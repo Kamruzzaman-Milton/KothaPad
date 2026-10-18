@@ -9,6 +9,13 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -225,8 +232,15 @@ class MainActivity : ComponentActivity() {
                     )
                 } else {
                     Surface(modifier = Modifier.fillMaxSize()) {
-                        when (currentScreen) {
-                            "SETTINGS" -> {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            // Main Editor Screen is kept alive underneath to preserve note and edit state
+                            EditorScreen(viewModel = viewModel)
+
+                            AnimatedVisibility(
+                                visible = currentScreen == "SETTINGS",
+                                enter = slideInHorizontally(tween(280)) { it } + fadeIn(tween(250)),
+                                exit = slideOutHorizontally(tween(250)) { it } + fadeOut(tween(200))
+                            ) {
                                 val dictationMode by viewModel.dictationModePref.collectAsState()
                                 val timedMinutes by viewModel.timedMinutesPref.collectAsState()
                                 val pauseToleranceSec by viewModel.pauseToleranceSecPref.collectAsState()
@@ -431,7 +445,12 @@ class MainActivity : ComponentActivity() {
                                     onBackClick = { viewModel.navigateTo("EDITOR") }
                                 )
                             }
-                            "NOTES_MANAGER_SETTINGS" -> {
+
+                            AnimatedVisibility(
+                                visible = currentScreen == "NOTES_MANAGER_SETTINGS",
+                                enter = slideInHorizontally(tween(280)) { it } + fadeIn(tween(250)),
+                                exit = slideOutHorizontally(tween(250)) { it } + fadeOut(tween(200))
+                            ) {
                                 val newNoteLocationMode by viewModel.newNoteLocationMode.collectAsState()
                                 val fixedNewNoteFolder by viewModel.fixedNewNoteFolder.collectAsState()
                                 val askBeforeCreating by viewModel.askBeforeCreating.collectAsState()
@@ -482,7 +501,12 @@ class MainActivity : ComponentActivity() {
                                     onUpdateTrashDays = { viewModel.setTrashAutoEmptyDaysPref(it) }
                                 )
                             }
-                            "MARKDOWN_SETTINGS" -> {
+
+                            AnimatedVisibility(
+                                visible = currentScreen == "MARKDOWN_SETTINGS",
+                                enter = slideInHorizontally(tween(280)) { it } + fadeIn(tween(250)),
+                                exit = slideOutHorizontally(tween(250)) { it } + fadeOut(tween(200))
+                            ) {
                                 val markdownSettings by viewModel.markdownSettings.collectAsState()
                                 com.example.markdown.MarkdownSettingsScreen(
                                     settings = markdownSettings,
@@ -490,9 +514,6 @@ class MainActivity : ComponentActivity() {
                                     onResetToDefaults = { viewModel.resetMarkdownSettingsToDefault() },
                                     onBackClick = { viewModel.navigateTo("SETTINGS") }
                                 )
-                            }
-                            else -> {
-                                EditorScreen(viewModel = viewModel)
                             }
                         }
 

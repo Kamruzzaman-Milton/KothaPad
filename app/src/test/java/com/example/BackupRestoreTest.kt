@@ -192,6 +192,7 @@ class BackupRestoreTest {
         // Re-import and restore
         val parsed1 = BackupManager.validateAndParseBackup(ByteArrayInputStream(outStream1.toByteArray()))
         val summary1 = BackupManager.restoreBackup(
+            context = context,
             noteRepository = noteRepo,
             stampRepository = stampRepo,
             spokenCommandRepository = commandRepo,
@@ -224,6 +225,7 @@ class BackupRestoreTest {
         prefManager.setLastOpenedNoteId(999999L)
         val parsed2 = BackupManager.validateAndParseBackup(ByteArrayInputStream(outStream2.toByteArray()))
         BackupManager.restoreBackup(
+            context = context,
             noteRepository = noteRepo,
             stampRepository = stampRepo,
             spokenCommandRepository = commandRepo,
@@ -282,6 +284,7 @@ class BackupRestoreTest {
 
         // Restore legacy backup: must not fail with "java.lang.Integer cannot be cast to java.lang.Long"
         val summary = BackupManager.restoreBackup(
+            context = context,
             noteRepository = noteRepo,
             stampRepository = stampRepo,
             spokenCommandRepository = commandRepo,
@@ -332,6 +335,7 @@ class BackupRestoreTest {
 
         val parsed = BackupManager.validateAndParseBackup(ByteArrayInputStream(outStream.toByteArray()))
         val summary = BackupManager.restoreBackup(
+            context = context,
             noteRepository = noteRepo,
             stampRepository = stampRepo,
             spokenCommandRepository = commandRepo,

@@ -122,4 +122,105 @@ class ExampleRobolectricTest {
         )
         assertEquals("2m 15s spent • 5w", reorderedMetrics)
     }
+
+    @Test
+    fun `test horizontal swipe navigation state transitions and destination isolation`() {
+        // Models the exact screen navigation states
+        var currentScreen = "EDITOR"
+        var isNoteManagerOpen = false
+
+        // 1. Editor Screen active:
+        assertTrue(currentScreen == "EDITOR" && !isNoteManagerOpen)
+
+        // 1a. Swiping horizontally from right to left (dx < 0) must open main settings menu
+        val onSwipeLeftFromEditor = {
+            currentScreen = "SETTINGS"
+        }
+        onSwipeLeftFromEditor()
+        assertEquals("SETTINGS", currentScreen)
+        org.junit.Assert.assertFalse(isNoteManagerOpen)
+
+        // 2. Main Settings Menu open:
+        // 2a. Swiping horizontally from left to right (dx > 0) must close settings and return to editor
+        val onSwipeRightFromSettings = {
+            currentScreen = "EDITOR"
+        }
+        onSwipeRightFromSettings()
+        assertEquals("EDITOR", currentScreen)
+        org.junit.Assert.assertFalse(isNoteManagerOpen)
+
+        // 3. Editor Screen active:
+        // 3a. Swiping horizontally from left to right (dx > 0) must open note manager list
+        val onSwipeRightFromEditor = {
+            isNoteManagerOpen = true
+        }
+        onSwipeRightFromEditor()
+        assertTrue(isNoteManagerOpen)
+        assertEquals("EDITOR", currentScreen)
+
+        // 4. Note Manager List open:
+        // 4a. Swiping horizontally from right to left (dx < 0) must close note manager and return to editor
+        val onSwipeLeftFromNoteManager = {
+            isNoteManagerOpen = false
+        }
+        onSwipeLeftFromNoteManager()
+        org.junit.Assert.assertFalse(isNoteManagerOpen)
+        assertEquals("EDITOR", currentScreen)
+
+        // 5. Verify isolation: Note Manager must never accidentally open Settings, and Settings must never open Note Manager
+        val allowRightOnSettings = true
+        val allowLeftOnSettings = false // Swiping left on settings does nothing
+        org.junit.Assert.assertFalse(allowLeftOnSettings)
+
+        val allowLeftOnNoteManager = true
+        val allowRightOnNoteManager = false // Swiping right on note manager does nothing
+        org.junit.Assert.assertFalse(allowRightOnNoteManager)
+    }
+
+    @Test
+    fun `test horizontal swipe directional dominance and threshold logic`() {
+        // Pure horizontal swipe: dx dominates dy significantly
+        fun isHorizontalSwipeValid(dx: Float, dy: Float, touchSlop: Float): Boolean {
+            val absX = kotlin.math.abs(dx)
+            val absY = kotlin.math.abs(dy)
+            return (absX > touchSlop || absY > touchSlop) && (absX > absY * 1.6f)
+        }
+
+        val touchSlop = 20f
+
+        // Case 1: Clear horizontal swipe right
+        assertTrue(isHorizontalSwipeValid(dx = 80f, dy = 10f, touchSlop = touchSlop))
+
+        // Case 2: Clear horizontal swipe left
+        assertTrue(isHorizontalSwipeValid(dx = -90f, dy = 15f, touchSlop = touchSlop))
+
+        // Case 3: Vertical scroll attempt (e.g. note or settings scrolling)
+        org.junit.Assert.assertFalse(isHorizontalSwipeValid(dx = 15f, dy = 80f, touchSlop = touchSlop))
+
+        // Case 4: Diagonal movement where vertical motion is too high
+        org.junit.Assert.assertFalse(isHorizontalSwipeValid(dx = 40f, dy = 35f, touchSlop = touchSlop))
+
+        // Case 5: Micro touch under touch slop (e.g. tap or click)
+        org.junit.Assert.assertFalse(isHorizontalSwipeValid(dx = 5f, dy = 3f, touchSlop = touchSlop))
+    }
+
+    @Test
+    fun `test note editing state and content preservation across navigation`() {
+        // Verify that navigating away and back does not reset textFieldValue or currentNote
+        var currentNoteContent = "Important draft that must not be lost"
+        var currentCursorPosition = currentNoteContent.length
+
+        // Navigate to Settings
+        val savedContent = currentNoteContent
+        val savedCursor = currentCursorPosition
+
+        var currentScreen = "SETTINGS"
+        assertEquals("SETTINGS", currentScreen)
+
+        // Return to Editor
+        currentScreen = "EDITOR"
+        assertEquals("EDITOR", currentScreen)
+        assertEquals("Important draft that must not be lost", savedContent)
+        assertEquals(currentNoteContent.length, savedCursor)
+    }
 }

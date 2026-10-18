@@ -160,7 +160,7 @@ object BackupManager {
         }
 
         val manifestObj = JSONObject().apply {
-            put("backupVersion", 2)
+            put("backupVersion", CURRENT_BACKUP_VERSION)
             put("appVersion", appVersion)
             put("appName", "KothaPad")
             put("isVault", false)
@@ -256,6 +256,10 @@ object BackupManager {
         val appVersion = manifestObj?.optString("appVersion", "1.0") ?: "1.0"
         val timestamp = manifestObj?.let { safeOptLong(it, "exportTimestamp", System.currentTimeMillis()) } ?: System.currentTimeMillis()
         val backupVersion = manifestObj?.let { safeOptInt(it, "backupVersion", if (isVault) 3 else 2) } ?: (if (isVault) 3 else 2)
+
+        if (backupVersion > CURRENT_BACKUP_VERSION) {
+            throw IllegalArgumentException("Unsupported backup version: $backupVersion. Maximum supported version is $CURRENT_BACKUP_VERSION.")
+        }
 
         if (isVault) {
             // Count notes and templates

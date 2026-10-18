@@ -22,7 +22,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import com.example.ui.navigation.horizontalSwipeNavigation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -159,6 +159,7 @@ fun EditorScreen(
 
     // Note Manager state
     val isNoteManagerOpen by viewModel.isNoteManagerOpen.collectAsState()
+    val currentScreen by viewModel.currentScreen.collectAsState()
     val activeNotes by viewModel.activeNotes.collectAsState()
     val archivedNotes by viewModel.archivedNotes.collectAsState()
     val trashedNotes by viewModel.trashedNotes.collectAsState()
@@ -396,6 +397,10 @@ fun EditorScreen(
         }
     }
 
+    val isAnyDialogOpen = showStyleSheet || showLanguagePicker || showRenameDialog ||
+            showTemplatesSheet || (editingKey != null) || showNewNoteDialogFromEditor
+    val isEditorActive = currentScreen == "EDITOR" && !isNoteManagerOpen
+
     Box(
         modifier = modifier.fillMaxSize()
     ) {
@@ -403,6 +408,22 @@ fun EditorScreen(
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
+                .horizontalSwipeNavigation(
+                    enabled = isEditorActive && !isAnyDialogOpen,
+                    allowSwipeLeft = true,   // right-to-left: opens Main Settings menu
+                    allowSwipeRight = true,  // left-to-right: opens Note Manager list
+                    onSwipeLeft = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus(force = true)
+                        viewModel.navigateTo("SETTINGS")
+                    },
+                    onSwipeRight = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus(force = true)
+                        viewModel.isNoteManagerOpen.value = true
+                    },
+                    dragResistance = 0.35f
+                )
                 .imePadding()
                 .testTag("editor_screen"),
             topBar = {

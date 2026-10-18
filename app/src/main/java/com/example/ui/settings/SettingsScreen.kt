@@ -18,7 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import com.example.ui.navigation.horizontalSwipeNavigation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -1339,9 +1339,19 @@ fun SettingsScreen(
         onBackClick()
     }
 
+    val isAnyDialogOpen = showSwitchVaultDialog || showOpenOrNewVaultDialog ||
+            showRecentVaultsDialog || showExportDialog || showImportDialog ||
+            showCreateVaultNameDialog || showDeleteOldDataDialog || showFinishSetupDialog || (validationError != null)
+
     Scaffold(
         modifier = modifier
             .fillMaxSize()
+            .horizontalSwipeNavigation(
+                enabled = !isAnyDialogOpen,
+                allowSwipeLeft = false,  // right-to-left: disabled (does NOT open Note Manager)
+                allowSwipeRight = true,  // left-to-right: closes Settings menu and returns to Editor
+                onSwipeRight = onBackClick
+            )
             .testTag("settings_screen"),
         topBar = {
             TopAppBar(

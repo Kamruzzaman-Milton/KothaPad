@@ -14,7 +14,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import com.example.ui.navigation.horizontalSwipeNavigation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -405,9 +405,18 @@ fun NotesManagerScreen(
     }
     val areAllExpanded = allFolderKeys.isNotEmpty() && allFolderKeys.all { expandedFolders.contains(it) }
 
+    val isAnyDialogOpen = showCreateNotePopup || showNewSubfolderDialog ||
+            isMultiSelectMode || isVaultMenuOpen || isSortMenuOpen
+
     Scaffold(
         modifier = modifier
             .fillMaxSize()
+            .horizontalSwipeNavigation(
+                enabled = !isAnyDialogOpen,
+                allowSwipeLeft = true,   // right-to-left: closes Note Manager list and returns to Editor
+                allowSwipeRight = false, // left-to-right: disabled (does NOT open Settings)
+                onSwipeLeft = onClose
+            )
             .testTag("fullscreen_notes_manager"),
         topBar = {
             TopAppBar(
