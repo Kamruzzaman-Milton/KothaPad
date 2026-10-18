@@ -7,11 +7,18 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -132,6 +139,7 @@ import com.example.ui.theme.HighlightCyan
 import com.example.ui.theme.HighlightGold
 import com.example.ui.theme.HighlightMint
 import com.example.ui.theme.HighlightSaffron
+import com.example.ui.theme.MicPausedAmber
 import com.example.ui.theme.SaffronPrimary
 import com.example.ui.theme.getFontFamilyByOption
 import kotlinx.coroutines.launch
@@ -844,31 +852,6 @@ fun EditorScreen(
                             }
                         }
 
-                        // Interim Speech Text Display
-                        if (partialText.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    .testTag("interim_speech_text")
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(text = "🎙️ ", fontSize = 13.sp)
-                                    Text(
-                                        text = partialText,
-                                        style = TextStyle(
-                                            fontFamily = fontFam,
-                                            fontSize = (fontSize - 1).sp,
-                                            fontStyle = FontStyle.Italic,
-                                            fontWeight = FontWeight.Medium,
-                                            color = SaffronPrimary
-                                        )
-                                    )
-                                }
-                            }
-                        }
 
                         // Generous bottom space so that typing at the bottom can scroll up to the vertical middle of the viewport
                         val bottomSpacerHeight = remember(viewportMaxHeight) {
@@ -1010,6 +993,87 @@ fun EditorScreen(
                                 micButtonOffsetY = micButtonOffsetY,
                                 dictationAnimationStyle = dictationAnimationStyle,
                                 hapticsLevel = hapticsLevel
+                            )
+                        }
+                    }
+                }
+
+                // CONTINUOUS FLOATING LIVE TEXT OVERLAY FOR VOICE TYPING
+                val isVoiceTypingActive = dictationState !is DictationState.Idle
+                AnimatedVisibility(
+                    visible = isVoiceTypingActive && !isReadingMode,
+                    enter = fadeIn(tween(180)) + slideInVertically(tween(180)) { it / 3 },
+                    exit = fadeOut(tween(180)) + slideOutVertically(tween(180)) { it / 3 },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = if (floatingLayoutSettings.useSideRail) {
+                                animatedReservedControlsHeight.coerceAtLeast(64.dp) + 8.dp
+                            } else {
+                                (80 + micButtonOffsetY.coerceAtLeast(0)).dp
+                            }
+                        )
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                        border = BorderStroke(1.5.dp, SaffronPrimary.copy(alpha = 0.5f)),
+                        shadowElevation = 8.dp,
+                        modifier = Modifier
+                            .widthIn(min = 120.dp, max = 560.dp)
+                            .testTag("interim_speech_text")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val infiniteTransition = rememberInfiniteTransition(label = "speech_overlay_pulse")
+                            val pulseAlpha by infiniteTransition.animateFloat(
+                                initialValue = 0.4f,
+                                targetValue = 1.0f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(800, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "pulse_alpha"
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (dictationState is DictationState.Paused) MicPausedAmber
+                                        else SaffronPrimary.copy(alpha = if (partialText.isNotBlank()) 1.0f else pulseAlpha)
+                                    )
+                            )
+
+                            Text(
+                                text = if (partialText.isNotBlank()) {
+                                    partialText
+                                } else when (dictationState) {
+                                    is DictationState.Paused -> "Dictation paused"
+                                    is DictationState.Starting, is DictationState.Restarting -> "Listening..."
+                                    is DictationState.Listening -> "Listening... speak now"
+                                    is DictationState.Error -> "Reconnecting..."
+                                    else -> "Listening..."
+                                },
+                                style = TextStyle(
+                                    fontFamily = fontFam,
+                                    fontSize = 15.sp,
+                                    fontStyle = if (partialText.isBlank()) FontStyle.Italic else FontStyle.Normal,
+                                    fontWeight = if (partialText.isNotBlank()) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = if (partialText.isNotBlank()) {
+                                        MaterialTheme.colorScheme.onSurface
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+                                    }
+                                ),
+                                maxLines = 4,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         }
                     }

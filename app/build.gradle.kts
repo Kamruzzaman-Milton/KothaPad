@@ -162,3 +162,31 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   // "ksp"(libs.moshi.kotlin.codegen)
 }
+
+abstract class CopyApkTask : DefaultTask() {
+  @get:InputFile
+  abstract val sourceApk: RegularFileProperty
+
+  @get:OutputFile
+  abstract val targetApk: RegularFileProperty
+
+  @TaskAction
+  fun copyApk() {
+    val src = sourceApk.get().asFile
+    val dst = targetApk.get().asFile
+    if (src.exists()) {
+      src.copyTo(dst, overwrite = true)
+      println("[Build] Copied fresh APK to ${dst.name}")
+    }
+  }
+}
+
+val copyApkToRootTask = tasks.register<CopyApkTask>("copyApkToRoot") {
+  sourceApk.set(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+  targetApk.set(layout.projectDirectory.file("../KothaPad.apk"))
+}
+
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+  finalizedBy(copyApkToRootTask)
+}
+
