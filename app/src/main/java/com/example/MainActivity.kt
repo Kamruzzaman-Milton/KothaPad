@@ -140,19 +140,19 @@ class MainActivity : ComponentActivity() {
                         viewModel.navigateTo("SETTINGS")
                     }
 
-                    // Priority 4: Notes list drawer / manager open -> close drawer
+                    // Priority 4: Settings screen or any sub-screen open -> return to editor (preserves reading/editing mode)
+                    currentScreen != "EDITOR" -> {
+                        viewModel.navigateTo("EDITOR")
+                    }
+
+                    // Priority 5: Notes list drawer / manager open -> close drawer
                     isNoteManagerOpen -> {
                         viewModel.isNoteManagerOpen.value = false
                     }
 
-                    // Priority 5: Reading mode active -> Exit reading mode
+                    // Priority 6: Reading mode active -> Exit reading mode
                     isReadingMode -> {
                         viewModel.setReadingMode(false)
-                    }
-
-                    // Priority 6: Settings screen or any sub-screen open -> return to editor
-                    currentScreen != "EDITOR" -> {
-                        viewModel.navigateTo("EDITOR")
                     }
 
                     // Priority 5: Built-in custom keyboard hidden because system keyboard was showing -> restore custom keyboard

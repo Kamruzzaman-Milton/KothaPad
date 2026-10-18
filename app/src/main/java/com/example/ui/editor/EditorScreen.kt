@@ -255,7 +255,16 @@ fun EditorScreen(
     val builtInKeyboardVisible = userWantsBuiltIn
 
     // Handle switching between In-App Custom Keyboard and System Keyboard
-    LaunchedEffect(userWantsBuiltIn) {
+    LaunchedEffect(userWantsBuiltIn, isReadingMode) {
+        if (isReadingMode) {
+            keyboardController?.hide()
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            val windowToken = (context as? Activity)?.window?.decorView?.windowToken
+            if (windowToken != null) {
+                imm?.hideSoftInputFromWindow(windowToken, 0)
+            }
+            return@LaunchedEffect
+        }
         if (!userWantsBuiltIn) {
             // Switching to System Keyboard: request focus and show soft input
             try { focusRequester.requestFocus() } catch (_: Exception) {}
