@@ -37,7 +37,7 @@ fun rememberMarkdownVisualTransformation(
     val codeBlockBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f)
     val linkColor = MaterialTheme.colorScheme.primary
     val quoteColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-    val listMarkerColor = SaffronPrimary
+    val listMarkerColor = MaterialTheme.colorScheme.primary
 
     return remember(
         settings,
@@ -291,7 +291,7 @@ fun styleMarkdownText(
                     val boxEnd = boxStart + box.length
                     addStyle(
                         SpanStyle(
-                            color = if (isChecked) SaffronPrimary else listMarkerColor,
+                            color = listMarkerColor,
                             fontWeight = FontWeight.Bold
                         ),
                         boxStart,

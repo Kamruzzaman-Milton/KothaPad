@@ -194,7 +194,7 @@ fun MarkdownRenderer(
                                 modifier = Modifier
                                     .width(4.dp)
                                     .height(24.dp) // minimal bar height, adapts with row content
-                                    .background(SaffronPrimary, RoundedCornerShape(2.dp))
+                                    .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(

@@ -87,21 +87,34 @@ fun KothaPadTheme(
         else -> isSystemDark
     }
 
+    // Derive secondary accent from customPrimary if secondary is at default saffron/amber
+    val effectiveSecondary = if (customSecondary == EmberAccent || customSecondary == Color(0xFFFF8A65) || customSecondary == SaffronPrimary) {
+        customPrimary
+    } else {
+        customSecondary
+    }
+
     val customColorScheme = if (bgLuminance < 0.5f) {
         darkColorScheme(
             primary = customPrimary,
             onPrimary = if (customPrimary.red * 0.299f + customPrimary.green * 0.587f + customPrimary.blue * 0.114f > 0.5f) Color.Black else Color.White,
             primaryContainer = customPrimary.copy(alpha = 0.25f),
             onPrimaryContainer = customPrimary,
-            secondary = customSecondary,
+            secondary = effectiveSecondary,
             onSecondary = Color.White,
+            secondaryContainer = effectiveSecondary.copy(alpha = 0.25f),
+            onSecondaryContainer = effectiveSecondary,
+            tertiary = effectiveSecondary,
+            tertiaryContainer = effectiveSecondary.copy(alpha = 0.2f),
+            onTertiaryContainer = effectiveSecondary,
             background = customBackground,
             onBackground = customText,
             surface = customSurface,
             onSurface = customText,
             surfaceVariant = customSurface.copy(alpha = 0.85f),
             onSurfaceVariant = customText.copy(alpha = 0.7f),
-            outline = customPrimary.copy(alpha = 0.35f)
+            outline = customPrimary.copy(alpha = 0.35f),
+            surfaceTint = customPrimary
         )
     } else {
         lightColorScheme(
@@ -109,15 +122,21 @@ fun KothaPadTheme(
             onPrimary = Color.White,
             primaryContainer = customPrimary.copy(alpha = 0.18f),
             onPrimaryContainer = customPrimary,
-            secondary = customSecondary,
+            secondary = effectiveSecondary,
             onSecondary = Color.White,
+            secondaryContainer = effectiveSecondary.copy(alpha = 0.18f),
+            onSecondaryContainer = effectiveSecondary,
+            tertiary = effectiveSecondary,
+            tertiaryContainer = effectiveSecondary.copy(alpha = 0.15f),
+            onTertiaryContainer = effectiveSecondary,
             background = customBackground,
             onBackground = customText,
             surface = customSurface,
             onSurface = customText,
             surfaceVariant = customSurface.copy(alpha = 0.9f),
             onSurfaceVariant = customText.copy(alpha = 0.7f),
-            outline = customPrimary.copy(alpha = 0.3f)
+            outline = customPrimary.copy(alpha = 0.3f),
+            surfaceTint = customPrimary
         )
     }
 
@@ -125,19 +144,31 @@ fun KothaPadTheme(
         primary = customPrimary,
         primaryContainer = customPrimary.copy(alpha = 0.25f),
         onPrimaryContainer = customPrimary,
-        outline = customPrimary.copy(alpha = 0.35f)
+        secondary = effectiveSecondary,
+        secondaryContainer = effectiveSecondary.copy(alpha = 0.25f),
+        onSecondaryContainer = effectiveSecondary,
+        outline = customPrimary.copy(alpha = 0.35f),
+        surfaceTint = customPrimary
     )
     val activeDarkColorScheme = DarkColorScheme.copy(
         primary = customPrimary,
         primaryContainer = customPrimary.copy(alpha = 0.25f),
         onPrimaryContainer = customPrimary,
-        outline = customPrimary.copy(alpha = 0.35f)
+        secondary = effectiveSecondary,
+        secondaryContainer = effectiveSecondary.copy(alpha = 0.25f),
+        onSecondaryContainer = effectiveSecondary,
+        outline = customPrimary.copy(alpha = 0.35f),
+        surfaceTint = customPrimary
     )
     val activeLightColorScheme = LightColorScheme.copy(
         primary = customPrimary,
         primaryContainer = customPrimary.copy(alpha = 0.18f),
         onPrimaryContainer = customPrimary,
-        outline = customPrimary.copy(alpha = 0.3f)
+        secondary = effectiveSecondary,
+        secondaryContainer = effectiveSecondary.copy(alpha = 0.18f),
+        onSecondaryContainer = effectiveSecondary,
+        outline = customPrimary.copy(alpha = 0.3f),
+        surfaceTint = customPrimary
     )
 
     val colorScheme = when {

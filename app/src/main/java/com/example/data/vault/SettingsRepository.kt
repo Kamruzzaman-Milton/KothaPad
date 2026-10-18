@@ -185,7 +185,7 @@ class SettingsRepository(
         coroutineScope.launch(Dispatchers.IO) {
             vaultConfigStore.initVault(vaultDoc)
             val json = serializeToJson(updated)
-            vaultConfigStore.updateSettings(vaultDoc, json)
+            vaultConfigStore.updateSettings(vaultDoc, json, immediate = true)
         }
     }
 
@@ -343,7 +343,7 @@ class SettingsRepository(
                 surface = s.customSurfaceColor,
                 text = s.customTextColor,
                 secondary = s.customSecondaryColor,
-                updateAppThemeToCustom = false
+                updateAppThemeToCustom = (s.appTheme.uppercase() == "CUSTOM")
             )
             pm.setCustomFont(s.customFontName, s.customFontPath)
             pm.setEditorLetterSpacing(s.editorLetterSpacing)
@@ -451,10 +451,15 @@ class SettingsRepository(
             put("editor_line_spacing", s.editorLineSpacing.toDouble())
             put("editor_font_family", s.editorFontFamily)
             put("custom_primary_color", s.customPrimaryColor)
+            put("custom_primary_hex", String.format("#%06X", 0xFFFFFF and s.customPrimaryColor))
             put("custom_background_color", s.customBackgroundColor)
+            put("custom_background_hex", String.format("#%06X", 0xFFFFFF and s.customBackgroundColor))
             put("custom_surface_color", s.customSurfaceColor)
+            put("custom_surface_hex", String.format("#%06X", 0xFFFFFF and s.customSurfaceColor))
             put("custom_text_color", s.customTextColor)
+            put("custom_text_hex", String.format("#%06X", 0xFFFFFF and s.customTextColor))
             put("custom_secondary_color", s.customSecondaryColor)
+            put("custom_secondary_hex", String.format("#%06X", 0xFFFFFF and s.customSecondaryColor))
             put("custom_font_name", s.customFontName)
             if (s.customFontPath != null) put("custom_font_path", s.customFontPath)
             put("editor_letter_spacing", s.editorLetterSpacing.toDouble())
@@ -618,27 +623,91 @@ class SettingsRepository(
             val favLangs = parseStringSet(langObj?.opt("favorite_languages") ?: root.opt("favorite_languages"), def.favoriteLanguages)
 
             val appObj = root.optJSONObject("appearance")
-            val appTheme = appObj?.optString("app_theme", def.appTheme) ?: root.optString("app_theme", def.appTheme)
-            val fontSize = (appObj?.optDouble("editor_font_size", def.editorFontSize.toDouble()) ?: root.optDouble("editor_font_size", def.editorFontSize.toDouble())).toFloat()
-            val lineSpacing = (appObj?.optDouble("editor_line_spacing", def.editorLineSpacing.toDouble()) ?: root.optDouble("editor_line_spacing", def.editorLineSpacing.toDouble())).toFloat()
-            val fontFamily = appObj?.optString("editor_font_family", def.editorFontFamily) ?: root.optString("editor_font_family", def.editorFontFamily)
-            val customPrimary = parseColorInt(appObj ?: root, "custom_primary_color", def.customPrimaryColor)
-            val customBg = parseColorInt(appObj ?: root, "custom_background_color", def.customBackgroundColor)
-            val customSurface = parseColorInt(appObj ?: root, "custom_surface_color", def.customSurfaceColor)
-            val customText = parseColorInt(appObj ?: root, "custom_text_color", def.customTextColor)
-            val customSec = parseColorInt(appObj ?: root, "custom_secondary_color", def.customSecondaryColor)
-            val customFontName = appObj?.optString("custom_font_name", def.customFontName) ?: root.optString("custom_font_name", def.customFontName)
-            val customFontPath = if (appObj?.has("custom_font_path") == true && !appObj.isNull("custom_font_path")) appObj.optString("custom_font_path") else root.optString("custom_font_path", null)
-            val letterSpacing = (appObj?.optDouble("editor_letter_spacing", def.editorLetterSpacing.toDouble()) ?: root.optDouble("editor_letter_spacing", def.editorLetterSpacing.toDouble())).toFloat()
-            val paragraphSpacing = appObj?.optInt("editor_paragraph_spacing", def.editorParagraphSpacing) ?: root.optInt("editor_paragraph_spacing", def.editorParagraphSpacing)
-            val textAlignment = appObj?.optString("editor_text_alignment", def.editorTextAlignment) ?: root.optString("editor_text_alignment", def.editorTextAlignment)
-            val marginDp = appObj?.optInt("editor_margin_dp", def.editorMarginDp) ?: root.optInt("editor_margin_dp", def.editorMarginDp)
-            val maxWidthDp = appObj?.optInt("editor_max_width_dp", def.editorMaxWidthDp) ?: root.optInt("editor_max_width_dp", def.editorMaxWidthDp)
-            val statusChip = appObj?.optString("status_chip_style", def.statusChipStyle) ?: root.optString("status_chip_style", def.statusChipStyle)
-            val uiDensity = appObj?.optString("ui_density", def.uiDensity) ?: root.optString("ui_density", def.uiDensity)
-            val cornerRadius = appObj?.optInt("corner_radius_dp", def.cornerRadiusDp) ?: root.optInt("corner_radius_dp", def.cornerRadiusDp)
-            val dictAnim = appObj?.optString("dictation_animation_style", def.dictationAnimationStyle) ?: root.optString("dictation_animation_style", def.dictationAnimationStyle)
-            val haptics = appObj?.optString("haptics_level", def.hapticsLevel) ?: root.optString("haptics_level", def.hapticsLevel)
+            val appTheme = when {
+                appObj != null && appObj.has("app_theme") -> appObj.getString("app_theme")
+                root.has("app_theme") -> root.getString("app_theme")
+                else -> def.appTheme
+            }
+            val fontSize = when {
+                appObj != null && appObj.has("editor_font_size") -> appObj.getDouble("editor_font_size").toFloat()
+                root.has("editor_font_size") -> root.getDouble("editor_font_size").toFloat()
+                else -> def.editorFontSize
+            }
+            val lineSpacing = when {
+                appObj != null && appObj.has("editor_line_spacing") -> appObj.getDouble("editor_line_spacing").toFloat()
+                root.has("editor_line_spacing") -> root.getDouble("editor_line_spacing").toFloat()
+                else -> def.editorLineSpacing
+            }
+            val fontFamily = when {
+                appObj != null && appObj.has("editor_font_family") -> appObj.getString("editor_font_family")
+                root.has("editor_font_family") -> root.getString("editor_font_family")
+                else -> def.editorFontFamily
+            }
+            val customPrimary = parseColorInt(appObj, root, "custom_primary_color", def.customPrimaryColor)
+            val customBg = parseColorInt(appObj, root, "custom_background_color", def.customBackgroundColor)
+            val customSurface = parseColorInt(appObj, root, "custom_surface_color", def.customSurfaceColor)
+            val customText = parseColorInt(appObj, root, "custom_text_color", def.customTextColor)
+            val customSec = parseColorInt(appObj, root, "custom_secondary_color", def.customSecondaryColor)
+            val customFontName = when {
+                appObj != null && appObj.has("custom_font_name") -> appObj.getString("custom_font_name")
+                root.has("custom_font_name") -> root.getString("custom_font_name")
+                else -> def.customFontName
+            }
+            val customFontPath = when {
+                appObj != null && appObj.has("custom_font_path") && !appObj.isNull("custom_font_path") -> appObj.getString("custom_font_path")
+                root.has("custom_font_path") && !root.isNull("custom_font_path") -> root.getString("custom_font_path")
+                else -> null
+            }
+            val letterSpacing = when {
+                appObj != null && appObj.has("editor_letter_spacing") -> appObj.getDouble("editor_letter_spacing").toFloat()
+                root.has("editor_letter_spacing") -> root.getDouble("editor_letter_spacing").toFloat()
+                else -> def.editorLetterSpacing
+            }
+            val paragraphSpacing = when {
+                appObj != null && appObj.has("editor_paragraph_spacing") -> appObj.getInt("editor_paragraph_spacing")
+                root.has("editor_paragraph_spacing") -> root.getInt("editor_paragraph_spacing")
+                else -> def.editorParagraphSpacing
+            }
+            val textAlignment = when {
+                appObj != null && appObj.has("editor_text_alignment") -> appObj.getString("editor_text_alignment")
+                root.has("editor_text_alignment") -> root.getString("editor_text_alignment")
+                else -> def.editorTextAlignment
+            }
+            val marginDp = when {
+                appObj != null && appObj.has("editor_margin_dp") -> appObj.getInt("editor_margin_dp")
+                root.has("editor_margin_dp") -> root.getInt("editor_margin_dp")
+                else -> def.editorMarginDp
+            }
+            val maxWidthDp = when {
+                appObj != null && appObj.has("editor_max_width_dp") -> appObj.getInt("editor_max_width_dp")
+                root.has("editor_max_width_dp") -> root.getInt("editor_max_width_dp")
+                else -> def.editorMaxWidthDp
+            }
+            val statusChip = when {
+                appObj != null && appObj.has("status_chip_style") -> appObj.getString("status_chip_style")
+                root.has("status_chip_style") -> root.getString("status_chip_style")
+                else -> def.statusChipStyle
+            }
+            val uiDensity = when {
+                appObj != null && appObj.has("ui_density") -> appObj.getString("ui_density")
+                root.has("ui_density") -> root.getString("ui_density")
+                else -> def.uiDensity
+            }
+            val cornerRadius = when {
+                appObj != null && appObj.has("corner_radius_dp") -> appObj.getInt("corner_radius_dp")
+                root.has("corner_radius_dp") -> root.getInt("corner_radius_dp")
+                else -> def.cornerRadiusDp
+            }
+            val dictAnim = when {
+                appObj != null && appObj.has("dictation_animation_style") -> appObj.getString("dictation_animation_style")
+                root.has("dictation_animation_style") -> root.getString("dictation_animation_style")
+                else -> def.dictationAnimationStyle
+            }
+            val haptics = when {
+                appObj != null && appObj.has("haptics_level") -> appObj.getString("haptics_level")
+                root.has("haptics_level") -> root.getString("haptics_level")
+                else -> def.hapticsLevel
+            }
 
             val tbObj = root.optJSONObject("toolbar")
             val tbOrder = tbObj?.optString("toolbar_item_order", def.toolbarItemOrder) ?: root.optString("toolbar_item_order", def.toolbarItemOrder)
@@ -881,13 +950,20 @@ class SettingsRepository(
         }
     }
 
-    private fun parseColorInt(obj: JSONObject?, key: String, defaultVal: Int): Int {
-        if (obj == null || !obj.has(key)) return defaultVal
-        val v = obj.opt(key)
-        return when (v) {
-            is Number -> v.toInt()
+    private fun parseColorInt(obj: JSONObject?, fallbackObj: JSONObject?, key: String, defaultVal: Int): Int {
+        val hexKey = if (key.endsWith("_color")) key.replace("_color", "_hex") else "${key}_hex"
+        val candidate = when {
+            obj != null && obj.has(key) -> obj.opt(key)
+            obj != null && obj.has(hexKey) -> obj.opt(hexKey)
+            fallbackObj != null && fallbackObj.has(key) -> fallbackObj.opt(key)
+            fallbackObj != null && fallbackObj.has(hexKey) -> fallbackObj.opt(hexKey)
+            else -> null
+        } ?: return defaultVal
+
+        return when (candidate) {
+            is Number -> candidate.toInt()
             is String -> try {
-                if (v.startsWith("#")) android.graphics.Color.parseColor(v) else v.toLong().toInt()
+                if (candidate.startsWith("#")) android.graphics.Color.parseColor(candidate) else candidate.toLong().toInt()
             } catch (_: Exception) { defaultVal }
             else -> defaultVal
         }

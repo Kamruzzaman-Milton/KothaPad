@@ -126,7 +126,7 @@ fun getFormatBarButtonDefinitions(): List<FormatBarButtonDef> {
                     text = "H",
                     fontWeight = FontWeight.Black,
                     fontSize = 17.sp,
-                    color = SaffronPrimary
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         ),
@@ -177,7 +177,7 @@ fun getFormatBarButtonDefinitions(): List<FormatBarButtonDef> {
                 Icon(
                     imageVector = Icons.Filled.CheckBox,
                     contentDescription = "Task checkbox",
-                    tint = SaffronPrimary,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
             }

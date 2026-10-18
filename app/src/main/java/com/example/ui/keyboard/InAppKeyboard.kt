@@ -108,15 +108,15 @@ private fun InAppGridKey(
 
     val isControlKey = key.actionType != KeyActionType.INSERT && key.actionType != KeyActionType.SPACE
     val keyBgColor = when {
-        isEditMode -> SaffronPrimary.copy(alpha = 0.15f)
+        isEditMode -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
         isControlKey -> MaterialTheme.colorScheme.surfaceVariant
         key.actionType == KeyActionType.SPACE -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
         else -> MaterialTheme.colorScheme.background
     }
 
     val textColor = when (key.actionType) {
-        KeyActionType.CHANGE_LANGUAGE -> SaffronPrimary
-        KeyActionType.OPEN_TEMPLATES -> SaffronPrimary
+        KeyActionType.CHANGE_LANGUAGE -> MaterialTheme.colorScheme.primary
+        KeyActionType.OPEN_TEMPLATES -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.onSurface
     }
 

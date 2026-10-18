@@ -1,5 +1,7 @@
 package com.example.ui.settings
 
+import java.io.File
+
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -62,6 +64,7 @@ import com.example.ui.editor.TOOLBAR_ITEM_KEYBOARD_MODE
 import com.example.ui.editor.TOOLBAR_ITEM_METRICS
 import com.example.ui.editor.TOOLBAR_ITEM_NOTE_TIMER
 import com.example.ui.editor.TOOLBAR_ITEM_TEXT_SIZE
+import com.example.ui.editor.TOOLBAR_ITEM_TEXT_STYLE
 
 
 // ==========================================

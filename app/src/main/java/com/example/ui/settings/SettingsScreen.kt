@@ -2170,9 +2170,20 @@ private fun ChipGroupControlRow(item: SettingItem.ChipGroup) {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             item.options.forEach { opt ->
+                val isSelected = item.selectedKey.equals(opt.key, ignoreCase = true)
                 FilterChip(
-                    selected = item.selectedKey.equals(opt.key, ignoreCase = true),
+                    selected = isSelected,
                     onClick = { item.onOptionSelected(opt.key) },
+                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                        selectedLabelColor = MaterialTheme.colorScheme.primary
+                    ),
+                    border = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = isSelected,
+                        borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                        selectedBorderColor = MaterialTheme.colorScheme.primary
+                    ),
                     label = { Text(opt.label, fontSize = 11.sp) }
                 )
             }
