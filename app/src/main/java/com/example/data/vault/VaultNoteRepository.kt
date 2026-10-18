@@ -449,17 +449,68 @@ class VaultNoteRepository(
             }
         } catch (_: Exception) {}
 
-        // If vault is completely brand-new / empty (0 markdown notes), create an initial welcome note
-        if (discoveredEntries.isEmpty() && cache.isEmpty()) {
-            val initialNote = Note(
-                title = "Welcome to KothaPad",
-                content = "# Welcome to KothaPad\n\nYour notes are stored as standard Markdown (`.md`) files inside your Vault.\n\n- Real files and folders\n- Obsidian-compatible\n- Clean Markdown format\n- Dictation and voice commands supported",
-                folder = GENERAL_DIR
+        // Clean up any old placeholder stub if present
+        val welcomeStub = cache.values.firstOrNull {
+            it.note.title.equals("Welcome to KothaPad", ignoreCase = true) &&
+            it.note.content.contains("Welcome to KothaPad") &&
+            it.note.content.contains("Obsidian-compatible")
+        }
+        if (welcomeStub != null && cache.size <= 3) {
+            try {
+                deleteInternal(welcomeStub.note)
+            } catch (_: Exception) {}
+        }
+
+        // Ensure "⚡KothaPad Tips" and "⚡KothaPad features" exist in the General folder of this vault
+        val currentNotes = cache.values.map { it.note }
+
+        // 1. If an older "⚡ KothaPad Quick Tips" note exists, upgrade it to "⚡KothaPad Tips"
+        val oldQuickTips = currentNotes.find {
+            it.title == "⚡ KothaPad Quick Tips" || it.title.contains("Quick Tips")
+        }
+        if (oldQuickTips != null) {
+            val updated = oldQuickTips.copy(
+                title = "⚡KothaPad Tips",
+                content = com.example.data.db.AppDatabase.KOTHAPAD_TIPS_CONTENT,
+                folder = GENERAL_DIR,
+                isPinned = true,
+                tags = "tips,guide,shortcuts,scenarios",
+                updatedAt = System.currentTimeMillis()
             )
-            val createdId = insertInternal(initialNote, vaultDoc)
+            updateInternal(updated, vaultDoc)
+        } else if (cache.values.none { it.note.title == "⚡KothaPad Tips" }) {
+            // Otherwise, if "⚡KothaPad Tips" doesn't exist yet, insert it
+            val tipsNote = Note(
+                title = "⚡KothaPad Tips",
+                content = com.example.data.db.AppDatabase.KOTHAPAD_TIPS_CONTENT,
+                folder = GENERAL_DIR,
+                isPinned = true,
+                tags = "tips,guide,shortcuts,scenarios",
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis()
+            )
+            val createdId = insertInternal(tipsNote, vaultDoc)
             val createdNote = getNoteOnce(createdId)
             if (createdNote != null) {
-                discoveredEntries.add(cache[getRelPathForNote(createdNote)]!!)
+                cache[getRelPathForNote(createdNote)]?.let { discoveredEntries.add(it) }
+            }
+        }
+
+        // 2. Ensure "⚡KothaPad features" exists in General folder
+        if (cache.values.none { it.note.title == "⚡KothaPad features" }) {
+            val featuresNote = Note(
+                title = "⚡KothaPad features",
+                content = com.example.data.db.AppDatabase.KOTHAPAD_FEATURES_CONTENT,
+                folder = GENERAL_DIR,
+                isPinned = false,
+                tags = "features,guide,docs,reference",
+                createdAt = System.currentTimeMillis() + 1,
+                updatedAt = System.currentTimeMillis() + 1
+            )
+            val createdId = insertInternal(featuresNote, vaultDoc)
+            val createdNote = getNoteOnce(createdId)
+            if (createdNote != null) {
+                cache[getRelPathForNote(createdNote)]?.let { discoveredEntries.add(it) }
             }
         }
 
