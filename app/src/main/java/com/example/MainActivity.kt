@@ -161,22 +161,17 @@ class MainActivity : ComponentActivity() {
                         viewModel.isNoteManagerOpen.value = false
                     }
 
-                    // Priority 6: Reading mode active -> Exit reading mode
-                    isReadingMode -> {
-                        viewModel.setReadingMode(false)
-                    }
-
-                    // Priority 5: Built-in custom keyboard hidden because system keyboard was showing -> restore custom keyboard
-                    !userWantsBuiltIn -> {
-                        viewModel.setUserWantsBuiltInKeyboard(true)
-                    }
-
                     // Priority 6: Recording/dictation active -> do NOT stop or exit, show toast
                     dictationState !is DictationState.Idle -> {
                         Toast.makeText(this@MainActivity, "Recording in progress. Tap mic to pause or stop.", Toast.LENGTH_SHORT).show()
                     }
 
-                    // Priority 7: Main editor screen with nothing open -> exit confirmation (toast within 2s)
+                    // Priority 7: Editing mode active -> Switch to Reading mode (primary workspace)
+                    !isReadingMode -> {
+                        viewModel.setReadingMode(true)
+                    }
+
+                    // Priority 8: Reading mode active (final workspace screen before app exit) -> exit confirmation (toast within 2s)
                     else -> {
                         val now = System.currentTimeMillis()
                         if (now - lastBackPressTime < 2000L) {

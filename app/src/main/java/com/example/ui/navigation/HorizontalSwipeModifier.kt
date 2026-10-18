@@ -59,6 +59,10 @@ fun Modifier.horizontalSwipeNavigation(
 
     val animOffset = remember { Animatable(0f) }
 
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        animOffset.snapTo(0f)
+    }
+
     this
         .graphicsLayer {
             translationX = animOffset.value
@@ -108,7 +112,6 @@ fun Modifier.horizontalSwipeNavigation(
                                         animOffset.animateTo(0f, tween(150))
                                     }
                                     onSwipeRight()
-                                    animOffset.snapTo(0f)
                                 }
                             } else if (shouldTriggerLeft) {
                                 scope.launch {
@@ -118,7 +121,6 @@ fun Modifier.horizontalSwipeNavigation(
                                         animOffset.animateTo(0f, tween(150))
                                     }
                                     onSwipeLeft()
-                                    animOffset.snapTo(0f)
                                 }
                             } else {
                                 // Threshold not reached: snap back smoothly

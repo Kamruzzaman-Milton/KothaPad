@@ -234,7 +234,6 @@ fun Modifier.swipeToDismiss(
                                 targetValue = target,
                                 animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
                             )
-                            offsetX.snapTo(0f)
                             onDismiss()
                         }
                     } else {
