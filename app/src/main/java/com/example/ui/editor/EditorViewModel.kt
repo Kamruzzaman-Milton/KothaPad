@@ -79,6 +79,7 @@ class EditorViewModel(
     val isVaultScanning: StateFlow<Boolean> = vaultNoteRepository.isScanning
     val vaultScanProgress: StateFlow<String?> = vaultNoteRepository.scanProgress
     val vaultSaveError: StateFlow<String?> = vaultNoteRepository.lastSaveError
+    val safeModeWarning: StateFlow<String?> = vaultNoteRepository.vaultConfigStore.safeModeWarning
 
     // Notes Data
     val allNotes: StateFlow<List<Note>> = noteRepository.allNotes
@@ -578,6 +579,7 @@ class EditorViewModel(
         preferencesManager.setLastOpenedNoteIdSync(note.id)
         viewModelScope.launch {
             preferencesManager.setLastOpenedNoteId(note.id)
+            vaultNoteRepository.onNoteOpenedForEditing(note.id)
             vaultNoteRepository.saveWorkspace(
                 lastOpenedRelPath = vaultNoteRepository.getRelPathForNote(note),
                 lastFolder = note.folder
@@ -618,6 +620,8 @@ class EditorViewModel(
         if (note.isDeleted || note.isArchived) return
         viewModelScope.launch(Dispatchers.IO) {
             noteRepository.update(note)
+            vaultNoteRepository.saveMetadata()
+            vaultNoteRepository.vaultConfigStore.flush()
         }
     }
 

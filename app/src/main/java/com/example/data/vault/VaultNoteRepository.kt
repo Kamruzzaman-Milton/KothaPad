@@ -26,19 +26,30 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 data class NoteMetadata(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val path: String = "",
     val isPinned: Boolean = false,
     val isArchived: Boolean = false,
     val isDeleted: Boolean = false,
     val deletedAt: Long? = null,
-    val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis(),
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
+    val modifiedAt: Long = 0L,
+    val sessionCount: Int = 0,
+    val timeSpent: Long = 0L,
+    val sessionDurationSec: Long = 0L,
+    val wordCount: Int = 0,
+    val charCount: Int = 0,
+    val fileSize: Long = 0L,
+    val contentHash: Long = 0L,
     val languageCode: String? = null,
     val highlightColor: String? = null,
     val fontSizeModifier: Float = 0f,
     val tags: String = "",
-    val sessionDurationSec: Long = 0L,
     val originalRelPath: String? = null,
-    val trashFileName: String? = null
+    val trashFileName: String? = null,
+    val isOrphaned: Boolean = false,
+    val orphanedAt: Long? = null
 )
 
 data class WorkspaceData(
@@ -112,12 +123,15 @@ class VaultNoteRepository(
     private val idToPathMap = ConcurrentHashMap<Long, String>()
     private val idGenerator = AtomicLong(1000L)
 
-    // Metadata Store: relPath -> NoteMetadata
-    private val metadataMap = ConcurrentHashMap<String, NoteMetadata>()
+    // Metadata Store: stableId -> NoteMetadata (Single source of truth)
+    private val metadataByIdMap = ConcurrentHashMap<String, NoteMetadata>()
+    // relPath -> stableId index
+    private val pathIndex = ConcurrentHashMap<String, String>()
 
     // Current Vault Reference
     private var currentVaultDoc: DocumentFile? = null
     private var scanJob: Job? = null
+    private var currentlyEditingNoteId: Long? = null
 
     // Workspace Cache
     private var workspaceData: WorkspaceData = WorkspaceData()
@@ -129,8 +143,57 @@ class VaultNoteRepository(
         const val TEMPLATES_DIR = "Templates"
         const val GENERAL_DIR = "General"
         const val TRASH_PREFIX = ".KOTHAPAD/trash/"
-        private const val META_SCHEMA_VERSION = 1
+        private const val META_SCHEMA_VERSION = 2
         private const val WORKSPACE_SCHEMA_VERSION = 1
+    }
+
+    fun countWords(text: String): Int {
+        if (text.isBlank()) return 0
+        return text.trim().split("\\s+".toRegex()).size
+    }
+
+    fun getMetadataForPath(relPath: String): NoteMetadata? {
+        val id = pathIndex[relPath]
+        if (id != null) {
+            val meta = metadataByIdMap[id]
+            if (meta != null) return meta
+        }
+        return metadataByIdMap.values.firstOrNull { it.path.equals(relPath, ignoreCase = true) }
+    }
+
+    fun putMetadata(meta: NoteMetadata) {
+        metadataByIdMap[meta.id] = meta
+        if (meta.path.isNotBlank()) {
+            pathIndex[meta.path] = meta.id
+        }
+    }
+
+    fun removeMetadataForPath(relPath: String) {
+        val id = pathIndex.remove(relPath)
+        if (id != null) {
+            metadataByIdMap.remove(id)
+        } else {
+            metadataByIdMap.values.firstOrNull { it.path.equals(relPath, ignoreCase = true) }?.let {
+                metadataByIdMap.remove(it.id)
+            }
+        }
+    }
+
+    fun onNoteOpenedForEditing(noteId: Long) {
+        if (currentlyEditingNoteId == noteId) return
+        currentlyEditingNoteId = noteId
+        val relPath = idToPathMap[noteId] ?: return
+        val meta = getMetadataForPath(relPath) ?: return
+        val updated = meta.copy(sessionCount = meta.sessionCount + 1)
+        putMetadata(updated)
+        val cached = cache[relPath]
+        if (cached != null) {
+            val updatedNote = cached.note.copy(sessionCount = updated.sessionCount)
+            cache[relPath] = cached.copy(note = updatedNote)
+        }
+        repositoryScope.launch(Dispatchers.IO) {
+            saveMetadata()
+        }
     }
 
     private fun getOrCreateIdForPath(relPath: String): Long {
@@ -165,9 +228,11 @@ class VaultNoteRepository(
     suspend fun onVaultOpened(vaultDoc: DocumentFile) = withContext(Dispatchers.IO) {
         currentVaultDoc = vaultDoc
         cache.clear()
-        metadataMap.clear()
+        metadataByIdMap.clear()
+        pathIndex.clear()
         pathToIdMap.clear()
         idToPathMap.clear()
+        currentlyEditingNoteId = null
 
         // Single source of truth: initialize vault config and cleanup duplicates
         vaultConfigStore.initVault(vaultDoc)
@@ -176,7 +241,7 @@ class VaultNoteRepository(
         vaultManager.getOrCreateDirRecursive(vaultDoc, TEMPLATES_DIR)
         vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR)
 
-        // Load metadata & workspace via VaultConfigStore
+        // Load metadata & workspace via VaultConfigStore before scanning
         loadMetadata(vaultDoc)
         loadWorkspace(vaultDoc)
 
@@ -215,9 +280,11 @@ class VaultNoteRepository(
         val vaultDoc = currentVaultDoc ?: return@withContext
         scanJob?.cancel()
         cache.clear()
-        metadataMap.clear()
+        metadataByIdMap.clear()
+        pathIndex.clear()
         pathToIdMap.clear()
         idToPathMap.clear()
+        currentlyEditingNoteId = null
         loadMetadata(vaultDoc)
         loadWorkspace(vaultDoc)
         startVaultScan(vaultDoc)
@@ -228,19 +295,18 @@ class VaultNoteRepository(
         val foundPaths = mutableSetOf<String>()
         val discoveredFolders = mutableSetOf<String>()
         var count = 0
+        var metadataChanged = false
 
         suspend fun traverse(dir: DocumentFile, currentRelPath: String) {
             val children = vaultManager.listChildren(dir)
             for (child in children) {
                 val name = child.name ?: continue
-                // CRITICAL RULE: Ignore every hidden file/folder (names starting with ".")
-                // Never read/modify/delete ".obsidian", ".kothapad", or any other hidden folder
+                // Ignore hidden files/folders (names starting with ".")
                 if (name.startsWith(".")) {
                     continue
                 }
 
                 if (child.isDirectory) {
-                    // Templates folder is reserved for template files (stamps)
                     if (currentRelPath.isEmpty() && name.equals(TEMPLATES_DIR, ignoreCase = true)) {
                         continue
                     }
@@ -259,58 +325,129 @@ class VaultNoteRepository(
                     val baseTitle = name.removeSuffix(".md")
                     val folderName = if (currentRelPath.isEmpty()) GENERAL_DIR else currentRelPath
                     val lastMod = child.lastModified()
+                    val fileSize = child.length()
 
-                    // Check existing cache
-                    val existing = cache[fileRelPath]
-                    if (existing != null && existing.lastModified == lastMod) {
-                        discoveredEntries.add(existing)
+                    val existingCache = cache[fileRelPath]
+                    val content = if (existingCache != null && existingCache.lastModified == lastMod) {
+                        existingCache.note.content
                     } else {
-                        // Read markdown content
-                        val content = vaultManager.readText(child)
-                        val meta = metadataMap[fileRelPath] ?: NoteMetadata(
-                            createdAt = if (lastMod > 0) lastMod else System.currentTimeMillis(),
-                            updatedAt = if (lastMod > 0) lastMod else System.currentTimeMillis()
-                        )
-                        metadataMap[fileRelPath] = meta
+                        vaultManager.readText(child)
+                    }
+                    val words = countWords(content)
+                    val chars = content.length
+                    val hash = content.hashCode().toLong()
 
-                        val id = getOrCreateIdForPath(fileRelPath)
-                        val note = Note(
-                            id = id,
-                            title = baseTitle,
-                            content = content,
-                            createdAt = meta.createdAt,
-                            updatedAt = meta.updatedAt,
-                            isPinned = meta.isPinned,
-                            languageCode = meta.languageCode,
-                            highlightColor = meta.highlightColor,
-                            fontSizeModifier = meta.fontSizeModifier,
-                            folder = folderName,
-                            tags = meta.tags,
-                            isArchived = meta.isArchived,
-                            isDeleted = meta.isDeleted,
-                            deletedAt = meta.deletedAt,
-                            sessionDurationSec = meta.sessionDurationSec
-                        )
+                    var meta = getMetadataForPath(fileRelPath)
 
-                        // Check if this is the currently open note and content changed externally
-                        if (existing != null && id == currentlyOpenNoteId && existing.note.content != content) {
-                            _externalNoteChange.value = ExternalNoteChange(
-                                note = note,
-                                diskContent = content,
-                                lastModified = lastMod
-                            )
+                    if (meta == null) {
+                        // Check for renamed / moved note: match by fileSize + lastModified OR contentHash
+                        val candidate = metadataByIdMap.values.firstOrNull { unmapped ->
+                            !foundPaths.contains(unmapped.path) &&
+                            !unmapped.path.startsWith(TRASH_PREFIX) &&
+                            ((unmapped.fileSize > 0L && unmapped.fileSize == fileSize && Math.abs(unmapped.modifiedAt - lastMod) < 2000L) ||
+                             (unmapped.contentHash != 0L && unmapped.contentHash == hash))
                         }
 
-                        val entry = CachedNoteEntry(
+                        if (candidate != null) {
+                            // Carried over metadata for moved/renamed note
+                            val oldPath = candidate.path
+                            pathIndex.remove(oldPath)
+                            meta = candidate.copy(
+                                path = fileRelPath,
+                                modifiedAt = lastMod,
+                                updatedAt = lastMod,
+                                fileSize = fileSize,
+                                contentHash = hash,
+                                wordCount = words,
+                                charCount = chars,
+                                isOrphaned = false,
+                                orphanedAt = null
+                            )
+                            putMetadata(meta)
+                            metadataChanged = true
+                        } else {
+                            // Missing entry: create new entry.
+                            // SAF has no real creation timestamp; use file lastModified if available, NEVER System.currentTimeMillis()
+                            val createdTs = if (lastMod > 0L) lastMod else System.currentTimeMillis()
+                            meta = NoteMetadata(
+                                path = fileRelPath,
+                                createdAt = createdTs,
+                                updatedAt = lastMod,
+                                modifiedAt = lastMod,
+                                sessionCount = 0,
+                                timeSpent = 0L,
+                                sessionDurationSec = 0L,
+                                wordCount = words,
+                                charCount = chars,
+                                fileSize = fileSize,
+                                contentHash = hash
+                            )
+                            putMetadata(meta)
+                            metadataChanged = true
+                        }
+                    } else {
+                        // Entry exists! Check if edited outside the app
+                        if (lastMod > meta.modifiedAt + 2000L && lastMod > meta.updatedAt + 2000L) {
+                            meta = meta.copy(
+                                modifiedAt = lastMod,
+                                updatedAt = lastMod,
+                                wordCount = words,
+                                charCount = chars,
+                                fileSize = fileSize,
+                                contentHash = hash,
+                                isOrphaned = false,
+                                orphanedAt = null
+                            )
+                            putMetadata(meta)
+                            metadataChanged = true
+                        } else {
+                            // Unchanged entry: keep ALL its fields untouched
+                            if (meta.isOrphaned) {
+                                meta = meta.copy(isOrphaned = false, orphanedAt = null)
+                                putMetadata(meta)
+                                metadataChanged = true
+                            }
+                        }
+                    }
+
+                    val id = getOrCreateIdForPath(fileRelPath)
+                    val note = Note(
+                        id = id,
+                        title = baseTitle,
+                        content = content,
+                        createdAt = if (meta.createdAt > 0L) meta.createdAt else (if (lastMod > 0L) lastMod else System.currentTimeMillis()),
+                        updatedAt = meta.updatedAt,
+                        isPinned = meta.isPinned,
+                        languageCode = meta.languageCode,
+                        highlightColor = meta.highlightColor,
+                        fontSizeModifier = meta.fontSizeModifier,
+                        folder = folderName,
+                        tags = meta.tags,
+                        isArchived = meta.isArchived,
+                        isDeleted = meta.isDeleted,
+                        deletedAt = meta.deletedAt,
+                        sessionDurationSec = meta.timeSpent.coerceAtLeast(meta.sessionDurationSec),
+                        sessionCount = meta.sessionCount
+                    )
+
+                    // Check if this is the currently open note and content changed externally
+                    if (existingCache != null && id == currentlyOpenNoteId && existingCache.note.content != content) {
+                        _externalNoteChange.value = ExternalNoteChange(
                             note = note,
-                            file = child,
-                            parentDir = dir,
-                            relPath = fileRelPath,
+                            diskContent = content,
                             lastModified = lastMod
                         )
-                        cache[fileRelPath] = entry
-                        discoveredEntries.add(entry)
                     }
+
+                    val entry = CachedNoteEntry(
+                        note = note,
+                        file = child,
+                        parentDir = dir,
+                        relPath = fileRelPath,
+                        lastModified = lastMod
+                    )
+                    cache[fileRelPath] = entry
+                    discoveredEntries.add(entry)
                 }
             }
         }
@@ -321,7 +458,7 @@ class VaultNoteRepository(
         val trashDir = vaultConfigStore.getOrCreateTrashDir(vaultDoc)
         if (trashDir != null) {
             val trashedInNormalFolder = cache.entries.filter { entry ->
-                val meta = metadataMap[entry.key]
+                val meta = getMetadataForPath(entry.key)
                 meta != null && meta.isDeleted && !entry.key.startsWith(TRASH_PREFIX)
             }.toList()
 
@@ -344,18 +481,20 @@ class VaultNoteRepository(
                             vaultManager.rename(moved, targetTrashName)
                         }
                         val newRel = "$TRASH_PREFIX$targetTrashName"
-                        val existingMeta = metadataMap[oldRel]
+                        val existingMeta = getMetadataForPath(oldRel)
                         val meta = (existingMeta ?: NoteMetadata()).copy(
+                            path = newRel,
                             isDeleted = true,
                             originalRelPath = oldRel,
                             trashFileName = targetTrashName
                         )
-                        metadataMap.remove(oldRel)
-                        metadataMap[newRel] = meta
+                        removeMetadataForPath(oldRel)
+                        putMetadata(meta)
                         cache.remove(oldRel)
                         updateIdPath(oldRel, newRel)
                         foundPaths.remove(oldRel)
                         discoveredEntries.removeAll { it.relPath == oldRel }
+                        metadataChanged = true
                     }
                 }
             }
@@ -369,7 +508,7 @@ class VaultNoteRepository(
                 trashRelPathsOnDisk.add(trashRel)
                 foundPaths.add(trashRel)
 
-                val meta = metadataMap[trashRel] ?: metadataMap.values.firstOrNull { it.trashFileName == tName }
+                val meta = getMetadataForPath(trashRel) ?: metadataByIdMap.values.firstOrNull { it.trashFileName == tName }
                 val origRel = meta?.originalRelPath ?: tName
                 val origFolder = if (origRel.contains("/")) origRel.substringBeforeLast("/") else GENERAL_DIR
                 val baseTitle = meta?.originalRelPath?.substringAfterLast("/")?.removeSuffix(".md")
@@ -377,14 +516,16 @@ class VaultNoteRepository(
 
                 val effectiveMeta = (meta ?: NoteMetadata(
                     createdAt = tFile.lastModified(),
-                    updatedAt = tFile.lastModified()
+                    updatedAt = tFile.lastModified(),
+                    modifiedAt = tFile.lastModified()
                 )).copy(
+                    path = trashRel,
                     isDeleted = true,
                     deletedAt = meta?.deletedAt ?: tFile.lastModified(),
                     originalRelPath = origRel,
                     trashFileName = tName
                 )
-                metadataMap[trashRel] = effectiveMeta
+                putMetadata(effectiveMeta)
 
                 val id = getOrCreateIdForPath(trashRel)
                 val content = vaultManager.readText(tFile)
@@ -403,7 +544,8 @@ class VaultNoteRepository(
                     isArchived = false,
                     isDeleted = true,
                     deletedAt = effectiveMeta.deletedAt,
-                    sessionDurationSec = effectiveMeta.sessionDurationSec
+                    sessionDurationSec = effectiveMeta.timeSpent.coerceAtLeast(effectiveMeta.sessionDurationSec),
+                    sessionCount = effectiveMeta.sessionCount
                 )
                 val entry = CachedNoteEntry(
                     note = note,
@@ -416,11 +558,12 @@ class VaultNoteRepository(
             }
 
             // Clean up metadata for trashed notes whose files no longer exist in trash
-            val deadTrashMeta = metadataMap.keys.filter { it.startsWith(TRASH_PREFIX) && !trashRelPathsOnDisk.contains(it) }
+            val deadTrashMeta = metadataByIdMap.values.filter { it.path.startsWith(TRASH_PREFIX) && !trashRelPathsOnDisk.contains(it.path) }
             for (d in deadTrashMeta) {
-                metadataMap.remove(d)
-                cache.remove(d)
-                removeIdForPath(d)
+                removeMetadataForPath(d.path)
+                cache.remove(d.path)
+                removeIdForPath(d.path)
+                metadataChanged = true
             }
         }
 
@@ -429,13 +572,25 @@ class VaultNoteRepository(
         for (r in removedKeys) {
             cache.remove(r)
             removeIdForPath(r)
-            metadataMap.remove(r)
         }
 
-        // Clean up orphaned metadata keys
-        val orphanMeta = metadataMap.keys.filter { !foundPaths.contains(it) }
-        for (orphan in orphanMeta) {
-            metadataMap.remove(orphan)
+        // Entries in metadata whose files were not found on disk: mark as orphaned (keep for grace period)
+        for ((metaId, entry) in metadataByIdMap) {
+            if (!foundPaths.contains(entry.path) && !entry.path.startsWith(TRASH_PREFIX)) {
+                if (!entry.isOrphaned) {
+                    val orphaned = entry.copy(isOrphaned = true, orphanedAt = System.currentTimeMillis())
+                    metadataByIdMap[metaId] = orphaned
+                    metadataChanged = true
+                } else {
+                    // Grace period: keep for 30 days before permanently purging
+                    val age = System.currentTimeMillis() - (entry.orphanedAt ?: System.currentTimeMillis())
+                    if (age > 30L * 24 * 3600 * 1000) {
+                        metadataByIdMap.remove(metaId)
+                        pathIndex.remove(entry.path)
+                        metadataChanged = true
+                    }
+                }
+            }
         }
 
         // Sync discovered real folders to customFolders so they appear in Notes Manager
@@ -461,25 +616,8 @@ class VaultNoteRepository(
             } catch (_: Exception) {}
         }
 
-        // Ensure "⚡KothaPad Tips" and "⚡KothaPad features" exist in the General folder of this vault
-        val currentNotes = cache.values.map { it.note }
-
-        // 1. If an older "⚡ KothaPad Quick Tips" note exists, upgrade it to "⚡KothaPad Tips"
-        val oldQuickTips = currentNotes.find {
-            it.title == "⚡ KothaPad Quick Tips" || it.title.contains("Quick Tips")
-        }
-        if (oldQuickTips != null) {
-            val updated = oldQuickTips.copy(
-                title = "⚡KothaPad Tips",
-                content = com.example.data.db.AppDatabase.KOTHAPAD_TIPS_CONTENT,
-                folder = GENERAL_DIR,
-                isPinned = true,
-                tags = "tips,guide,shortcuts,scenarios",
-                updatedAt = System.currentTimeMillis()
-            )
-            updateInternal(updated, vaultDoc)
-        } else if (cache.values.none { it.note.title == "⚡KothaPad Tips" }) {
-            // Otherwise, if "⚡KothaPad Tips" doesn't exist yet, insert it
+        // Only seed tips notes if vault is completely empty (0 user notes)
+        if (cache.isEmpty() && discoveredEntries.isEmpty()) {
             val tipsNote = Note(
                 title = "⚡KothaPad Tips",
                 content = com.example.data.db.AppDatabase.KOTHAPAD_TIPS_CONTENT,
@@ -496,26 +634,10 @@ class VaultNoteRepository(
             }
         }
 
-        // 2. Ensure "⚡KothaPad features" exists in General folder
-        if (cache.values.none { it.note.title == "⚡KothaPad features" }) {
-            val featuresNote = Note(
-                title = "⚡KothaPad features",
-                content = com.example.data.db.AppDatabase.KOTHAPAD_FEATURES_CONTENT,
-                folder = GENERAL_DIR,
-                isPinned = false,
-                tags = "features,guide,docs,reference",
-                createdAt = System.currentTimeMillis() + 1,
-                updatedAt = System.currentTimeMillis() + 1
-            )
-            val createdId = insertInternal(featuresNote, vaultDoc)
-            val createdNote = getNoteOnce(createdId)
-            if (createdNote != null) {
-                cache[getRelPathForNote(createdNote)]?.let { discoveredEntries.add(it) }
-            }
+        // NO WRITE ON PURE OPEN: only save metadata if something actually changed!
+        if (metadataChanged) {
+            saveMetadata()
         }
-
-        // Persist updated metadata
-        saveMetadata()
         recomputeFlows()
     }
 
@@ -531,67 +653,118 @@ class VaultNoteRepository(
     }
 
     // =========================================================================
-    // Metadata Persistence (.kothapad/notes-meta.json)
+    // Metadata Persistence (.KOTHAPAD/notes-meta.json)
     // =========================================================================
 
     private suspend fun loadMetadata(vaultDoc: DocumentFile) = withContext(Dispatchers.IO) {
         try {
+            metadataByIdMap.clear()
+            pathIndex.clear()
+
             val root = vaultConfigStore.readNotesMeta(vaultDoc) ?: return@withContext
             val notesObj = root.optJSONObject("notes") ?: return@withContext
 
             val keys = notesObj.keys()
             while (keys.hasNext()) {
-                val relPath = keys.next()
-                val obj = notesObj.optJSONObject(relPath) ?: continue
+                val entryKey = keys.next()
+                val obj = notesObj.optJSONObject(entryKey) ?: continue
+
+                // Backward-compatible schema migration (schema v1 -> v2):
+                // If entryKey is path or obj doesn't have "id", generate a stable UUID
+                val noteId = if (obj.has("id") && !obj.isNull("id") && obj.optString("id").isNotBlank()) {
+                    obj.optString("id")
+                } else {
+                    java.util.UUID.randomUUID().toString()
+                }
+                val relPath = if (obj.has("path") && !obj.isNull("path") && obj.optString("path").isNotBlank()) {
+                    obj.optString("path")
+                } else {
+                    entryKey
+                }
+                val timeSpentVal = if (obj.has("timeSpent")) {
+                    obj.optLong("timeSpent", 0L)
+                } else {
+                    obj.optLong("sessionDurationSec", 0L)
+                }
+                val rawCreatedAt = obj.optLong("createdAt", 0L)
+                val rawUpdatedAt = obj.optLong("updatedAt", 0L)
+                val rawModifiedAt = if (obj.has("modifiedAt")) obj.optLong("modifiedAt", rawUpdatedAt) else rawUpdatedAt
+
                 val meta = NoteMetadata(
+                    id = noteId,
+                    path = relPath,
                     isPinned = obj.optBoolean("isPinned", false),
                     isArchived = obj.optBoolean("isArchived", false),
                     isDeleted = obj.optBoolean("isDeleted", false),
                     deletedAt = if (obj.has("deletedAt") && !obj.isNull("deletedAt")) obj.optLong("deletedAt") else null,
-                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                    updatedAt = obj.optLong("updatedAt", System.currentTimeMillis()),
+                    createdAt = rawCreatedAt,
+                    updatedAt = rawUpdatedAt,
+                    modifiedAt = rawModifiedAt,
+                    sessionCount = obj.optInt("sessionCount", 0),
+                    timeSpent = timeSpentVal,
+                    sessionDurationSec = timeSpentVal,
+                    wordCount = obj.optInt("wordCount", 0),
+                    charCount = obj.optInt("charCount", 0),
+                    fileSize = obj.optLong("fileSize", 0L),
+                    contentHash = obj.optLong("contentHash", 0L),
                     languageCode = if (obj.has("languageCode") && !obj.isNull("languageCode")) obj.optString("languageCode") else null,
                     highlightColor = if (obj.has("highlightColor") && !obj.isNull("highlightColor")) obj.optString("highlightColor") else null,
                     fontSizeModifier = obj.optDouble("fontSizeModifier", 0.0).toFloat(),
                     tags = obj.optString("tags", ""),
-                    sessionDurationSec = obj.optLong("sessionDurationSec", 0L),
                     originalRelPath = if (obj.has("originalRelPath") && !obj.isNull("originalRelPath")) obj.optString("originalRelPath") else null,
-                    trashFileName = if (obj.has("trashFileName") && !obj.isNull("trashFileName")) obj.optString("trashFileName") else null
+                    trashFileName = if (obj.has("trashFileName") && !obj.isNull("trashFileName")) obj.optString("trashFileName") else null,
+                    isOrphaned = obj.optBoolean("isOrphaned", false),
+                    orphanedAt = if (obj.has("orphanedAt") && !obj.isNull("orphanedAt")) obj.optLong("orphanedAt") else null
                 )
-                metadataMap[relPath] = meta
+                putMetadata(meta)
             }
         } catch (_: Exception) {
-            // Safe tolerant fallback: malformed metadata is safely ignored
+            // Tolerant fallback
         }
     }
 
-    suspend fun saveMetadata() = withContext(Dispatchers.IO) {
+    suspend fun saveMetadata(immediate: Boolean = false) = withContext(Dispatchers.IO) {
         val vaultDoc = currentVaultDoc ?: return@withContext
+        if (vaultConfigStore.isFileInSafeMode(NOTES_META_FILE)) {
+            // Safe mode prevents overwriting corrupted file!
+            return@withContext
+        }
         try {
             val root = JSONObject()
             root.put("schemaVersion", META_SCHEMA_VERSION)
             val notesObj = JSONObject()
-            for ((path, meta) in metadataMap) {
+            for ((id, meta) in metadataByIdMap) {
                 val obj = JSONObject()
+                obj.put("id", meta.id)
+                obj.put("path", meta.path)
                 obj.put("isPinned", meta.isPinned)
                 obj.put("isArchived", meta.isArchived)
                 obj.put("isDeleted", meta.isDeleted)
                 if (meta.deletedAt != null) obj.put("deletedAt", meta.deletedAt)
                 obj.put("createdAt", meta.createdAt)
                 obj.put("updatedAt", meta.updatedAt)
+                obj.put("modifiedAt", meta.modifiedAt)
+                obj.put("sessionCount", meta.sessionCount)
+                obj.put("timeSpent", meta.timeSpent)
+                obj.put("sessionDurationSec", meta.sessionDurationSec)
+                obj.put("wordCount", meta.wordCount)
+                obj.put("charCount", meta.charCount)
+                obj.put("fileSize", meta.fileSize)
+                obj.put("contentHash", meta.contentHash)
                 if (meta.languageCode != null) obj.put("languageCode", meta.languageCode)
                 if (meta.highlightColor != null) obj.put("highlightColor", meta.highlightColor)
                 obj.put("fontSizeModifier", meta.fontSizeModifier.toDouble())
                 obj.put("tags", meta.tags)
-                obj.put("sessionDurationSec", meta.sessionDurationSec)
                 if (meta.originalRelPath != null) obj.put("originalRelPath", meta.originalRelPath)
                 if (meta.trashFileName != null) obj.put("trashFileName", meta.trashFileName)
-                notesObj.put(path, obj)
+                if (meta.isOrphaned) obj.put("isOrphaned", true)
+                if (meta.orphanedAt != null) obj.put("orphanedAt", meta.orphanedAt)
+                notesObj.put(id, obj)
             }
             root.put("notes", notesObj)
-            vaultConfigStore.updateNotesMeta(vaultDoc, root)
+            vaultConfigStore.updateNotesMeta(vaultDoc, root, immediate)
         } catch (_: Exception) {
-            // Keep going, non-blocking
+            // Non-blocking
         }
     }
 
@@ -727,26 +900,42 @@ class VaultNoteRepository(
         val relPath = if (targetFolder.isEmpty() || targetFolder == ".") finalFileName else "$targetFolder/$finalFileName"
         val id = getOrCreateIdForPath(relPath)
 
+        val now = System.currentTimeMillis()
+        val words = countWords(note.content)
+        val chars = note.content.length
+        val hash = note.content.hashCode().toLong()
+        val fileSize = file.length()
+
         val meta = NoteMetadata(
+            id = java.util.UUID.randomUUID().toString(),
+            path = relPath,
             isPinned = note.isPinned,
             isArchived = note.isArchived,
             isDeleted = note.isDeleted,
             deletedAt = note.deletedAt,
-            createdAt = note.createdAt,
-            updatedAt = System.currentTimeMillis(),
+            createdAt = if (note.createdAt > 0L) note.createdAt else now,
+            updatedAt = now,
+            modifiedAt = now,
+            sessionCount = if (note.sessionCount > 0) note.sessionCount else 1,
+            timeSpent = note.sessionDurationSec,
+            sessionDurationSec = note.sessionDurationSec,
+            wordCount = words,
+            charCount = chars,
+            fileSize = fileSize,
+            contentHash = hash,
             languageCode = note.languageCode,
             highlightColor = note.highlightColor,
             fontSizeModifier = note.fontSizeModifier,
-            tags = note.tags,
-            sessionDurationSec = note.sessionDurationSec
+            tags = note.tags
         )
-        metadataMap[relPath] = meta
+        putMetadata(meta)
 
         val createdNote = note.copy(
             id = id,
             title = cleanTitle,
             folder = targetFolder,
-            updatedAt = meta.updatedAt
+            updatedAt = meta.updatedAt,
+            sessionCount = meta.sessionCount
         )
         val entry = CachedNoteEntry(
             note = createdNote,
@@ -841,23 +1030,28 @@ class VaultNoteRepository(
                     }
                     val newTrashRelPath = "$TRASH_PREFIX$targetTrashName"
                     val now = note.deletedAt ?: System.currentTimeMillis()
-                    val meta = NoteMetadata(
+                    val existingMeta = getMetadataForPath(currentRelPath)
+                    val meta = (existingMeta ?: NoteMetadata()).copy(
+                        path = newTrashRelPath,
                         isPinned = false,
                         isArchived = false,
                         isDeleted = true,
                         deletedAt = now,
-                        createdAt = note.createdAt,
+                        createdAt = if (existingMeta != null && existingMeta.createdAt > 0L) existingMeta.createdAt else note.createdAt,
                         updatedAt = now,
+                        modifiedAt = now,
+                        sessionCount = existingMeta?.sessionCount ?: note.sessionCount,
+                        timeSpent = note.sessionDurationSec,
+                        sessionDurationSec = note.sessionDurationSec,
                         languageCode = note.languageCode,
                         highlightColor = note.highlightColor,
                         fontSizeModifier = note.fontSizeModifier,
                         tags = note.tags,
-                        sessionDurationSec = note.sessionDurationSec,
                         originalRelPath = currentRelPath,
                         trashFileName = targetTrashName
                     )
-                    metadataMap.remove(currentRelPath)
-                    metadataMap[newTrashRelPath] = meta
+                    removeMetadataForPath(currentRelPath)
+                    putMetadata(meta)
                     cache.remove(currentRelPath)
                     updateIdPath(currentRelPath, newTrashRelPath)
 
@@ -868,7 +1062,8 @@ class VaultNoteRepository(
                         isDeleted = true,
                         deletedAt = now,
                         isPinned = false,
-                        updatedAt = now
+                        updatedAt = now,
+                        sessionCount = meta.sessionCount
                     )
                     cache[newTrashRelPath] = CachedNoteEntry(
                         note = updatedTrashedNote,
@@ -890,7 +1085,7 @@ class VaultNoteRepository(
 
         // Handle Physical Restoring from Trash
         if (!note.isDeleted && (entry.note.isDeleted || currentRelPath.startsWith(TRASH_PREFIX))) {
-            val meta = metadataMap[currentRelPath] ?: metadataMap.values.firstOrNull { it.trashFileName == currentFile.name }
+            val meta = getMetadataForPath(currentRelPath) ?: metadataByIdMap.values.firstOrNull { it.trashFileName == currentFile.name }
             val originalRel = meta?.originalRelPath ?: "${note.folder}/${note.title}.md".trimStart('/')
             val destFolder = if (originalRel.contains("/")) originalRel.substringBeforeLast("/") else (if (note.folder.isNotBlank()) note.folder else GENERAL_DIR)
             val baseName = originalRel.substringAfterLast("/").removeSuffix(".md").ifBlank { note.title.ifBlank { "Restored Note" } }
@@ -906,23 +1101,29 @@ class VaultNoteRepository(
                 val cleanRestoredTitle = uniqueName.removeSuffix(".md")
                 val newRelPath = if (destFolder.isEmpty() || destFolder == ".") uniqueName else "$destFolder/$uniqueName"
                 val now = System.currentTimeMillis()
-                val restoredMeta = NoteMetadata(
+                val restoredMeta = (meta ?: NoteMetadata()).copy(
+                    path = newRelPath,
                     isPinned = note.isPinned,
                     isArchived = note.isArchived,
                     isDeleted = false,
                     deletedAt = null,
-                    createdAt = note.createdAt,
+                    createdAt = if (meta != null && meta.createdAt > 0L) meta.createdAt else note.createdAt,
                     updatedAt = now,
+                    modifiedAt = now,
+                    sessionCount = meta?.sessionCount ?: note.sessionCount,
+                    timeSpent = note.sessionDurationSec,
+                    sessionDurationSec = note.sessionDurationSec,
                     languageCode = note.languageCode,
                     highlightColor = note.highlightColor,
                     fontSizeModifier = note.fontSizeModifier,
                     tags = note.tags,
-                    sessionDurationSec = note.sessionDurationSec,
                     originalRelPath = null,
-                    trashFileName = null
+                    trashFileName = null,
+                    isOrphaned = false,
+                    orphanedAt = null
                 )
-                metadataMap.remove(currentRelPath)
-                metadataMap[newRelPath] = restoredMeta
+                removeMetadataForPath(currentRelPath)
+                putMetadata(restoredMeta)
                 cache.remove(currentRelPath)
                 updateIdPath(currentRelPath, newRelPath)
 
@@ -932,7 +1133,8 @@ class VaultNoteRepository(
                     folder = destFolder,
                     isDeleted = false,
                     deletedAt = null,
-                    updatedAt = now
+                    updatedAt = now,
+                    sessionCount = restoredMeta.sessionCount
                 )
                 cache[newRelPath] = CachedNoteEntry(
                     note = restoredNote,
@@ -958,7 +1160,10 @@ class VaultNoteRepository(
                     currentParent = newParentDir
                     val fileName = movedFile.name ?: "${note.title}.md"
                     val newRel = "$targetFolder/$fileName"
-                    metadataMap.remove(currentRelPath)?.let { metadataMap[newRel] = it }
+                    getMetadataForPath(currentRelPath)?.let {
+                        removeMetadataForPath(currentRelPath)
+                        putMetadata(it.copy(path = newRel))
+                    }
                     cache.remove(currentRelPath)
                     updateIdPath(currentRelPath, newRel)
                     currentRelPath = newRel
@@ -974,7 +1179,10 @@ class VaultNoteRepository(
             if (renamed) {
                 val parentPath = if (currentRelPath.contains("/")) currentRelPath.substringBeforeLast("/") else ""
                 val newRel = if (parentPath.isEmpty()) uniqueName else "$parentPath/$uniqueName"
-                metadataMap.remove(currentRelPath)?.let { metadataMap[newRel] = it }
+                getMetadataForPath(currentRelPath)?.let {
+                    removeMetadataForPath(currentRelPath)
+                    putMetadata(it.copy(path = newRel))
+                }
                 cache.remove(currentRelPath)
                 updateIdPath(currentRelPath, newRel)
                 currentRelPath = newRel
@@ -1006,26 +1214,48 @@ class VaultNoteRepository(
 
         // 4. Update metadata in notes-meta.json
         val now = System.currentTimeMillis()
-        val meta = NoteMetadata(
+        val existingMeta = getMetadataForPath(currentRelPath)
+        val words = countWords(note.content)
+        val chars = note.content.length
+        val hash = note.content.hashCode().toLong()
+        val fileSize = currentFile.length()
+
+        val meta = (existingMeta ?: NoteMetadata(
+            id = java.util.UUID.randomUUID().toString(),
+            path = currentRelPath,
+            createdAt = note.createdAt,
+            sessionCount = note.sessionCount
+        )).copy(
+            path = currentRelPath,
             isPinned = note.isPinned,
             isArchived = note.isArchived,
             isDeleted = note.isDeleted,
             deletedAt = note.deletedAt,
-            createdAt = note.createdAt,
+            createdAt = if (existingMeta != null && existingMeta.createdAt > 0L) existingMeta.createdAt else note.createdAt,
             updatedAt = now,
+            modifiedAt = now,
+            sessionCount = existingMeta?.sessionCount ?: note.sessionCount,
+            timeSpent = note.sessionDurationSec,
+            sessionDurationSec = note.sessionDurationSec,
+            wordCount = words,
+            charCount = chars,
+            fileSize = fileSize,
+            contentHash = hash,
             languageCode = note.languageCode,
             highlightColor = note.highlightColor,
             fontSizeModifier = note.fontSizeModifier,
             tags = note.tags,
-            sessionDurationSec = note.sessionDurationSec
+            isOrphaned = false,
+            orphanedAt = null
         )
-        metadataMap[currentRelPath] = meta
+        putMetadata(meta)
 
         val updatedNote = note.copy(
             id = entry.note.id,
             title = currentFile.name?.removeSuffix(".md") ?: note.title,
             folder = targetFolder,
-            updatedAt = now
+            updatedAt = now,
+            sessionCount = meta.sessionCount
         )
         val newEntry = CachedNoteEntry(
             note = updatedNote,
@@ -1063,7 +1293,7 @@ class VaultNoteRepository(
                 vaultManager.delete(entry.file)
                 cache.remove(relPath)
                 removeIdForPath(relPath)
-                metadataMap.remove(relPath)
+                removeMetadataForPath(relPath)
                 if (workspaceData.lastOpenedNoteRelPath == relPath) {
                     saveWorkspace(clearLastOpenedNote = true)
                 }
@@ -1121,11 +1351,11 @@ class VaultNoteRepository(
                     }
                 }
             }
-            val remainingTrash = metadataMap.keys.filter { it.startsWith(TRASH_PREFIX) }
+            val remainingTrash = metadataByIdMap.values.filter { it.path.startsWith(TRASH_PREFIX) }
             for (r in remainingTrash) {
-                metadataMap.remove(r)
-                cache.remove(r)
-                removeIdForPath(r)
+                removeMetadataForPath(r.path)
+                cache.remove(r.path)
+                removeIdForPath(r.path)
             }
             saveMetadata()
             recomputeFlows()

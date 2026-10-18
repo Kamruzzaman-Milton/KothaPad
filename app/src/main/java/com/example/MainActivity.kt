@@ -100,6 +100,8 @@ class MainActivity : ComponentActivity() {
             val migrationError by viewModel.migrationError.collectAsState()
             val showExternalConflictDialog by viewModel.showExternalConflictDialog.collectAsState()
             val pendingExternalChange by viewModel.pendingExternalChange.collectAsState()
+            val safeModeWarning by viewModel.safeModeWarning.collectAsState()
+            var acknowledgedSafeWarning by remember { mutableStateOf<String?>(null) }
 
             val density = LocalDensity.current
             val imeBottom = WindowInsets.ime.getBottom(density)
@@ -616,6 +618,25 @@ class MainActivity : ComponentActivity() {
                                 dismissButton = {
                                     OutlinedButton(onClick = { viewModel.resolveExternalConflict(keepMine = false) }) {
                                         Text("Load Disk Version")
+                                    }
+                                }
+                            )
+                        }
+
+                        // 6. Safe mode / corrupt metadata warning dialog
+                        if (safeModeWarning != null && safeModeWarning != acknowledgedSafeWarning) {
+                            AlertDialog(
+                                onDismissRequest = { acknowledgedSafeWarning = safeModeWarning },
+                                title = { Text("Vault Safe Mode Notice") },
+                                text = {
+                                    Text(
+                                        safeModeWarning ?: "",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                },
+                                confirmButton = {
+                                    Button(onClick = { acknowledgedSafeWarning = safeModeWarning }) {
+                                        Text("Dismiss")
                                     }
                                 }
                             )

@@ -7,6 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -247,6 +250,11 @@ class VaultConfigStore(
         return created
     }
 
+    // Track files in safe mode to prevent overwriting corrupted files
+    private val safeModeFiles = ConcurrentHashMap<String, Boolean>()
+    private val _safeModeWarning = MutableStateFlow<String?>(null)
+    val safeModeWarning: StateFlow<String?> = _safeModeWarning.asStateFlow()
+
     // =========================================================================
     // Reading Config Files
     // =========================================================================
@@ -255,6 +263,8 @@ class VaultConfigStore(
     suspend fun readNotesMeta(vaultRoot: DocumentFile): JSONObject? = readConfigFile(vaultRoot, FILE_NOTES_META)
     suspend fun readWorkspace(vaultRoot: DocumentFile): JSONObject? = readConfigFile(vaultRoot, FILE_WORKSPACE)
 
+    suspend fun isFileInSafeMode(fileName: String): Boolean = safeModeFiles[fileName] == true
+
     suspend fun readConfigFile(vaultRoot: DocumentFile, fileName: String): JSONObject? = mutex.withLock {
         withContext(Dispatchers.IO) {
             // Check in-memory cache
@@ -262,23 +272,62 @@ class VaultConfigStore(
 
             val configDir = resolveConfigDirInternal(vaultRoot) ?: return@withContext null
             val children = configDir.listFiles()
-            val file = children.firstOrNull { it.isFile && it.name.equals(fileName, ignoreCase = true) } ?: return@withContext null
+            val file = children.firstOrNull { it.isFile && it.name.equals(fileName, ignoreCase = true) }
+
+            // If file does not exist at all, return null (fresh vault case)
+            if (file == null || !file.exists()) {
+                return@withContext null
+            }
 
             val text = readFileText(file)
-            if (text.isBlank()) return@withContext null
-
-            try {
-                val json = JSONObject(text)
-                // Schema version check: ensure at least 1
-                if (!json.has("schemaVersion") || json.optInt("schemaVersion", 1) < 1) {
-                    json.put("schemaVersion", 1)
+            if (text.isNotBlank()) {
+                try {
+                    val json = JSONObject(text)
+                    if (!json.has("schemaVersion") || json.optInt("schemaVersion", 1) < 1) {
+                        json.put("schemaVersion", 1)
+                    }
+                    jsonCache[fileName] = JSONObject(json.toString())
+                    lastWrittenContent[fileName] = text
+                    safeModeFiles[fileName] = false
+                    return@withContext json
+                } catch (_: Exception) {
+                    // Corrupted JSON inside an existing file
                 }
-                jsonCache[fileName] = JSONObject(json.toString())
-                lastWrittenContent[fileName] = text
-                json
-            } catch (_: Exception) {
-                null
             }
+
+            // CRITICAL: File exists on disk, but is empty or corrupted! NEVER OVERWRITE.
+            safeModeFiles[fileName] = true
+
+            // 1. Preserve corrupt copy with timestamp
+            val corruptName = "${fileName.removeSuffix(".json")}.corrupt-${System.currentTimeMillis()}.json"
+            try {
+                val corruptFile = configDir.createFile("application/json", corruptName)
+                if (corruptFile != null && text.isNotEmpty()) {
+                    context.contentResolver.openOutputStream(corruptFile.uri, "wt")?.use { stream ->
+                        stream.bufferedWriter(Charsets.UTF_8).use { it.write(text); it.flush() }
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // 2. Try to recover from .bak backup if present
+            val bakName = "$fileName.bak"
+            val bakFile = children.firstOrNull { it.isFile && it.name.equals(bakName, ignoreCase = true) }
+            if (bakFile != null && bakFile.exists()) {
+                val bakText = readFileText(bakFile)
+                if (bakText.isNotBlank()) {
+                    try {
+                        val recoveredJson = JSONObject(bakText)
+                        jsonCache[fileName] = JSONObject(recoveredJson.toString())
+                        lastWrittenContent[fileName] = bakText
+                        safeModeFiles[fileName] = false
+                        _safeModeWarning.value = "Warning: $fileName was corrupted. Successfully recovered from $bakName. Corrupt copy preserved as $corruptName."
+                        return@withContext recoveredJson
+                    } catch (_: Exception) {}
+                }
+            }
+
+            _safeModeWarning.value = "Warning: $fileName was corrupted and could not be recovered. Safe mode enabled to prevent overwriting."
+            null
         }
     }
 
@@ -317,6 +366,11 @@ class VaultConfigStore(
         immediate: Boolean = false
     ) = mutex.withLock {
         withContext(Dispatchers.IO) {
+            if (safeModeFiles[fileName] == true) {
+                // In safe mode due to unrecovered corruption: NEVER overwrite!
+                return@withContext
+            }
+
             val existing = jsonCache[fileName] ?: readConfigFileInternal(vaultRoot, fileName) ?: JSONObject()
             val merged = if (existing.length() > 0) {
                 // Preserve schemaVersion rule
@@ -340,7 +394,7 @@ class VaultConfigStore(
                 writeToDiskInternal(vaultRoot, fileName, merged)
             } else {
                 val job = scope.launch(Dispatchers.IO) {
-                    delay(500)
+                    delay(1500) // Debounce ~1.5 s
                     mutex.withLock {
                         val toWrite = jsonCache[fileName] ?: return@withLock
                         writeToDiskInternal(vaultRoot, fileName, toWrite)
@@ -383,24 +437,65 @@ class VaultConfigStore(
     }
 
     private fun writeToDiskInternal(vaultRoot: DocumentFile, fileName: String, json: JSONObject): Boolean {
+        if (safeModeFiles[fileName] == true) {
+            return false // Safe mode protects against corrupt file overwrite
+        }
         return try {
             if (!json.has("schemaVersion") || json.optInt("schemaVersion", 1) < 1) {
                 json.put("schemaVersion", 1)
             }
             val formatted = json.toString(2)
-            // Validate JSON formatting
+            // Validate JSON formatting in memory first
             JSONObject(formatted)
 
-            // Avoid writing if content did not change
+            // NO WRITE IF UNCHANGED (No-op write avoidance)
             val lastSaved = lastWrittenContent[fileName]
             if (lastSaved == formatted) {
                 return true
             }
 
             val configDir = resolveConfigDirInternal(vaultRoot) ?: return false
+
+            // SAFE ATOMIC WRITE:
+            // 1. Write to temporary file in .KOTHAPAD
+            val tempName = "$fileName.tmp"
+            val tempFile = configDir.findFile(tempName) ?: configDir.createFile("application/json", tempName)
+            if (tempFile != null && tempFile.exists()) {
+                context.contentResolver.openOutputStream(tempFile.uri, "wt")?.use { stream ->
+                    stream.bufferedWriter(Charsets.UTF_8).use { writer ->
+                        writer.write(formatted)
+                        writer.flush()
+                    }
+                }
+                // Verify temp file parses correctly
+                val verifyText = readFileText(tempFile)
+                if (verifyText.isBlank()) {
+                    tempFile.delete()
+                    return false
+                }
+                JSONObject(verifyText) // Will throw if invalid
+                tempFile.delete()
+            }
+
             val file = getOrCreateFileInternal(configDir, fileName) ?: return false
 
-            // In-place update with truncate mode ("wt")
+            // 2. Before overwriting, keep a backup of the last good version if file already has content
+            if (!lastSaved.isNullOrBlank()) {
+                try {
+                    val bakName = "$fileName.bak"
+                    val bakFile = configDir.findFile(bakName) ?: configDir.createFile("application/json", bakName)
+                    if (bakFile != null) {
+                        context.contentResolver.openOutputStream(bakFile.uri, "wt")?.use { stream ->
+                            stream.bufferedWriter(Charsets.UTF_8).use { writer ->
+                                writer.write(lastSaved)
+                                writer.flush()
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 3. Write verified content to target file
             context.contentResolver.openOutputStream(file.uri, "wt")?.use { stream ->
                 stream.bufferedWriter(Charsets.UTF_8).use { writer ->
                     writer.write(formatted)
