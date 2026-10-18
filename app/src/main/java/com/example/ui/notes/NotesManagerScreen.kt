@@ -914,52 +914,55 @@ fun NotesManagerScreen(
             ) {
                 if (currentVaultView == VaultView.TRASH) {
                     // TRASH VIEW BANNER & LIST
-                    TrashHeaderBanner(
-                        trashedCount = trashedNotes.size,
-                    trashAutoEmptyDays = trashAutoEmptyDays,
-                    onEmptyTrashClick = { showEmptyTrashConfirmDialog = true },
-                    onUpdateTrashDays = onUpdateTrashDays
-                )
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        TrashHeaderBanner(
+                            trashedCount = trashedNotes.size,
+                            trashAutoEmptyDays = trashAutoEmptyDays,
+                            onEmptyTrashClick = { showEmptyTrashConfirmDialog = true },
+                            onUpdateTrashDays = onUpdateTrashDays
+                        )
 
-                if (filteredNotes.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Trash is empty", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 12.dp),
-                        contentPadding = PaddingValues(bottom = 96.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(getSortedNotesForFolder(filteredNotes), key = { it.id }) { note ->
-                            NoteTreeItem(
-                                note = note,
-                                isCurrentlyOpen = false,
-                                isMultiSelectMode = isMultiSelectMode,
-                                isSelected = selectedNoteIds.contains(note.id),
-                                showMetrics = showNoteMetrics,
-                                metricsStyle = noteMetricsStyle,
-                                noteMetricsOrder = noteMetricsOrder,
-                                noteMetricsHiddenItems = noteMetricsHiddenItems,
-                                isTrash = true,
-                                onNoteClick = { },
-                                onToggleSelect = {
-                                    selectedNoteIds = if (selectedNoteIds.contains(note.id)) selectedNoteIds - note.id else selectedNoteIds + note.id
-                                },
-                                onRestore = { onRestoreNote(note) },
-                                onDeletePermanent = { onPermanentlyDeleteNote(note) }
-                            )
+                        if (filteredNotes.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Trash is empty", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .padding(horizontal = 12.dp),
+                                contentPadding = PaddingValues(bottom = 96.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(getSortedNotesForFolder(filteredNotes), key = { it.id }) { note ->
+                                    NoteTreeItem(
+                                        note = note,
+                                        isCurrentlyOpen = false,
+                                        isMultiSelectMode = isMultiSelectMode,
+                                        isSelected = selectedNoteIds.contains(note.id),
+                                        showMetrics = showNoteMetrics,
+                                        metricsStyle = noteMetricsStyle,
+                                        noteMetricsOrder = noteMetricsOrder,
+                                        noteMetricsHiddenItems = noteMetricsHiddenItems,
+                                        isTrash = true,
+                                        onNoteClick = { },
+                                        onToggleSelect = {
+                                            selectedNoteIds = if (selectedNoteIds.contains(note.id)) selectedNoteIds - note.id else selectedNoteIds + note.id
+                                        },
+                                        onRestore = { onRestoreNote(note) },
+                                        onDeletePermanent = { onPermanentlyDeleteNote(note) }
+                                    )
+                                }
+                            }
                         }
                     }
-                }
-            } else if (currentVaultView == VaultView.ARCHIVE) {
+                } else if (currentVaultView == VaultView.ARCHIVE) {
                 // ARCHIVE VIEW
                 if (filteredNotes.isEmpty()) {
                     Box(

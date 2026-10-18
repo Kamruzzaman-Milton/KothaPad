@@ -258,7 +258,7 @@ fun EditorScreen(
     LaunchedEffect(userWantsBuiltIn) {
         if (!userWantsBuiltIn) {
             // Switching to System Keyboard: request focus and show soft input
-            focusRequester.requestFocus()
+            try { focusRequester.requestFocus() } catch (_: Exception) {}
             keyboardController?.show()
             val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
             val activity = context as? Activity
@@ -274,7 +274,7 @@ fun EditorScreen(
             if (windowToken != null) {
                 imm?.hideSoftInputFromWindow(windowToken, 0)
             }
-            focusRequester.requestFocus()
+            try { focusRequester.requestFocus() } catch (_: Exception) {}
         }
     }
 
@@ -294,19 +294,19 @@ fun EditorScreen(
     LaunchedEffect(isNoteManagerOpen) {
         if (isNoteManagerOpen) {
             keyboardController?.hide()
-            focusManager.clearFocus(force = true)
+            try { focusManager.clearFocus(force = true) } catch (_: Exception) {}
         } else {
             // Restore editor focus when Note Manager closes only if not in reading mode
             if (!isReadingMode) {
-                focusRequester.requestFocus()
+                try { focusRequester.requestFocus() } catch (_: Exception) {}
             }
         }
     }
 
-    // Request focus on editor when note is opened/loaded initially (never automatically on exiting reading mode)
+    // Request focus on editor when note is opened/loaded initially (never automatically on exiting reading mode or when Note Manager is open)
     LaunchedEffect(currentNote?.id) {
-        if (!isReadingMode) {
-            focusRequester.requestFocus()
+        if (!isReadingMode && !isNoteManagerOpen) {
+            try { focusRequester.requestFocus() } catch (_: Exception) {}
         }
     }
 
@@ -525,7 +525,7 @@ fun EditorScreen(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) {
-                                focusRequester.requestFocus()
+                                try { focusRequester.requestFocus() } catch (_: Exception) {}
                                 if (!userWantsBuiltIn) {
                                     keyboardController?.show()
                                     val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager

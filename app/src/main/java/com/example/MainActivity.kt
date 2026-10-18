@@ -109,7 +109,7 @@ class MainActivity : ComponentActivity() {
 
             // Centralized Back Navigation Hierarchy
             // Priority 1: System keyboard open -> Do NOT intercept, let default behavior dismiss keyboard
-            BackHandler(enabled = !isImeVisible || isReadingMode || isNoteManagerOpen) {
+            BackHandler(enabled = !isImeVisible || isReadingMode || isNoteManagerOpen || currentScreen != "EDITOR") {
                 when {
                     // Priority 2: Dialog, bottom sheet, popup, or key customization open -> close it
                     editingKey != null -> {

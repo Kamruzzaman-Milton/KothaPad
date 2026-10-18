@@ -1,5 +1,6 @@
 package com.example.ui.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -68,9 +69,13 @@ fun NotesManagerSettingsScreen(
     onUpdateTrashDays: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    BackHandler {
+        onBackClick()
+    }
+
     var showFolderPickerDialog by remember { mutableStateOf(false) }
     var showResetConfirmDialog by remember { mutableStateOf(false) }
-    var expandedSectionIds by remember { mutableStateOf(setOf("new_note_section", "list_metrics_section", "trash_retention_section")) }
+    var expandedSectionIds by remember { mutableStateOf(emptySet<String>()) }
 
     val sections = remember(
         newNoteLocationMode, fixedNewNoteFolder, askBeforeCreating,
