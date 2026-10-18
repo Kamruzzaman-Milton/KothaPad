@@ -143,9 +143,14 @@ data class AppSettings(
     val mdAutoContinueLists: Boolean = true,
     val mdFormatBarEnabled: Boolean = true,
     val mdFormatBarButtons: List<String> = listOf(
-        "heading", "bold", "italic", "strikethrough", "highlight",
-        "bullet_list", "numbered_list", "checkbox", "quote",
-        "inline_code", "code_block", "link", "horizontal_rule"
+        "heading", "bold", "highlight", "numbered_list", "checkbox", "horizontal_rule",
+        "italic", "strikethrough", "bullet_list", "quote",
+        "inline_code", "code_block", "link"
+    ),
+    val mdFormatBarOrder: List<String> = listOf(
+        "heading", "bold", "highlight", "numbered_list", "checkbox", "horizontal_rule",
+        "italic", "strikethrough", "bullet_list", "quote",
+        "inline_code", "code_block", "link"
     ),
     val mdTappableCheckboxes: Boolean = true,
 
@@ -576,6 +581,9 @@ class SettingsRepository(
             val btnArr = JSONArray()
             s.mdFormatBarButtons.forEach { btnArr.put(it) }
             put("md_format_bar_buttons", btnArr)
+            val orderArr = JSONArray()
+            s.mdFormatBarOrder.forEach { orderArr.put(it) }
+            put("md_format_bar_order", orderArr)
             put("md_tappable_checkboxes", s.mdTappableCheckboxes)
         }
         root.put("markdown", markdown)
@@ -716,6 +724,7 @@ class SettingsRepository(
             val mdAc = mdObj?.optBoolean("md_auto_continue_lists", def.mdAutoContinueLists) ?: root.optBoolean("md_auto_continue_lists", def.mdAutoContinueLists)
             val mdFb = mdObj?.optBoolean("md_format_bar_enabled", def.mdFormatBarEnabled) ?: root.optBoolean("md_format_bar_enabled", def.mdFormatBarEnabled)
             val mdFbb = parseStringList(mdObj?.opt("md_format_bar_buttons") ?: root.opt("md_format_bar_buttons"), def.mdFormatBarButtons)
+            val mdFbo = parseStringList(mdObj?.opt("md_format_bar_order") ?: root.opt("md_format_bar_order"), def.mdFormatBarOrder)
             val mdTc = mdObj?.optBoolean("md_tappable_checkboxes", def.mdTappableCheckboxes) ?: root.optBoolean("md_tappable_checkboxes", def.mdTappableCheckboxes)
 
             val rmObj = root.optJSONObject("readingMode")
@@ -827,6 +836,7 @@ class SettingsRepository(
                 mdAutoContinueLists = mdAc,
                 mdFormatBarEnabled = mdFb,
                 mdFormatBarButtons = mdFbb,
+                mdFormatBarOrder = mdFbo,
                 mdTappableCheckboxes = mdTc,
                 readingModeEnabled = readingMode
             )

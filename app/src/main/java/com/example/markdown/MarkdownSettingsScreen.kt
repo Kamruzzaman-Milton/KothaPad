@@ -1,11 +1,19 @@
 package com.example.markdown
 
+import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +26,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.AlertDialog
@@ -490,7 +503,7 @@ fun MarkdownSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Format Buttons",
+                                text = "Format Buttons & Order",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (settings.markdownEnabled && settings.formatBarEnabled) {
@@ -502,7 +515,7 @@ fun MarkdownSettingsScreen(
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 TextButton(
                                     onClick = {
-                                        onUpdateSettings { it.copy(formatBarButtons = MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS) }
+                                        onUpdateSettings { it.copy(formatBarButtons = it.formatBarOrder) }
                                     },
                                     enabled = settings.markdownEnabled && settings.formatBarEnabled
                                 ) {
@@ -520,7 +533,7 @@ fun MarkdownSettingsScreen(
                         }
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Choose which syntax buttons appear in the quick format bar",
+                            text = "Drag and drop the handle (≡) or use arrows to customize their order. Toggle checkboxes to show/hide.",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (settings.markdownEnabled && settings.formatBarEnabled) {
                                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -528,70 +541,52 @@ fun MarkdownSettingsScreen(
                                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                             }
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        val allButtons = remember { getFormatBarButtonDefinitions() }
-                        allButtons.forEach { btn ->
-                            val isChecked = settings.formatBarButtons.contains(btn.id)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable(
-                                        enabled = settings.markdownEnabled && settings.formatBarEnabled,
-                                        onClick = {
-                                            val newButtons = if (isChecked) {
-                                                settings.formatBarButtons - btn.id
-                                            } else {
-                                                MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS.filter { id ->
-                                                    id == btn.id || settings.formatBarButtons.contains(id)
-                                                }
-                                            }
-                                            onUpdateSettings { it.copy(formatBarButtons = newButtons) }
-                                        }
-                                    )
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = isChecked,
-                                    onCheckedChange = { checked ->
-                                        val newButtons = if (checked) {
-                                            MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS.filter { id ->
-                                                id == btn.id || settings.formatBarButtons.contains(id)
-                                            }
-                                        } else {
-                                            settings.formatBarButtons - btn.id
-                                        }
-                                        onUpdateSettings { it.copy(formatBarButtons = newButtons) }
-                                    },
-                                    enabled = settings.markdownEnabled && settings.formatBarEnabled,
-                                    colors = CheckboxDefaults.colors(
-                                        checkedColor = SaffronPrimary
-                                    ),
-                                    modifier = Modifier.testTag("format_bar_check_${btn.id}")
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = btn.label,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (settings.markdownEnabled && settings.formatBarEnabled) {
-                                        MaterialTheme.colorScheme.onSurface
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = btn.contentDescription,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (settings.markdownEnabled && settings.formatBarEnabled) {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                        FormatBarReorderList(
+                            formatBarOrder = settings.formatBarOrder,
+                            formatBarButtons = settings.formatBarButtons,
+                            enabled = settings.markdownEnabled && settings.formatBarEnabled,
+                            onReorder = { newOrder ->
+                                val newButtons = newOrder.filter { settings.formatBarButtons.contains(it) }
+                                onUpdateSettings { it.copy(formatBarOrder = newOrder, formatBarButtons = newButtons) }
+                            },
+                            onToggleCheck = { buttonId, isChecked ->
+                                val newButtons = if (isChecked) {
+                                    settings.formatBarOrder.filter {
+                                        it == buttonId || settings.formatBarButtons.contains(it)
                                     }
-                                )
+                                } else {
+                                    settings.formatBarButtons.filter { it != buttonId }
+                                }
+                                onUpdateSettings { it.copy(formatBarButtons = newButtons) }
                             }
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                onUpdateSettings {
+                                    val defOrder = MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER
+                                    val defButtons = defOrder.filter { id -> it.formatBarButtons.contains(id) }
+                                        .takeIf { it.isNotEmpty() } ?: defOrder
+                                    it.copy(formatBarOrder = defOrder, formatBarButtons = defButtons)
+                                }
+                            },
+                            enabled = settings.markdownEnabled && settings.formatBarEnabled,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("reset_format_bar_order_button"),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Reset order to default sequence", fontSize = 12.sp)
                         }
                     }
                 }
@@ -708,5 +703,258 @@ private fun MarkdownToggleRow(
             ),
             modifier = Modifier.testTag(testTag)
         )
+    }
+}
+
+@Composable
+private fun FormatBarReorderList(
+    formatBarOrder: List<String>,
+    formatBarButtons: List<String>,
+    enabled: Boolean,
+    onReorder: (newOrder: List<String>) -> Unit,
+    onToggleCheck: (buttonId: String, isChecked: Boolean) -> Unit
+) {
+    val view = LocalView.current
+    val allDefMap = remember { getFormatBarButtonDefinitions().associateBy { it.id } }
+
+    val currentOrder = remember(formatBarOrder) {
+        val list = formatBarOrder.toMutableList()
+        MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER.forEach { id ->
+            if (!list.contains(id)) list.add(id)
+        }
+        list
+    }
+
+    var draggingIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffsetAccumulator by remember { mutableStateOf(0f) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("format_bar_reorder_list"),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        currentOrder.forEachIndexed { index, buttonId ->
+            val btn = allDefMap[buttonId] ?: FormatBarButtonDef(
+                id = buttonId,
+                label = buttonId,
+                contentDescription = buttonId,
+                renderIcon = { Text(buttonId.take(1).uppercase()) }
+            )
+            val isChecked = formatBarButtons.contains(buttonId)
+            val isDragging = draggingIndex == index
+
+            val rowElevation = if (isDragging) 8.dp else 0.dp
+            val rowBorderColor = if (isDragging) SaffronPrimary else AmoledBorder.copy(alpha = 0.35f)
+            val rowBgColor = if (isDragging) {
+                MaterialTheme.colorScheme.surfaceVariant
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            }
+
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = rowBgColor,
+                border = BorderStroke(if (isDragging) 1.5.dp else 1.dp, rowBorderColor),
+                shadowElevation = rowElevation,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zIndex(if (isDragging) 10f else 1f)
+                    .graphicsLayer {
+                        if (isDragging) {
+                            translationY = dragOffsetAccumulator
+                            scaleX = 1.02f
+                            scaleY = 1.02f
+                        }
+                    }
+                    .testTag("format_bar_item_$buttonId")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Checkbox
+                    Checkbox(
+                        checked = isChecked,
+                        onCheckedChange = { checked ->
+                            if (enabled) {
+                                onToggleCheck(buttonId, checked)
+                            }
+                        },
+                        enabled = enabled,
+                        colors = CheckboxDefaults.colors(checkedColor = SaffronPrimary),
+                        modifier = Modifier.testTag("format_bar_check_${btn.id}")
+                    )
+
+                    // Badge/Icon
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (isChecked) SaffronPrimary.copy(alpha = 0.15f)
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        btn.renderIcon()
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    // Title & Position & Description
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = btn.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (enabled && isChecked) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            val posLabel = when (index) {
+                                0 -> "1st"
+                                1 -> "2nd"
+                                2 -> "3rd"
+                                else -> "#${index + 1}"
+                            }
+                            Text(
+                                text = "($posLabel)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isChecked) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Text(
+                            text = btn.contentDescription,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+
+                    // Up Arrow Button
+                    IconButton(
+                        onClick = {
+                            if (enabled && index > 0) {
+                                val list = currentOrder.toMutableList()
+                                val item = list.removeAt(index)
+                                list.add(index - 1, item)
+                                try {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                } catch (_: Exception) {}
+                                onReorder(list)
+                            }
+                        },
+                        enabled = enabled && index > 0,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("move_up_${buttonId}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowUpward,
+                            contentDescription = "Move Up",
+                            tint = if (enabled && index > 0) SaffronPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
+                    // Down Arrow Button
+                    IconButton(
+                        onClick = {
+                            if (enabled && index < currentOrder.size - 1) {
+                                val list = currentOrder.toMutableList()
+                                val item = list.removeAt(index)
+                                list.add(index + 1, item)
+                                try {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                } catch (_: Exception) {}
+                                onReorder(list)
+                            }
+                        },
+                        enabled = enabled && index < currentOrder.size - 1,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("move_down_${buttonId}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowDownward,
+                            contentDescription = "Move Down",
+                            tint = if (enabled && index < currentOrder.size - 1) SaffronPrimary
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
+                    // Drag Handle
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .pointerInput(buttonId, enabled) {
+                                if (!enabled) return@pointerInput
+                                detectDragGestures(
+                                    onDragStart = {
+                                        draggingIndex = index
+                                        dragOffsetAccumulator = 0f
+                                        try {
+                                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                        } catch (_: Exception) {}
+                                    },
+                                    onDragEnd = {
+                                        draggingIndex = null
+                                        dragOffsetAccumulator = 0f
+                                    },
+                                    onDragCancel = {
+                                        draggingIndex = null
+                                        dragOffsetAccumulator = 0f
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        dragOffsetAccumulator += dragAmount.y
+                                        val currentIndex = draggingIndex ?: return@detectDragGestures
+                                        val rowHeightPx = 52.dp.toPx()
+
+                                        if (dragOffsetAccumulator > rowHeightPx && currentIndex < currentOrder.size - 1) {
+                                            val list = currentOrder.toMutableList()
+                                            val item = list.removeAt(currentIndex)
+                                            list.add(currentIndex + 1, item)
+                                            draggingIndex = currentIndex + 1
+                                            dragOffsetAccumulator -= rowHeightPx
+                                            try {
+                                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                            } catch (_: Exception) {}
+                                            onReorder(list)
+                                        } else if (dragOffsetAccumulator < -rowHeightPx && currentIndex > 0) {
+                                            val list = currentOrder.toMutableList()
+                                            val item = list.removeAt(currentIndex)
+                                            list.add(currentIndex - 1, item)
+                                            draggingIndex = currentIndex - 1
+                                            dragOffsetAccumulator += rowHeightPx
+                                            try {
+                                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                            } catch (_: Exception) {}
+                                            onReorder(list)
+                                        }
+                                    }
+                                )
+                            }
+                            .testTag("drag_handle_${buttonId}"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DragHandle,
+                            contentDescription = "Drag to reorder",
+                            tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }

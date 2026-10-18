@@ -468,7 +468,9 @@ fun EditorScreen(
                                 }
                             },
                             onHelpClick = {
-                                allNotes.find { it.title.contains("Quick Tips") }?.let {
+                                (allNotes.find { it.title.contains("KothaPad Tips") }
+                                    ?: allNotes.find { it.title.contains("Quick Tips") }
+                                    ?: allNotes.find { it.title.contains("KothaPad features") })?.let {
                                     viewModel.loadNote(it)
                                 }
                             }

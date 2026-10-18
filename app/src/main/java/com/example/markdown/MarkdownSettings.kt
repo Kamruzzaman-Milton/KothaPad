@@ -37,24 +37,26 @@ data class MarkdownSettings(
     // Phase 3 additions:
     val formatBarEnabled: Boolean = true,
     val formatBarButtons: List<String> = DEFAULT_FORMAT_BAR_BUTTONS,
+    val formatBarOrder: List<String> = DEFAULT_FORMAT_BAR_ORDER,
     val tappableCheckboxes: Boolean = true
 ) {
     companion object {
-        val DEFAULT_FORMAT_BAR_BUTTONS = listOf(
+        val DEFAULT_FORMAT_BAR_ORDER = listOf(
             "heading",
             "bold",
-            "italic",
-            "strikethrough",
             "highlight",
-            "bullet_list",
             "numbered_list",
             "checkbox",
+            "horizontal_rule",
+            "italic",
+            "strikethrough",
+            "bullet_list",
             "quote",
             "inline_code",
             "code_block",
-            "link",
-            "horizontal_rule"
+            "link"
         )
+        val DEFAULT_FORMAT_BAR_BUTTONS = DEFAULT_FORMAT_BAR_ORDER
 
         val KEY_MD_ENABLED = booleanPreferencesKey("md_enabled")
         val KEY_MD_HEADINGS = booleanPreferencesKey("md_headings")
@@ -81,6 +83,7 @@ data class MarkdownSettings(
         // Phase 3 Keys
         val KEY_MD_FORMAT_BAR_ENABLED = booleanPreferencesKey("md_format_bar_enabled")
         val KEY_MD_FORMAT_BAR_BUTTONS = stringPreferencesKey("md_format_bar_buttons")
+        val KEY_MD_FORMAT_BAR_ORDER = stringPreferencesKey("md_format_bar_order")
         val KEY_MD_TAPPABLE_CHECKBOXES = booleanPreferencesKey("md_tappable_checkboxes")
     }
 }
@@ -88,6 +91,20 @@ data class MarkdownSettings(
 class MarkdownSettingsRepository(private val preferencesManager: PreferencesManager) {
 
     val settingsFlow: Flow<MarkdownSettings> = preferencesManager.dataStore.data.map { prefs ->
+        val order = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ORDER]?.let { str ->
+            val list = str.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            val full = list.toMutableList()
+            MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER.forEach { id ->
+                if (!full.contains(id)) full.add(id)
+            }
+            full
+        } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER
+
+        val buttons = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_BUTTONS]?.let { str ->
+            val set = str.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+            order.filter { set.contains(it) }
+        } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS
+
         MarkdownSettings(
             markdownEnabled = prefs[MarkdownSettings.KEY_MD_ENABLED] ?: true,
             headings = prefs[MarkdownSettings.KEY_MD_HEADINGS] ?: true,
@@ -109,10 +126,8 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
             codeFontMonospace = prefs[MarkdownSettings.KEY_MD_CODE_MONOSPACE] ?: true,
             autoContinueLists = prefs[MarkdownSettings.KEY_MD_AUTO_CONTINUE_LISTS] ?: true,
             formatBarEnabled = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ENABLED] ?: true,
-            formatBarButtons = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_BUTTONS]?.let { str ->
-                val list = str.split(",").filter { it.isNotBlank() }
-                if (list.isNotEmpty()) list else MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS
-            } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS,
+            formatBarButtons = buttons,
+            formatBarOrder = order,
             tappableCheckboxes = prefs[MarkdownSettings.KEY_MD_TAPPABLE_CHECKBOXES] ?: true
         )
     }
@@ -120,6 +135,20 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
     suspend fun updateSettings(transform: (MarkdownSettings) -> MarkdownSettings) {
         var updatedSettings: MarkdownSettings? = null
         preferencesManager.dataStore.edit { prefs ->
+            val order = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ORDER]?.let { str ->
+                val list = str.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                val full = list.toMutableList()
+                MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER.forEach { id ->
+                    if (!full.contains(id)) full.add(id)
+                }
+                full
+            } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER
+
+            val buttons = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_BUTTONS]?.let { str ->
+                val set = str.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+                order.filter { set.contains(it) }
+            } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS
+
             val current = MarkdownSettings(
                 markdownEnabled = prefs[MarkdownSettings.KEY_MD_ENABLED] ?: true,
                 headings = prefs[MarkdownSettings.KEY_MD_HEADINGS] ?: true,
@@ -141,10 +170,8 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
                 codeFontMonospace = prefs[MarkdownSettings.KEY_MD_CODE_MONOSPACE] ?: true,
                 autoContinueLists = prefs[MarkdownSettings.KEY_MD_AUTO_CONTINUE_LISTS] ?: true,
                 formatBarEnabled = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ENABLED] ?: true,
-                formatBarButtons = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_BUTTONS]?.let { str ->
-                    val list = str.split(",").filter { it.isNotBlank() }
-                    if (list.isNotEmpty()) list else MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS
-                } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS,
+                formatBarButtons = buttons,
+                formatBarOrder = order,
                 tappableCheckboxes = prefs[MarkdownSettings.KEY_MD_TAPPABLE_CHECKBOXES] ?: true
             )
             val updated = transform(current)
@@ -170,6 +197,7 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
             prefs[MarkdownSettings.KEY_MD_AUTO_CONTINUE_LISTS] = updated.autoContinueLists
             prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ENABLED] = updated.formatBarEnabled
             prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_BUTTONS] = updated.formatBarButtons.joinToString(",")
+            prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ORDER] = updated.formatBarOrder.joinToString(",")
             prefs[MarkdownSettings.KEY_MD_TAPPABLE_CHECKBOXES] = updated.tappableCheckboxes
         }
         updatedSettings?.let { updated ->
@@ -196,6 +224,7 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
                     mdAutoContinueLists = updated.autoContinueLists,
                     mdFormatBarEnabled = updated.formatBarEnabled,
                     mdFormatBarButtons = updated.formatBarButtons,
+                    mdFormatBarOrder = updated.formatBarOrder,
                     mdTappableCheckboxes = updated.tappableCheckboxes
                 )
             }
@@ -227,6 +256,10 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
     // Phase 3 setters
     suspend fun setFormatBarEnabled(enabled: Boolean) = updateSettings { it.copy(formatBarEnabled = enabled) }
     suspend fun setFormatBarButtons(buttons: List<String>) = updateSettings { it.copy(formatBarButtons = buttons) }
+    suspend fun setFormatBarOrder(order: List<String>) = updateSettings { current ->
+        val newButtons = order.filter { current.formatBarButtons.contains(it) }
+        current.copy(formatBarOrder = order, formatBarButtons = newButtons)
+    }
     suspend fun setTappableCheckboxes(enabled: Boolean) = updateSettings { it.copy(tappableCheckboxes = enabled) }
 
     suspend fun resetToDefaults() {

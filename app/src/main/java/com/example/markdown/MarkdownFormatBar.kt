@@ -56,7 +56,8 @@ fun MarkdownFormatBar(
     val view = LocalView.current
     val allButtons = remember { getFormatBarButtonDefinitions() }
     val visibleButtons = remember(enabledButtonIds) {
-        allButtons.filter { enabledButtonIds.contains(it.id) }
+        val buttonMap = allButtons.associateBy { it.id }
+        enabledButtonIds.mapNotNull { buttonMap[it] }
     }
 
     if (visibleButtons.isEmpty()) return
@@ -143,32 +144,6 @@ fun getFormatBarButtonDefinitions(): List<FormatBarButtonDef> {
             }
         ),
         FormatBarButtonDef(
-            id = "italic",
-            label = "Italic",
-            contentDescription = "Italic",
-            renderIcon = {
-                Icon(
-                    imageVector = Icons.Default.FormatItalic,
-                    contentDescription = "Italic",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        ),
-        FormatBarButtonDef(
-            id = "strikethrough",
-            label = "Strikethrough",
-            contentDescription = "Strikethrough",
-            renderIcon = {
-                Icon(
-                    imageVector = Icons.Default.FormatStrikethrough,
-                    contentDescription = "Strikethrough",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        ),
-        FormatBarButtonDef(
             id = "highlight",
             label = "Highlight",
             contentDescription = "Highlight",
@@ -177,19 +152,6 @@ fun getFormatBarButtonDefinitions(): List<FormatBarButtonDef> {
                     imageVector = Icons.Default.Highlight,
                     contentDescription = "Highlight",
                     tint = HighlightGold,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        ),
-        FormatBarButtonDef(
-            id = "bullet_list",
-            label = "Bullet list",
-            contentDescription = "Bullet list",
-            renderIcon = {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
-                    contentDescription = "Bullet list",
-                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -216,6 +178,58 @@ fun getFormatBarButtonDefinitions(): List<FormatBarButtonDef> {
                     imageVector = Icons.Filled.CheckBox,
                     contentDescription = "Task checkbox",
                     tint = SaffronPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        ),
+        FormatBarButtonDef(
+            id = "horizontal_rule",
+            label = "Divider",
+            contentDescription = "Horizontal rule",
+            renderIcon = {
+                Icon(
+                    imageVector = Icons.Default.HorizontalRule,
+                    contentDescription = "Horizontal rule",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        ),
+        FormatBarButtonDef(
+            id = "italic",
+            label = "Italic",
+            contentDescription = "Italic",
+            renderIcon = {
+                Icon(
+                    imageVector = Icons.Default.FormatItalic,
+                    contentDescription = "Italic",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        ),
+        FormatBarButtonDef(
+            id = "strikethrough",
+            label = "Strikethrough",
+            contentDescription = "Strikethrough",
+            renderIcon = {
+                Icon(
+                    imageVector = Icons.Default.FormatStrikethrough,
+                    contentDescription = "Strikethrough",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        ),
+        FormatBarButtonDef(
+            id = "bullet_list",
+            label = "Bullet list",
+            contentDescription = "Bullet list",
+            renderIcon = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.FormatListBulleted,
+                    contentDescription = "Bullet list",
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -268,19 +282,6 @@ fun getFormatBarButtonDefinitions(): List<FormatBarButtonDef> {
                 Icon(
                     imageVector = Icons.Default.Link,
                     contentDescription = "Markdown link",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        ),
-        FormatBarButtonDef(
-            id = "horizontal_rule",
-            label = "Divider",
-            contentDescription = "Horizontal rule",
-            renderIcon = {
-                Icon(
-                    imageVector = Icons.Default.HorizontalRule,
-                    contentDescription = "Horizontal rule",
                     tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(20.dp)
                 )
