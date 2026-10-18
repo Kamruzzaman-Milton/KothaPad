@@ -66,7 +66,6 @@ import com.example.data.vault.VaultState
 import com.example.ui.theme.AmoledBorder
 import com.example.ui.theme.AmoledSurface
 import com.example.ui.theme.AmoledSurfaceVariant
-import com.example.ui.theme.SaffronPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

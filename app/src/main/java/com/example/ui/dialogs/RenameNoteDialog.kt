@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.ui.theme.SaffronPrimary
 
 @Composable
 fun RenameNoteDialog(
@@ -53,7 +52,7 @@ fun RenameNoteDialog(
                     onDismiss()
                 }
             ) {
-                Text("Save", color = SaffronPrimary, fontWeight = FontWeight.Bold)
+                Text("Save", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {

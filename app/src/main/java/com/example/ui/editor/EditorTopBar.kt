@@ -39,7 +39,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.LanguageItem
-import com.example.ui.theme.SaffronPrimary
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -135,7 +134,7 @@ fun EditorTopBar(
                         text = langItem.code.take(2).uppercase(),
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
-                            color = SaffronPrimary
+                            color = MaterialTheme.colorScheme.primary
                         )
                     )
                 }
@@ -190,7 +189,7 @@ fun EditorTopBar(
                         text = {
                             Text(
                                 if (isKeyboardEditMode) "Done editing keyboard" else "Edit keyboard keys",
-                                color = if (isKeyboardEditMode) SaffronPrimary else MaterialTheme.colorScheme.onSurface
+                                color = if (isKeyboardEditMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                         },
                         onClick = {

@@ -140,7 +140,6 @@ import com.example.ui.theme.HighlightGold
 import com.example.ui.theme.HighlightMint
 import com.example.ui.theme.HighlightSaffron
 import com.example.ui.theme.MicPausedAmber
-import com.example.ui.theme.SaffronPrimary
 import com.example.ui.theme.getFontFamilyByOption
 import kotlinx.coroutines.launch
 
@@ -832,7 +831,7 @@ fun EditorScreen(
                                             textAlign = textAlignValue,
                                             color = MaterialTheme.colorScheme.onBackground
                                         ),
-                                        cursorBrush = SolidColor(SaffronPrimary),
+                                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                                         decorationBox = { innerTextField ->
                                             Box(modifier = Modifier.fillMaxWidth()) {
                                                 if (textFieldValue.text.isEmpty() && partialText.isEmpty()) {
@@ -1023,7 +1022,7 @@ fun EditorScreen(
                     Surface(
                         shape = RoundedCornerShape(18.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                        border = BorderStroke(1.5.dp, SaffronPrimary.copy(alpha = 0.5f)),
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                         shadowElevation = 8.dp,
                         modifier = Modifier
                             .widthIn(min = 120.dp, max = 560.dp)
@@ -1051,7 +1050,7 @@ fun EditorScreen(
                                     .clip(CircleShape)
                                     .background(
                                         if (dictationState is DictationState.Paused) MicPausedAmber
-                                        else SaffronPrimary.copy(alpha = if (partialText.isNotBlank()) 1.0f else pulseAlpha)
+                                        else MaterialTheme.colorScheme.primary.copy(alpha = if (partialText.isNotBlank()) 1.0f else pulseAlpha)
                                     )
                             )
 
@@ -1235,7 +1234,7 @@ fun EditorScreen(
                                             editorShowNewFolderField = false
                                         }
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                 ) {
                                     Text("Add")
                                 }
@@ -1254,7 +1253,7 @@ fun EditorScreen(
                         )
                         showNewNoteDialogFromEditor = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Create")
                 }

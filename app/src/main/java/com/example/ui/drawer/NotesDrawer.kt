@@ -54,7 +54,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Note
-import com.example.ui.theme.SaffronPrimary
 import java.util.Date
 
 @Composable
@@ -104,7 +103,7 @@ fun NotesDrawer(
                     text = "KothaPad Notes",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        color = SaffronPrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
                 )
 
@@ -127,8 +126,8 @@ fun NotesDrawer(
                     .fillMaxWidth()
                     .testTag("drawer_new_note_button"),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = SaffronPrimary,
-                    contentColor = Color.White
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 shape = RoundedCornerShape(10.dp)
             ) {
@@ -211,13 +210,13 @@ fun NotesDrawer(
                                 .testTag("note_item_${note.id}"),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isSelected) {
-                                    SaffronPrimary.copy(alpha = 0.15f)
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                                 } else {
                                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                 }
                             ),
                             border = if (isSelected) {
-                                androidx.compose.foundation.BorderStroke(1.dp, SaffronPrimary)
+                                androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                             } else null
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
@@ -248,7 +247,7 @@ fun NotesDrawer(
                                             Icon(
                                                 imageVector = if (note.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                                                 contentDescription = if (note.isPinned) "Unpin" else "Pin",
-                                                tint = if (note.isPinned) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                tint = if (note.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(16.dp)
                                             )
                                         }

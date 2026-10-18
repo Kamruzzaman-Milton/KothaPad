@@ -40,7 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.FloatingLayoutSettings
-import com.example.ui.theme.SaffronPrimary
 
 data class RailButtonMeta(
     val id: String,
@@ -138,13 +137,13 @@ fun RailButtonOrderReorderControl(
                             modifier = Modifier
                                 .size(28.dp)
                                 .clip(CircleShape)
-                                .background(SaffronPrimary.copy(alpha = 0.2f)),
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = meta.icon,
                                 contentDescription = null,
-                                tint = SaffronPrimary,
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -164,7 +163,7 @@ fun RailButtonOrderReorderControl(
                                 Text(
                                     text = "($positionLabel)",
                                     style = MaterialTheme.typography.labelSmall.copy(
-                                        color = SaffronPrimary,
+                                        color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.Medium
                                     )
                                 )
@@ -189,7 +188,7 @@ fun RailButtonOrderReorderControl(
                             Icon(
                                 imageVector = Icons.Default.ArrowUpward,
                                 contentDescription = "Move Up",
-                                tint = if (index > 0) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                                tint = if (index > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -205,7 +204,7 @@ fun RailButtonOrderReorderControl(
                             Icon(
                                 imageVector = Icons.Default.ArrowDownward,
                                 contentDescription = "Move Down",
-                                tint = if (index < currentOrder.size - 1) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                                tint = if (index < currentOrder.size - 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                                 modifier = Modifier.size(18.dp)
                             )
                         }

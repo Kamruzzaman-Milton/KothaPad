@@ -43,7 +43,6 @@ import com.example.data.model.DictationState
 import com.example.ui.theme.MicErrorRed
 import com.example.ui.theme.MicPausedAmber
 import com.example.ui.theme.MicRestartingBlue
-import com.example.ui.theme.SaffronPrimary
 import com.example.util.NoteTimeFormatter
 
 // Known Toolbar Item Identifiers in their default requested order:
@@ -138,7 +137,7 @@ fun EditorToolBar(
                         val isIdle = dictationState is DictationState.Idle
 
                         val chipColor = when {
-                            isListening || isStarting -> SaffronPrimary
+                            isListening || isStarting -> MaterialTheme.colorScheme.primary
                             isRestarting -> MicRestartingBlue
                             isPaused -> MicPausedAmber
                             isError -> MicErrorRed
@@ -230,7 +229,7 @@ fun EditorToolBar(
                                 Icon(
                                     imageVector = Icons.Default.Timer,
                                     contentDescription = "Total Time Spent on Note",
-                                    tint = SaffronPrimary,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
@@ -251,7 +250,7 @@ fun EditorToolBar(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(
-                                    if (isInAppKeyboardActive) SaffronPrimary.copy(alpha = 0.2f)
+                                    if (isInAppKeyboardActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                                     else Color.Transparent
                                 )
                                 .clickable {
@@ -268,14 +267,14 @@ fun EditorToolBar(
                                 Icon(
                                     imageVector = if (isInAppKeyboardActive) Icons.Default.Keyboard else Icons.Default.KeyboardHide,
                                     contentDescription = "Toggle Keyboard",
-                                    tint = if (isInAppKeyboardActive) SaffronPrimary else MaterialTheme.colorScheme.onSurface,
+                                    tint = if (isInAppKeyboardActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
                                     text = if (isInAppKeyboardActive) "Custom" else "System",
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight = FontWeight.Medium,
-                                        color = if (isInAppKeyboardActive) SaffronPrimary else MaterialTheme.colorScheme.onSurface
+                                        color = if (isInAppKeyboardActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                     )
                                 )
                             }
@@ -356,7 +355,7 @@ fun EditorToolBar(
                                 Icon(
                                     imageVector = Icons.Default.FormatColorFill,
                                     contentDescription = "Highlight color",
-                                    tint = SaffronPrimary,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }

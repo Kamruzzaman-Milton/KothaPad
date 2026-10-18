@@ -119,7 +119,6 @@ import com.example.ui.dialogs.EditTemplateDialog
 import com.example.ui.theme.AmoledBorder
 import com.example.ui.theme.AmoledSurface
 import com.example.ui.theme.AmoledSurfaceVariant
-import com.example.ui.theme.SaffronPrimary
 import com.example.util.NoteTimeFormatter
 import java.util.Date
 import kotlin.math.ceil
@@ -427,7 +426,7 @@ fun NotesManagerScreen(
                             text = if (totalSelected == 0) "Select items" else "$totalSelected selected",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
-                                color = SaffronPrimary
+                                color = MaterialTheme.colorScheme.primary
                             )
                         )
                     } else {
@@ -480,7 +479,7 @@ fun NotesManagerScreen(
                             onDismissRequest = { isVaultMenuOpen = false }
                         ) {
                             DropdownMenuItem(
-                                leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, tint = SaffronPrimary) },
+                                leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                                 text = { Text("KothaPad Notes (${activeNotes.size})") },
                                 onClick = {
                                     currentVaultView = VaultView.ACTIVE
@@ -611,7 +610,7 @@ fun NotesManagerScreen(
                                 Icon(
                                     imageVector = Icons.Default.Merge,
                                     contentDescription = "Merge",
-                                    tint = if (selectedNotes.size >= 2) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                    tint = if (selectedNotes.size >= 2) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text("Merge", fontSize = 10.sp)
@@ -630,7 +629,7 @@ fun NotesManagerScreen(
                                 Icon(
                                     imageVector = Icons.Default.DriveFileMove,
                                     contentDescription = "Move",
-                                    tint = if (selectedNotes.isNotEmpty()) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                    tint = if (selectedNotes.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text("Move", fontSize = 10.sp)
@@ -649,7 +648,7 @@ fun NotesManagerScreen(
                                 Icon(
                                     imageVector = Icons.Default.Label,
                                     contentDescription = "Tag",
-                                    tint = if (selectedNotes.isNotEmpty()) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                    tint = if (selectedNotes.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Text("Tag", fontSize = 10.sp)
@@ -721,7 +720,7 @@ fun NotesManagerScreen(
                     onClick = {
                         handlePlusClick(defaultFolder)
                     },
-                    containerColor = SaffronPrimary,
+                    containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = Color.White,
                     modifier = Modifier.testTag("notes_manager_fab")
                 ) {
@@ -746,7 +745,7 @@ fun NotesManagerScreen(
                     Text(
                         text = vaultScanProgress ?: "Indexing notes...",
                         style = MaterialTheme.typography.bodySmall,
-                        color = SaffronPrimary,
+                        color = MaterialTheme.colorScheme.primary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -755,7 +754,7 @@ fun NotesManagerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(2.dp),
-                        color = SaffronPrimary,
+                        color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant
                     )
                 }
@@ -784,7 +783,7 @@ fun NotesManagerScreen(
                         Icon(
                             imageVector = Icons.Outlined.NoteAdd,
                             contentDescription = "New note",
-                            tint = SaffronPrimary,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -828,7 +827,7 @@ fun NotesManagerScreen(
                                         Text(
                                             text = opt.displayName,
                                             fontWeight = if (opt == sortOption) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (opt == sortOption) SaffronPrimary else MaterialTheme.colorScheme.onSurface
+                                            color = if (opt == sortOption) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                         )
                                     },
                                     onClick = {
@@ -869,7 +868,7 @@ fun NotesManagerScreen(
                         Icon(
                             imageVector = Icons.Outlined.Search,
                             contentDescription = "Search notes",
-                            tint = if (isSearchVisible || searchQuery.isNotEmpty()) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (isSearchVisible || searchQuery.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -903,7 +902,7 @@ fun NotesManagerScreen(
                         .testTag("notes_manager_search"),
                     placeholder = { Text("Search title, content, tags, folder...", fontSize = 13.sp) },
                     leadingIcon = {
-                        Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = SaffronPrimary, modifier = Modifier.size(18.dp))
+                        Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                     },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
@@ -915,7 +914,7 @@ fun NotesManagerScreen(
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SaffronPrimary,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = AmoledBorder
                     )
                 )
@@ -1243,7 +1242,7 @@ fun NotesManagerScreen(
                         }
                         showNewFolderDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Create")
                 }
@@ -1280,7 +1279,7 @@ fun NotesManagerScreen(
                         }
                         showNewSubfolderDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Create")
                 }
@@ -1317,7 +1316,7 @@ fun NotesManagerScreen(
                         }
                         folderToRename = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Rename")
                 }
@@ -1347,7 +1346,7 @@ fun NotesManagerScreen(
                         RadioButton(
                             selected = !deleteFolderNotesChoice,
                             onClick = { deleteFolderNotesChoice = false },
-                            colors = RadioButtonDefaults.colors(selectedColor = SaffronPrimary)
+                            colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Move notes to 'General'", fontSize = 13.sp)
@@ -1404,7 +1403,7 @@ fun NotesManagerScreen(
                         onRenameNote(note, renameNoteInput)
                         noteToRename = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Rename")
                 }
@@ -1437,14 +1436,14 @@ fun NotesManagerScreen(
                         allActiveFolders.take(4).forEach { f ->
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
-                                color = if (targetMoveFolderInput.equals(f, ignoreCase = true)) SaffronPrimary.copy(alpha = 0.2f) else AmoledSurfaceVariant,
-                                border = BorderStroke(1.dp, if (targetMoveFolderInput.equals(f, ignoreCase = true)) SaffronPrimary else AmoledBorder),
+                                color = if (targetMoveFolderInput.equals(f, ignoreCase = true)) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else AmoledSurfaceVariant,
+                                border = BorderStroke(1.dp, if (targetMoveFolderInput.equals(f, ignoreCase = true)) MaterialTheme.colorScheme.primary else AmoledBorder),
                                 modifier = Modifier.clickable { targetMoveFolderInput = f }
                             ) {
                                 Text(
                                     text = f,
                                     fontSize = 11.sp,
-                                    color = if (targetMoveFolderInput.equals(f, ignoreCase = true)) SaffronPrimary else MaterialTheme.colorScheme.onSurface,
+                                    color = if (targetMoveFolderInput.equals(f, ignoreCase = true)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
@@ -1459,7 +1458,7 @@ fun NotesManagerScreen(
                         onMoveNotesToFolder(listOf(note), folder)
                         noteToMove = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Move")
                 }
@@ -1520,7 +1519,7 @@ fun NotesManagerScreen(
                         isMultiSelectMode = false
                         selectedNoteIds = emptySet()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Move")
                 }
@@ -1563,7 +1562,7 @@ fun NotesManagerScreen(
                         selectedNoteIds = emptySet()
                         onClose()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Merge")
                 }
@@ -1600,7 +1599,7 @@ fun NotesManagerScreen(
                         isMultiSelectMode = false
                         selectedNoteIds = emptySet()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Add Tags")
                 }
@@ -1693,7 +1692,7 @@ fun NotesManagerScreen(
                                             showNewFolderInputInPopup = false
                                         }
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                 ) {
                                     Text("Add")
                                 }
@@ -1749,7 +1748,7 @@ fun NotesManagerScreen(
                             androidx.compose.material3.Switch(
                                 checked = popupStartRecording,
                                 onCheckedChange = { popupStartRecording = it },
-                                colors = androidx.compose.material3.SwitchDefaults.colors(checkedThumbColor = SaffronPrimary)
+                                colors = androidx.compose.material3.SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary)
                             )
                         }
                     }
@@ -1766,7 +1765,7 @@ fun NotesManagerScreen(
                         )
                         showCreateNotePopup = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     modifier = Modifier.testTag("create_note_confirm_button")
                 ) {
                     Text("Create")
@@ -2084,12 +2083,12 @@ private fun FolderTreeHeader(
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = when {
-            isSelected -> SaffronPrimary.copy(alpha = 0.2f)
+            isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
             else -> Color.Transparent
         },
         border = BorderStroke(
             width = if (isSelected) 1.dp else 0.5.dp,
-            color = if (isSelected) SaffronPrimary else AmoledBorder.copy(alpha = 0.25f)
+            color = if (isSelected) MaterialTheme.colorScheme.primary else AmoledBorder.copy(alpha = 0.25f)
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -2124,7 +2123,7 @@ private fun FolderTreeHeader(
                 Icon(
                     imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                     contentDescription = if (isSelected) "Deselect folder" else "Select folder",
-                    tint = if (isSelected) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .size(18.dp)
                         .clickable(onClick = onToggleSelect)
@@ -2153,7 +2152,7 @@ private fun FolderTreeHeader(
                     imageVector = if (isExpanded) Icons.Default.FolderOpen else Icons.Outlined.Folder,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
-                    tint = SaffronPrimary
+                    tint = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.width(6.dp))
             }
@@ -2200,7 +2199,7 @@ private fun FolderTreeHeader(
                     onDismissRequest = { isMenuOpen = false }
                 ) {
                     DropdownMenuItem(
-                        leadingIcon = { Icon(Icons.Outlined.NoteAdd, contentDescription = null, tint = SaffronPrimary) },
+                        leadingIcon = { Icon(Icons.Outlined.NoteAdd, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                         text = { Text("New note here") },
                         onClick = {
                             isMenuOpen = false
@@ -2217,7 +2216,7 @@ private fun FolderTreeHeader(
                     )
                     if (onCreateSubfolder != null) {
                         DropdownMenuItem(
-                            leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, contentDescription = null, tint = SaffronPrimary) },
+                            leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                             text = { Text("New subfolder") },
                             onClick = {
                                 isMenuOpen = false
@@ -2287,15 +2286,15 @@ private fun NoteTreeItem(
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = when {
-            isSelected -> SaffronPrimary.copy(alpha = 0.2f)
-            isCurrentlyOpen -> SaffronPrimary.copy(alpha = 0.12f)
+            isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+            isCurrentlyOpen -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
             else -> Color.Transparent
         },
         border = BorderStroke(
             width = if (isCurrentlyOpen || isSelected) 1.dp else 0.5.dp,
             color = when {
-                isSelected -> SaffronPrimary
-                isCurrentlyOpen -> SaffronPrimary.copy(alpha = 0.45f)
+                isSelected -> MaterialTheme.colorScheme.primary
+                isCurrentlyOpen -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
                 else -> AmoledBorder.copy(alpha = 0.25f)
             }
         ),
@@ -2327,7 +2326,7 @@ private fun NoteTreeItem(
                 Icon(
                     imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                     contentDescription = null,
-                    tint = if (isSelected) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                         .size(18.dp)
                         .clickable(onClick = onToggleSelect)
@@ -2340,7 +2339,7 @@ private fun NoteTreeItem(
                 Icon(
                     imageVector = Icons.Filled.PushPin,
                     contentDescription = "Pinned",
-                    tint = SaffronPrimary,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
@@ -2348,7 +2347,7 @@ private fun NoteTreeItem(
                 Icon(
                     imageVector = Icons.Outlined.Description,
                     contentDescription = null,
-                    tint = if (isCurrentlyOpen) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    tint = if (isCurrentlyOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
@@ -2366,7 +2365,7 @@ private fun NoteTreeItem(
                         fontWeight = if (isCurrentlyOpen) FontWeight.Bold else FontWeight.Normal,
                         fontSize = 13.5.sp
                     ),
-                    color = if (isCurrentlyOpen) SaffronPrimary else MaterialTheme.colorScheme.onSurface,
+                    color = if (isCurrentlyOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2402,7 +2401,7 @@ private fun NoteTreeItem(
                         onClick = { onRestore?.invoke() },
                         modifier = Modifier.size(26.dp)
                     ) {
-                        Icon(Icons.Default.Restore, contentDescription = "Restore", tint = SaffronPrimary, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Restore, contentDescription = "Restore", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     }
                     IconButton(
                         onClick = { onDeletePermanent?.invoke() },
@@ -2417,7 +2416,7 @@ private fun NoteTreeItem(
                         onClick = { onUnarchive?.invoke() },
                         modifier = Modifier.size(26.dp)
                     ) {
-                        Icon(Icons.Default.Unarchive, contentDescription = "Unarchive", tint = SaffronPrimary, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Unarchive, contentDescription = "Unarchive", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     }
                     IconButton(
                         onClick = { onDelete?.invoke() },
@@ -2446,7 +2445,7 @@ private fun NoteTreeItem(
                         onDismissRequest = { isMenuOpen = false }
                     ) {
                         DropdownMenuItem(
-                            leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = SaffronPrimary) },
+                            leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                             text = { Text("Open") },
                             onClick = {
                                 isMenuOpen = false
@@ -2474,7 +2473,7 @@ private fun NoteTreeItem(
                                 Icon(
                                     imageVector = if (note.isPinned) Icons.Outlined.PushPin else Icons.Filled.PushPin,
                                     contentDescription = null,
-                                    tint = SaffronPrimary
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             },
                             text = { Text(if (note.isPinned) "Unpin" else "Pin") },
@@ -2562,7 +2561,7 @@ private fun TemplateTreeRow(
                         Icon(
                             imageVector = Icons.Filled.PushPin,
                             contentDescription = "Pinned",
-                            tint = SaffronPrimary,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(12.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
@@ -2606,7 +2605,7 @@ private fun TemplateTreeRow(
                     onDismissRequest = { isMenuOpen = false }
                 ) {
                     DropdownMenuItem(
-                        leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = SaffronPrimary) },
+                        leadingIcon = { Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
                         text = { Text("Use Template") },
                         onClick = {
                             isMenuOpen = false
@@ -2626,7 +2625,7 @@ private fun TemplateTreeRow(
                             Icon(
                                 imageVector = if (template.isPinned) Icons.Outlined.PushPin else Icons.Filled.PushPin,
                                 contentDescription = null,
-                                tint = SaffronPrimary
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         },
                         text = { Text(if (template.isPinned) "Unpin" else "Pin to top") },
@@ -2706,7 +2705,7 @@ private fun TrashHeaderBanner(
                     Box {
                         Text(
                             text = "$trashAutoEmptyDays days ▼",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = SaffronPrimary),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary),
                             modifier = Modifier.clickable { showDaysDropdown = true }
                         )
                         DropdownMenu(

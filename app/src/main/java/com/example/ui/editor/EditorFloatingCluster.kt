@@ -78,7 +78,6 @@ import com.example.data.model.DictationState
 import com.example.ui.theme.MicErrorRed
 import com.example.ui.theme.MicPausedAmber
 import com.example.ui.theme.MicRestartingBlue
-import com.example.ui.theme.SaffronPrimary
 
 @Composable
 fun HorizontalRecordingWaveform(
@@ -220,7 +219,7 @@ fun EditorFloatingCluster(
     val isRecording = isListening || isStarting
 
     val defaultStateColor = when {
-        isListening || isStarting -> SaffronPrimary
+        isListening || isStarting -> MaterialTheme.colorScheme.primary
         isRestarting -> MicRestartingBlue
         isPaused -> MicPausedAmber
         isError -> MicErrorRed
@@ -228,7 +227,7 @@ fun EditorFloatingCluster(
     }
 
     val targetColor = when (micButtonColor.uppercase()) {
-        "SAFFRON" -> if (isListening || isStarting) SaffronPrimary else Color(0xFFFF7043)
+        "SAFFRON" -> Color(0xFFFF7043)
         "CORAL" -> Color(0xFFFF5252)
         "EMERALD" -> Color(0xFF2E7D32)
         "BLUE" -> Color(0xFF1976D2)
@@ -457,10 +456,10 @@ fun EditorFloatingCluster(
                                 Text(
                                     text = mode.displayName,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) SaffronPrimary else MaterialTheme.colorScheme.onSurface
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                 )
                                 if (isSelected) {
-                                    Text("✓", color = SaffronPrimary, fontSize = 14.sp)
+                                    Text("✓", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
                                 }
                             }
                         },

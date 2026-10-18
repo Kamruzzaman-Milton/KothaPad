@@ -55,7 +55,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Stamp
-import com.example.ui.theme.SaffronPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -129,7 +128,7 @@ fun TemplatesBottomSheet(
                             )
                             isCreatingNew = true
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.testTag("new_template_button")
                     ) {
@@ -155,12 +154,12 @@ fun TemplatesBottomSheet(
                     .testTag("template_search_field"),
                 placeholder = { Text("Search templates...") },
                 leadingIcon = {
-                    Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = SaffronPrimary)
+                    Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.primary)
                 },
                 singleLine = true,
                 shape = RoundedCornerShape(10.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = SaffronPrimary,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                 )
             )
@@ -187,7 +186,7 @@ fun TemplatesBottomSheet(
                             .testTag("template_item_${template.id}"),
                         colors = CardDefaults.cardColors(
                             containerColor = if (template.isPinned) {
-                                SaffronPrimary.copy(alpha = 0.12f)
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                             } else {
                                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             }
@@ -206,7 +205,7 @@ fun TemplatesBottomSheet(
                                         Icon(
                                             imageVector = Icons.Filled.PushPin,
                                             contentDescription = "Pinned",
-                                            tint = SaffronPrimary,
+                                            tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(14.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
@@ -281,7 +280,7 @@ fun TemplatesBottomSheet(
                                     Icon(
                                         imageVector = if (template.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                                         contentDescription = "Pin to top",
-                                        tint = if (template.isPinned) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        tint = if (template.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
@@ -393,7 +392,7 @@ fun EditTemplateDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SaffronPrimary,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                     )
                 )
@@ -406,7 +405,7 @@ fun EditTemplateDialog(
                     maxLines = 8,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SaffronPrimary,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                     )
                 )
@@ -431,7 +430,7 @@ fun EditTemplateDialog(
                                 }
                                 .padding(horizontal = 6.dp, vertical = 4.dp)
                         ) {
-                            Text(token, fontSize = 11.sp, color = SaffronPrimary)
+                            Text(token, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -453,7 +452,7 @@ fun EditTemplateDialog(
                                 onSave(template.copy(label = title.trim(), templateText = body))
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text("Save")

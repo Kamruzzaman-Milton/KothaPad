@@ -39,7 +39,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.LanguageItem
-import com.example.ui.theme.SaffronPrimary
 
 @Composable
 fun LanguagePickerDialog(
@@ -131,7 +130,7 @@ fun LanguagePickerDialog(
                                         text = item.displayName,
                                         style = MaterialTheme.typography.bodyMedium.copy(
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isSelected) SaffronPrimary else MaterialTheme.colorScheme.onSurface
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                         )
                                     )
                                     Text(
@@ -149,7 +148,7 @@ fun LanguagePickerDialog(
                                 Icon(
                                     imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                                     contentDescription = "Favorite",
-                                    tint = if (isFavorite) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }

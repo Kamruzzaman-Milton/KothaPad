@@ -632,8 +632,18 @@ class PreferencesManager(private val context: Context) {
         notifyRepo { it.copy(defaultNewNoteFolder = folder) }
     }
 
-    suspend fun setCustomThemeColors(primary: Int, bg: Int, surface: Int, text: Int, secondary: Int) {
+    suspend fun setCustomThemeColors(
+        primary: Int,
+        bg: Int,
+        surface: Int,
+        text: Int,
+        secondary: Int,
+        updateAppThemeToCustom: Boolean = false
+    ) {
         context.dataStore.edit {
+            if (updateAppThemeToCustom) {
+                it[KEY_APP_THEME] = "CUSTOM"
+            }
             it[KEY_CUSTOM_PRIMARY_COLOR] = primary
             it[KEY_CUSTOM_BACKGROUND_COLOR] = bg
             it[KEY_CUSTOM_SURFACE_COLOR] = surface
@@ -642,6 +652,7 @@ class PreferencesManager(private val context: Context) {
         }
         notifyRepo {
             it.copy(
+                appTheme = if (updateAppThemeToCustom) "CUSTOM" else it.appTheme,
                 customPrimaryColor = primary,
                 customBackgroundColor = bg,
                 customSurfaceColor = surface,

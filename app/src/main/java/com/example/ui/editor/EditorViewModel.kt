@@ -2102,7 +2102,25 @@ class EditorViewModel(
     // Appearance & Custom Theme
     fun setCustomThemeColors(primary: Int, bg: Int, surface: Int, text: Int, secondary: Int) {
         viewModelScope.launch {
-            preferencesManager.setCustomThemeColors(primary, bg, surface, text, secondary)
+            preferencesManager.setCustomThemeColors(
+                primary = primary,
+                bg = bg,
+                surface = surface,
+                text = text,
+                secondary = secondary,
+                updateAppThemeToCustom = true
+            )
+            settingsRepository.updateSettings {
+                it.copy(
+                    appTheme = "CUSTOM",
+                    customPrimaryColor = primary,
+                    customBackgroundColor = bg,
+                    customSurfaceColor = surface,
+                    customTextColor = text,
+                    customSecondaryColor = secondary
+                )
+            }
+            settingsRepository.flushSaves()
         }
     }
 

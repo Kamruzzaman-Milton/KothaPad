@@ -183,6 +183,7 @@ class SettingsRepository(
         _settings.value = updated
         val vaultDoc = vaultManager.getCurrentVaultDocumentFile() ?: return
         coroutineScope.launch(Dispatchers.IO) {
+            vaultConfigStore.initVault(vaultDoc)
             val json = serializeToJson(updated)
             vaultConfigStore.updateSettings(vaultDoc, json)
         }
@@ -337,11 +338,12 @@ class SettingsRepository(
             pm.setEditorLineSpacing(s.editorLineSpacing)
             pm.setEditorFontFamily(s.editorFontFamily)
             pm.setCustomThemeColors(
-                s.customPrimaryColor,
-                s.customBackgroundColor,
-                s.customSurfaceColor,
-                s.customTextColor,
-                s.customSecondaryColor
+                primary = s.customPrimaryColor,
+                bg = s.customBackgroundColor,
+                surface = s.customSurfaceColor,
+                text = s.customTextColor,
+                secondary = s.customSecondaryColor,
+                updateAppThemeToCustom = false
             )
             pm.setCustomFont(s.customFontName, s.customFontPath)
             pm.setEditorLetterSpacing(s.editorLetterSpacing)
@@ -620,11 +622,11 @@ class SettingsRepository(
             val fontSize = (appObj?.optDouble("editor_font_size", def.editorFontSize.toDouble()) ?: root.optDouble("editor_font_size", def.editorFontSize.toDouble())).toFloat()
             val lineSpacing = (appObj?.optDouble("editor_line_spacing", def.editorLineSpacing.toDouble()) ?: root.optDouble("editor_line_spacing", def.editorLineSpacing.toDouble())).toFloat()
             val fontFamily = appObj?.optString("editor_font_family", def.editorFontFamily) ?: root.optString("editor_font_family", def.editorFontFamily)
-            val customPrimary = appObj?.optInt("custom_primary_color", def.customPrimaryColor) ?: root.optInt("custom_primary_color", def.customPrimaryColor)
-            val customBg = appObj?.optInt("custom_background_color", def.customBackgroundColor) ?: root.optInt("custom_background_color", def.customBackgroundColor)
-            val customSurface = appObj?.optInt("custom_surface_color", def.customSurfaceColor) ?: root.optInt("custom_surface_color", def.customSurfaceColor)
-            val customText = appObj?.optInt("custom_text_color", def.customTextColor) ?: root.optInt("custom_text_color", def.customTextColor)
-            val customSec = appObj?.optInt("custom_secondary_color", def.customSecondaryColor) ?: root.optInt("custom_secondary_color", def.customSecondaryColor)
+            val customPrimary = parseColorInt(appObj ?: root, "custom_primary_color", def.customPrimaryColor)
+            val customBg = parseColorInt(appObj ?: root, "custom_background_color", def.customBackgroundColor)
+            val customSurface = parseColorInt(appObj ?: root, "custom_surface_color", def.customSurfaceColor)
+            val customText = parseColorInt(appObj ?: root, "custom_text_color", def.customTextColor)
+            val customSec = parseColorInt(appObj ?: root, "custom_secondary_color", def.customSecondaryColor)
             val customFontName = appObj?.optString("custom_font_name", def.customFontName) ?: root.optString("custom_font_name", def.customFontName)
             val customFontPath = if (appObj?.has("custom_font_path") == true && !appObj.isNull("custom_font_path")) appObj.optString("custom_font_path") else root.optString("custom_font_path", null)
             val letterSpacing = (appObj?.optDouble("editor_letter_spacing", def.editorLetterSpacing.toDouble()) ?: root.optDouble("editor_letter_spacing", def.editorLetterSpacing.toDouble())).toFloat()
@@ -876,6 +878,18 @@ class SettingsRepository(
             is Collection<*> -> raw.mapNotNull { it?.toString() }
             is String -> if (raw.isBlank()) default else raw.split(",").map { it.trim() }.filter { it.isNotBlank() }
             else -> default
+        }
+    }
+
+    private fun parseColorInt(obj: JSONObject?, key: String, defaultVal: Int): Int {
+        if (obj == null || !obj.has(key)) return defaultVal
+        val v = obj.opt(key)
+        return when (v) {
+            is Number -> v.toInt()
+            is String -> try {
+                if (v.startsWith("#")) android.graphics.Color.parseColor(v) else v.toLong().toInt()
+            } catch (_: Exception) { defaultVal }
+            else -> defaultVal
         }
     }
 }

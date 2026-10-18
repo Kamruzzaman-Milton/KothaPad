@@ -34,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.ui.theme.SaffronPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -343,7 +342,7 @@ fun NotesManagerSettingsScreen(
                             Text(
                                 text = folder,
                                 fontWeight = if (folder == fixedNewNoteFolder) FontWeight.Bold else FontWeight.Normal,
-                                color = if (folder == fixedNewNoteFolder) SaffronPrimary else MaterialTheme.colorScheme.onSurface
+                                color = if (folder == fixedNewNoteFolder) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -369,7 +368,7 @@ fun NotesManagerSettingsScreen(
                         onResetToDefaults()
                         showResetConfirmDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Reset")
                 }

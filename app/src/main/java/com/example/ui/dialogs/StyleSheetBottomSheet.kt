@@ -35,7 +35,6 @@ import com.example.ui.theme.HighlightCyan
 import com.example.ui.theme.HighlightGold
 import com.example.ui.theme.HighlightMint
 import com.example.ui.theme.HighlightSaffron
-import com.example.ui.theme.SaffronPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,7 +65,7 @@ fun StyleSheetBottomSheet(
                 text = "Text Styling & Formatting",
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.Bold,
-                    color = SaffronPrimary
+                    color = MaterialTheme.colorScheme.primary
                 )
             )
 
@@ -79,7 +78,7 @@ fun StyleSheetBottomSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(text = "Font Size", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                Text(text = "${fontSize.toInt()} sp", style = MaterialTheme.typography.bodySmall, color = SaffronPrimary)
+                Text(text = "${fontSize.toInt()} sp", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             Slider(
                 value = fontSize,
@@ -87,8 +86,8 @@ fun StyleSheetBottomSheet(
                 valueRange = 12f..32f,
                 steps = 9,
                 colors = SliderDefaults.colors(
-                    thumbColor = SaffronPrimary,
-                    activeTrackColor = SaffronPrimary
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary
                 )
             )
 
@@ -163,7 +162,7 @@ fun StyleSheetBottomSheet(
                             .background(if (color == Color.Transparent) MaterialTheme.colorScheme.surfaceVariant else color)
                             .border(
                                 width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) SaffronPrimary else MaterialTheme.colorScheme.outline,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                                 shape = CircleShape
                             )
                             .clickable { onHighlightChange(tintKey) },

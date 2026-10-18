@@ -37,7 +37,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.notes.NoteMetricsConfig
-import com.example.ui.theme.SaffronPrimary
 
 @Composable
 fun NoteMetricsReorderAndVisibilityControl(
@@ -83,7 +82,7 @@ fun NoteMetricsReorderAndVisibilityControl(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isVisible) 0.55f else 0.22f),
                     border = if (isVisible) {
-                        androidx.compose.foundation.BorderStroke(1.dp, SaffronPrimary.copy(alpha = 0.25f))
+                        androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
                     } else null,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -101,7 +100,7 @@ fun NoteMetricsReorderAndVisibilityControl(
                                 .size(26.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (isVisible) SaffronPrimary.copy(alpha = 0.2f)
+                                    if (isVisible) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                                     else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f)
                                 ),
                             contentAlignment = Alignment.Center
@@ -110,7 +109,7 @@ fun NoteMetricsReorderAndVisibilityControl(
                                 text = "${index + 1}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isVisible) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                color = if (isVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
                         }
 
@@ -151,7 +150,7 @@ fun NoteMetricsReorderAndVisibilityControl(
                                         text = if (isDetailed) meta.detailedSample else meta.compactSample,
                                         fontSize = 9.5.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = if (isVisible) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                        color = if (isVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                                         maxLines = 1
                                     )
                                 }
@@ -207,7 +206,7 @@ fun NoteMetricsReorderAndVisibilityControl(
                             Icon(
                                 imageVector = if (isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                 contentDescription = if (isVisible) "Hide ${meta.label}" else "Show ${meta.label}",
-                                tint = if (isVisible) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                tint = if (isVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                                 modifier = Modifier.size(17.dp)
                             )
                         }
@@ -229,14 +228,14 @@ fun NoteMetricsReorderAndVisibilityControl(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = null,
                     modifier = Modifier.size(14.dp),
-                    tint = SaffronPrimary
+                    tint = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "Reset metrics order & visibility",
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Medium,
-                    color = SaffronPrimary
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -257,7 +256,7 @@ fun NoteMetricsReorderAndVisibilityControl(
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.8.sp,
-                        color = SaffronPrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
                 )
 

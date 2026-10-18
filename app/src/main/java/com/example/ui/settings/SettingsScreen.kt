@@ -93,7 +93,6 @@ import com.example.data.model.InsertionMode
 import com.example.ui.theme.AmoledBorder
 import com.example.ui.theme.AmoledSurface
 import com.example.ui.theme.AmoledSurfaceVariant
-import com.example.ui.theme.SaffronPrimary
 
 // ==========================================
 // Reusable, Extensible Setting Data Models
@@ -1432,7 +1431,7 @@ fun SettingsScreen(
                         clipboardManager.setText(AnnotatedString(exportedJson))
                         showExportDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Copy to Clipboard")
                 }
@@ -1484,7 +1483,7 @@ fun SettingsScreen(
                             importError = true
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Import")
                 }
@@ -1586,7 +1585,7 @@ fun SettingsScreen(
             confirmButton = {
                 Button(
                     onClick = { validationError = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("OK")
                 }
@@ -1617,7 +1616,7 @@ fun SettingsScreen(
                     modifier = Modifier.padding(vertical = 8.dp)
                 ) {
                     CircularProgressIndicator(
-                        color = SaffronPrimary,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(36.dp)
                     )
                     Text(
@@ -1666,7 +1665,7 @@ fun SettingsScreen(
                                     modifier = Modifier.padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Outlined.Folder, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(24.dp))
+                                    Icon(Icons.Outlined.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(vault.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
@@ -1715,7 +1714,7 @@ fun SettingsScreen(
                             showOpenOrNewVaultDialog = false
                             createParentFolderLauncher.launch(null)
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Icon(Icons.Outlined.Folder, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -1744,7 +1743,7 @@ fun SettingsScreen(
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = AmoledSurface,
-                            border = BorderStroke(1.dp, if (isCurrent) SaffronPrimary else AmoledBorder),
+                            border = BorderStroke(1.dp, if (isCurrent) MaterialTheme.colorScheme.primary else AmoledBorder),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
@@ -1761,7 +1760,7 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                    Icon(Icons.Outlined.Folder, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(22.dp))
+                                    Icon(Icons.Outlined.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(
@@ -1835,7 +1834,7 @@ fun SettingsScreen(
                             onCreateNewVault(parent, name)
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Create")
                 }
@@ -1916,7 +1915,7 @@ fun NavigationSettingCard(
                 Icon(
                     imageVector = section.icon,
                     contentDescription = null,
-                    tint = SaffronPrimary,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -1944,7 +1943,7 @@ fun NavigationSettingCard(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = "Open",
-                tint = SaffronPrimary,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -1976,7 +1975,7 @@ fun HeadlineCard(
             ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = BorderStroke(
             width = 1.dp,
-            color = if (isExpanded) SaffronPrimary.copy(alpha = 0.6f) else AmoledBorder.copy(alpha = 0.5f)
+            color = if (isExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else AmoledBorder.copy(alpha = 0.5f)
         )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -1992,7 +1991,7 @@ fun HeadlineCard(
                     Icon(
                         imageVector = section.icon,
                         contentDescription = null,
-                        tint = if (isExpanded) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (isExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -2003,7 +2002,7 @@ fun HeadlineCard(
                         text = section.title,
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            color = if (isExpanded) SaffronPrimary else MaterialTheme.colorScheme.onSurface
+                            color = if (isExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                         )
                     )
                     if (!section.subtitle.isNullOrBlank()) {
@@ -2020,7 +2019,7 @@ fun HeadlineCard(
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
-                    tint = if (isExpanded) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (isExpanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.rotate(chevronRotation)
                 )
             }
@@ -2100,8 +2099,8 @@ private fun SwitchControlRow(item: SettingItem.Switch) {
             checked = item.checked,
             onCheckedChange = item.onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = SaffronPrimary,
-                checkedTrackColor = SaffronPrimary.copy(alpha = 0.5f)
+                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
             )
         )
     }
@@ -2123,7 +2122,7 @@ private fun SliderControlRow(item: SettingItem.Slider) {
             Text(
                 text = item.displayValue,
                 style = MaterialTheme.typography.bodySmall,
-                color = SaffronPrimary,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold
             )
         }
@@ -2140,8 +2139,8 @@ private fun SliderControlRow(item: SettingItem.Slider) {
             valueRange = item.valueRange,
             steps = item.steps,
             colors = SliderDefaults.colors(
-                thumbColor = SaffronPrimary,
-                activeTrackColor = SaffronPrimary
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary
             )
         )
     }
@@ -2229,7 +2228,7 @@ private fun InfoTextControl(item: SettingItem.InfoText) {
                 text = item.title,
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold,
-                    color = SaffronPrimary
+                    color = MaterialTheme.colorScheme.primary
                 )
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -2244,7 +2243,7 @@ private fun InfoTextControl(item: SettingItem.InfoText) {
             Text(
                 text = item.badge,
                 style = MaterialTheme.typography.labelSmall,
-                color = SaffronPrimary
+                color = MaterialTheme.colorScheme.primary
             )
         }
         if (!item.actionButtonText.isNullOrBlank() && item.onActionClick != null) {

@@ -121,12 +121,31 @@ fun KothaPadTheme(
         )
     }
 
+    val activeAmoledColorScheme = AmoledColorScheme.copy(
+        primary = customPrimary,
+        primaryContainer = customPrimary.copy(alpha = 0.25f),
+        onPrimaryContainer = customPrimary,
+        outline = customPrimary.copy(alpha = 0.35f)
+    )
+    val activeDarkColorScheme = DarkColorScheme.copy(
+        primary = customPrimary,
+        primaryContainer = customPrimary.copy(alpha = 0.25f),
+        onPrimaryContainer = customPrimary,
+        outline = customPrimary.copy(alpha = 0.35f)
+    )
+    val activeLightColorScheme = LightColorScheme.copy(
+        primary = customPrimary,
+        primaryContainer = customPrimary.copy(alpha = 0.18f),
+        onPrimaryContainer = customPrimary,
+        outline = customPrimary.copy(alpha = 0.3f)
+    )
+
     val colorScheme = when {
         isCustom -> customColorScheme
-        themeSetting.uppercase() == "AMOLED" -> AmoledColorScheme
-        themeSetting.uppercase() == "DARK" -> DarkColorScheme
-        themeSetting.uppercase() == "LIGHT" -> LightColorScheme
-        else -> if (isSystemDark) AmoledColorScheme else LightColorScheme
+        themeSetting.uppercase() == "AMOLED" -> activeAmoledColorScheme
+        themeSetting.uppercase() == "DARK" -> activeDarkColorScheme
+        themeSetting.uppercase() == "LIGHT" -> activeLightColorScheme
+        else -> if (isSystemDark) activeAmoledColorScheme else activeLightColorScheme
     }
 
     val shapes = Shapes(

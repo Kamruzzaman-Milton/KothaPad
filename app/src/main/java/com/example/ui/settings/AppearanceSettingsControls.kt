@@ -62,9 +62,7 @@ import com.example.ui.editor.TOOLBAR_ITEM_KEYBOARD_MODE
 import com.example.ui.editor.TOOLBAR_ITEM_METRICS
 import com.example.ui.editor.TOOLBAR_ITEM_NOTE_TIMER
 import com.example.ui.editor.TOOLBAR_ITEM_TEXT_SIZE
-import com.example.ui.editor.TOOLBAR_ITEM_TEXT_STYLE
-import com.example.ui.theme.SaffronPrimary
-import java.io.File
+
 
 // ==========================================
 // 1. Full Custom Theme & Color Pickers
@@ -122,7 +120,7 @@ fun FullCustomThemeColorPicker(
     ) {
         Text(
             text = "Custom Theme Color Picker",
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = SaffronPrimary)
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         )
         Text(
             text = "Select a target element below, then adjust with the palette or RGB sliders.",
@@ -231,7 +229,7 @@ fun FullCustomThemeColorPicker(
                         .background(Color(preset))
                         .border(
                             width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) SaffronPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
                             shape = CircleShape
                         )
                         .clickable {
@@ -398,14 +396,14 @@ fun ToolbarReorderAndVisibilityControl(
                             modifier = Modifier
                                 .size(24.dp)
                                 .clip(CircleShape)
-                                .background(SaffronPrimary.copy(alpha = 0.2f)),
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "${index + 1}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = SaffronPrimary
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
 
@@ -465,7 +463,7 @@ fun ToolbarReorderAndVisibilityControl(
                             Icon(
                                 imageVector = if (isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                                 contentDescription = if (isVisible) "Hide item" else "Show item",
-                                tint = if (isVisible) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                tint = if (isVisible) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -542,7 +540,7 @@ fun CustomFontImportControl(
         Text(
             text = if (customFontName.isNotBlank()) "Active Font: $customFontName" else "No custom font file loaded yet.",
             style = MaterialTheme.typography.bodySmall,
-            color = if (customFontName.isNotBlank()) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (customFontName.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -557,7 +555,7 @@ fun CustomFontImportControl(
                 },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Icon(
                     imageVector = Icons.Default.UploadFile,
@@ -586,7 +584,7 @@ fun CustomFontImportControl(
             Text(
                 text = importStatusMessage ?: "",
                 style = MaterialTheme.typography.labelSmall,
-                color = SaffronPrimary
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
