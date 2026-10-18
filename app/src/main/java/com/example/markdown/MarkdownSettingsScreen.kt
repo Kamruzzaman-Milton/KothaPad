@@ -89,37 +89,7 @@ fun MarkdownSettingsScreen(
     Scaffold(
         modifier = modifier
             .fillMaxSize()
-            .testTag("markdown_settings_screen")
-            .pointerInput(Unit) {
-                var totalDrag = 0f
-                var triggered = false
-                detectHorizontalDragGestures(
-                    onDragStart = {
-                        totalDrag = 0f
-                        triggered = false
-                    },
-                    onDragEnd = {
-                        totalDrag = 0f
-                        triggered = false
-                    },
-                    onDragCancel = {
-                        totalDrag = 0f
-                        triggered = false
-                    }
-                ) { change, dragAmount ->
-                    if (triggered) return@detectHorizontalDragGestures
-                    if (dragAmount > 0f) {
-                        totalDrag += dragAmount
-                    } else {
-                        totalDrag = 0f
-                    }
-                    if (dragAmount > 35f || totalDrag > 50f) {
-                        change.consume()
-                        triggered = true
-                        onBackClick()
-                    }
-                }
-            },
+            .testTag("markdown_settings_screen"),
         topBar = {
             TopAppBar(
                 title = {

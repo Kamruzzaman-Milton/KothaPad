@@ -568,6 +568,23 @@ class EditorViewModel(
         redoStack.clear()
         updateUndoRedoStates()
 
+        if (note.content.isEmpty()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val full = vaultNoteRepository.ensureNoteContentLoaded(note)
+                if (full.content.isNotEmpty() && _currentNote.value?.id == full.id) {
+                    withContext(Dispatchers.Main) {
+                        if (_textFieldValue.value.text.isEmpty()) {
+                            _currentNote.value = full
+                            _textFieldValue.value = TextFieldValue(
+                                text = full.content,
+                                selection = TextRange(full.content.length)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         if (note.folder.isNotBlank()) {
             preferencesManager.setLastActiveFolderSync(note.folder)
             viewModelScope.launch {

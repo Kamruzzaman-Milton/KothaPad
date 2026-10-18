@@ -147,9 +147,77 @@ class VaultNoteRepository(
         private const val WORKSPACE_SCHEMA_VERSION = 1
     }
 
+    private val localContentCacheDir by lazy {
+        context.filesDir.resolve("note_content_cache").apply { mkdirs() }
+    }
+
+    private fun saveContentToLocalCache(id: String, content: String) {
+        if (id.isBlank()) return
+        try {
+            java.io.File(localContentCacheDir, id).writeText(content, Charsets.UTF_8)
+        } catch (_: Exception) {}
+    }
+
+    private fun readContentFromLocalCache(id: String): String? {
+        if (id.isBlank()) return null
+        return try {
+            val file = java.io.File(localContentCacheDir, id)
+            if (file.exists()) file.readText(Charsets.UTF_8) else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun ensureNoteContentLoaded(note: Note): Note = withContext(Dispatchers.IO) {
+        if (note.content.isNotEmpty()) return@withContext note
+        val relPath = idToPathMap[note.id] ?: return@withContext note
+        val meta = getMetadataForPath(relPath)
+        val cachedContent = readContentFromLocalCache(meta?.id ?: "")
+        if (!cachedContent.isNullOrEmpty()) {
+            val updated = note.copy(content = cachedContent)
+            val entry = cache[relPath]
+            if (entry != null) {
+                cache[relPath] = entry.copy(note = updated)
+            }
+            return@withContext updated
+        }
+        val entry = cache[relPath]
+        val file = entry?.file
+        val text = if (file != null && file.exists()) {
+            vaultManager.readText(file)
+        } else {
+            val vaultDoc = currentVaultDoc ?: return@withContext note
+            val f = vaultManager.findFileRecursive(vaultDoc, relPath)
+            if (f != null) vaultManager.readText(f) else ""
+        }
+        if (text.isNotEmpty()) {
+            if (meta != null) {
+                saveContentToLocalCache(meta.id, text)
+            }
+            val updated = note.copy(content = text)
+            if (entry != null) {
+                cache[relPath] = entry.copy(note = updated)
+            }
+            return@withContext updated
+        }
+        note
+    }
+
     fun countWords(text: String): Int {
-        if (text.isBlank()) return 0
-        return text.trim().split("\\s+".toRegex()).size
+        if (text.isEmpty()) return 0
+        var count = 0
+        var inWord = false
+        val len = text.length
+        for (i in 0 until len) {
+            val c = text[i]
+            if (c.isWhitespace()) {
+                inWord = false
+            } else if (!inWord) {
+                inWord = true
+                count++
+            }
+        }
+        return count
     }
 
     fun getMetadataForPath(relPath: String): NoteMetadata? {
@@ -242,18 +310,12 @@ class VaultNoteRepository(
         vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR)
 
         // Load metadata & workspace via VaultConfigStore before scanning
+        // This IMMEDIATELY populates activeNotes and allNotes flows in memory
         loadMetadata(vaultDoc)
         loadWorkspace(vaultDoc)
 
-        // Perform initial vault scan synchronously so all notes & trash are indexed when onVaultOpened completes
-        _isScanning.value = true
-        _scanProgress.value = "Indexing notes..."
-        try {
-            scanVaultRecursive(vaultDoc)
-        } finally {
-            _isScanning.value = false
-            _scanProgress.value = null
-        }
+        // Perform fast vault scan to index files without blocking UI startup
+        startVaultScan(vaultDoc)
     }
 
     fun startVaultScan(vaultDoc: DocumentFile) {
@@ -327,17 +389,25 @@ class VaultNoteRepository(
                     val lastMod = child.lastModified()
                     val fileSize = child.length()
 
-                    val existingCache = cache[fileRelPath]
-                    val content = if (existingCache != null && existingCache.lastModified == lastMod) {
-                        existingCache.note.content
-                    } else {
-                        vaultManager.readText(child)
-                    }
-                    val words = countWords(content)
-                    val chars = content.length
-                    val hash = content.hashCode().toLong()
-
                     var meta = getMetadataForPath(fileRelPath)
+                    val isUnchanged = (meta != null && Math.abs(meta.modifiedAt - lastMod) < 2000L && (meta.fileSize <= 0L || meta.fileSize == fileSize))
+
+                    val existingCache = cache[fileRelPath]
+                    val content = if (isUnchanged) {
+                        if (existingCache != null && existingCache.note.content.isNotEmpty()) {
+                            existingCache.note.content
+                        } else {
+                            readContentFromLocalCache(meta!!.id) ?: ""
+                        }
+                    } else {
+                        val text = vaultManager.readText(child)
+                        val effectiveId = meta?.id ?: java.util.UUID.randomUUID().toString()
+                        saveContentToLocalCache(effectiveId, text)
+                        text
+                    }
+                    val words = if (isUnchanged && meta!!.wordCount > 0) meta.wordCount else countWords(content)
+                    val chars = if (isUnchanged && meta!!.charCount > 0) meta.charCount else content.length
+                    val hash = if (isUnchanged && meta!!.contentHash != 0L) meta.contentHash else (if (content.isNotEmpty()) content.hashCode().toLong() else 0L)
 
                     if (meta == null) {
                         // Check for renamed / moved note: match by fileSize + lastModified OR contentHash
@@ -367,7 +437,6 @@ class VaultNoteRepository(
                             metadataChanged = true
                         } else {
                             // Missing entry: create new entry.
-                            // SAF has no real creation timestamp; use file lastModified if available, NEVER System.currentTimeMillis()
                             val createdTs = if (lastMod > 0L) lastMod else System.currentTimeMillis()
                             meta = NoteMetadata(
                                 path = fileRelPath,
@@ -528,7 +597,14 @@ class VaultNoteRepository(
                 putMetadata(effectiveMeta)
 
                 val id = getOrCreateIdForPath(trashRel)
-                val content = vaultManager.readText(tFile)
+                val content = if (meta != null && Math.abs(meta.modifiedAt - tFile.lastModified()) < 2000L) {
+                    val existing = cache[trashRel]?.note?.content
+                    if (!existing.isNullOrEmpty()) existing else (readContentFromLocalCache(effectiveMeta.id) ?: "")
+                } else {
+                    val text = vaultManager.readText(tFile)
+                    saveContentToLocalCache(effectiveMeta.id, text)
+                    text
+                }
                 val note = Note(
                     id = id,
                     title = baseTitle,
@@ -718,6 +794,58 @@ class VaultNoteRepository(
                 )
                 putMetadata(meta)
             }
+
+            // INSTANT EMISSION: Populate in-memory cache directly from metadata & local content cache
+            for ((_, meta) in metadataByIdMap) {
+                if (meta.isOrphaned) continue
+                val noteId = getOrCreateIdForPath(meta.path)
+                val isTrash = meta.isDeleted || meta.path.startsWith(TRASH_PREFIX)
+                val baseTitle = if (isTrash) {
+                    meta.originalRelPath?.substringAfterLast("/")?.removeSuffix(".md")
+                        ?: meta.trashFileName?.removeSuffix(".md")?.replace(Regex("_\\d{10,}$"), "")
+                        ?: meta.path.substringAfterLast("/").removeSuffix(".md")
+                } else {
+                    meta.path.substringAfterLast("/").removeSuffix(".md")
+                }
+                val folderName = if (isTrash) {
+                    val orig = meta.originalRelPath ?: ""
+                    if (orig.contains("/")) orig.substringBeforeLast("/") else GENERAL_DIR
+                } else {
+                    if (meta.path.contains("/")) meta.path.substringBeforeLast("/") else GENERAL_DIR
+                }
+                val cachedContent = readContentFromLocalCache(meta.id) ?: ""
+                val note = Note(
+                    id = noteId,
+                    title = baseTitle.ifBlank { "Untitled Note" },
+                    content = cachedContent,
+                    createdAt = meta.createdAt,
+                    updatedAt = meta.updatedAt,
+                    isPinned = meta.isPinned && !isTrash,
+                    languageCode = meta.languageCode,
+                    highlightColor = meta.highlightColor,
+                    fontSizeModifier = meta.fontSizeModifier,
+                    folder = folderName,
+                    tags = meta.tags,
+                    isArchived = meta.isArchived && !isTrash,
+                    isDeleted = isTrash,
+                    deletedAt = meta.deletedAt,
+                    sessionDurationSec = meta.timeSpent.coerceAtLeast(meta.sessionDurationSec),
+                    sessionCount = meta.sessionCount
+                )
+                val existingEntry = cache[meta.path]
+                if (existingEntry != null) {
+                    cache[meta.path] = existingEntry.copy(note = note, lastModified = meta.modifiedAt)
+                } else {
+                    cache[meta.path] = CachedNoteEntry(
+                        note = note,
+                        file = vaultDoc,
+                        parentDir = vaultDoc,
+                        relPath = meta.path,
+                        lastModified = meta.modifiedAt
+                    )
+                }
+            }
+            recomputeFlows()
         } catch (_: Exception) {
             // Tolerant fallback
         }
@@ -929,6 +1057,7 @@ class VaultNoteRepository(
             tags = note.tags
         )
         putMetadata(meta)
+        saveContentToLocalCache(meta.id, note.content)
 
         val createdNote = note.copy(
             id = id,
@@ -1249,6 +1378,7 @@ class VaultNoteRepository(
             orphanedAt = null
         )
         putMetadata(meta)
+        saveContentToLocalCache(meta.id, note.content)
 
         val updatedNote = note.copy(
             id = entry.note.id,
@@ -1450,9 +1580,10 @@ class VaultNoteRepository(
             }
         }
         // Bidirectional sync: make sure existing DB templates exist on disk
+        val existingFileNames = files.mapNotNull { it.name }.toSet()
         for (st in existingTemplates) {
             val fileName = "${VaultManager.sanitizeFilename(st.label)}.md"
-            if (templatesDir.findFile(fileName) == null) {
+            if (!existingFileNames.contains(fileName)) {
                 saveTemplateFile(st)
             }
         }

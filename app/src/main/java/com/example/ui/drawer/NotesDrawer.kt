@@ -198,7 +198,7 @@ fun NotesDrawer(
                 ) {
                     items(filteredNotes, key = { it.id }) { note ->
                         val isSelected = note.id == currentNoteId
-                        val dateFormatted = DateFormat.format("MMM dd, hh:mm a", Date(note.updatedAt)).toString()
+                        val dateFormatted = com.example.ui.notes.NoteMetricsConfig.formatDateTime(note.updatedAt)
 
                         Card(
                             modifier = Modifier

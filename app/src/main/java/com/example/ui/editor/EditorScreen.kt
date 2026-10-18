@@ -397,24 +397,7 @@ fun EditorScreen(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            // Performing gesture by swiping from left to right on screen launches Note Manager!
-            .pointerInput(isNoteManagerOpen) {
-                detectHorizontalDragGestures { change, dragAmount ->
-                    if (dragAmount > 35f && !isNoteManagerOpen) {
-                        change.consume()
-                        keyboardController?.hide()
-                        focusManager.clearFocus(force = true)
-                        viewModel.isNoteManagerOpen.value = true
-                    } else if (dragAmount < -35f && !isNoteManagerOpen) {
-                        change.consume()
-                        keyboardController?.hide()
-                        focusManager.clearFocus(force = true)
-                        viewModel.navigateTo("SETTINGS")
-                    }
-                }
-            }
+        modifier = modifier.fillMaxSize()
     ) {
         // Main Editor View
         Scaffold(

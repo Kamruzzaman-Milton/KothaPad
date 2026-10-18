@@ -370,19 +370,33 @@ fun NotesManagerScreen(
         }
     }
 
-    // Helper to sort notes in a folder
-    fun getSortedNotesForFolder(notesInFolder: List<Note>): List<Note> {
-        return when (sortOption) {
-            NoteSortOption.MODIFIED_DESC -> notesInFolder.sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending { it.updatedAt })
-            NoteSortOption.MODIFIED_ASC -> notesInFolder.sortedWith(compareByDescending<Note> { it.isPinned }.thenBy { it.updatedAt })
-            NoteSortOption.CREATED_DESC -> notesInFolder.sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending { it.createdAt })
-            NoteSortOption.CREATED_ASC -> notesInFolder.sortedWith(compareByDescending<Note> { it.isPinned }.thenBy { it.createdAt })
-            NoteSortOption.NAME_ASC -> notesInFolder.sortedWith(compareByDescending<Note> { it.isPinned }.thenBy { getDisplayTitle(it).lowercase() })
-            NoteSortOption.NAME_DESC -> notesInFolder.sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending { getDisplayTitle(it).lowercase() })
-            NoteSortOption.WORD_COUNT_DESC -> notesInFolder.sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending {
-                if (it.content.isBlank()) 0 else it.content.trim().split("\\s+".toRegex()).size
+    val sortedFilteredNotes = remember(filteredNotes, sortOption) {
+        when (sortOption) {
+            NoteSortOption.MODIFIED_DESC -> filteredNotes.sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending { it.updatedAt })
+            NoteSortOption.MODIFIED_ASC -> filteredNotes.sortedWith(compareByDescending<Note> { it.isPinned }.thenBy { it.updatedAt })
+            NoteSortOption.CREATED_DESC -> filteredNotes.sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending { it.createdAt })
+            NoteSortOption.CREATED_ASC -> filteredNotes.sortedWith(compareByDescending<Note> { it.isPinned }.thenBy { it.createdAt })
+            NoteSortOption.NAME_ASC -> filteredNotes.sortedWith(compareByDescending<Note> { it.isPinned }.thenBy { getDisplayTitle(it).lowercase() })
+            NoteSortOption.NAME_DESC -> filteredNotes.sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending { getDisplayTitle(it).lowercase() })
+            NoteSortOption.WORD_COUNT_DESC -> filteredNotes.sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending {
+                com.example.ui.notes.NoteMetricsConfig.fastWordCount(it.content)
             })
         }
+    }
+
+    val notesByFolder = remember(sortedFilteredNotes) {
+        sortedFilteredNotes.groupBy { it.folder.trim().ifBlank { "General" }.lowercase() }
+    }
+
+    val rootNotes = remember(sortedFilteredNotes, allTreePaths) {
+        sortedFilteredNotes.filter { note ->
+            val f = note.folder.trim()
+            f.isBlank() || (!allTreePaths.any { it.equals(f, ignoreCase = true) })
+        }
+    }
+
+    fun getSortedNotesForFolder(folderPath: String): List<Note> {
+        return notesByFolder[folderPath.trim().ifBlank { "General" }.lowercase()] ?: emptyList()
     }
 
     // Check if all folders are currently expanded
@@ -394,15 +408,7 @@ fun NotesManagerScreen(
     Scaffold(
         modifier = modifier
             .fillMaxSize()
-            .testTag("fullscreen_notes_manager")
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures { change, dragAmount ->
-                    if (dragAmount < -35f) {
-                        change.consume()
-                        onClose()
-                    }
-                }
-            },
+            .testTag("fullscreen_notes_manager"),
         topBar = {
             TopAppBar(
                 title = {
@@ -940,7 +946,7 @@ fun NotesManagerScreen(
                                 contentPadding = PaddingValues(bottom = 96.dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                items(getSortedNotesForFolder(filteredNotes), key = { it.id }) { note ->
+                                items(sortedFilteredNotes, key = { it.id }) { note ->
                                     NoteTreeItem(
                                         note = note,
                                         isCurrentlyOpen = false,
@@ -981,7 +987,7 @@ fun NotesManagerScreen(
                         contentPadding = PaddingValues(bottom = 96.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        items(getSortedNotesForFolder(filteredNotes), key = { it.id }) { note ->
+                        items(sortedFilteredNotes, key = { it.id }) { note ->
                             NoteTreeItem(
                                 note = note,
                                 isCurrentlyOpen = note.id == currentNoteId,
@@ -1129,7 +1135,7 @@ fun NotesManagerScreen(
                                 folderToDelete = path
                                 deleteFolderNotesChoice = false
                             },
-                            getSortedNotesForFolder = { notes -> getSortedNotesForFolder(notes) },
+                            getSortedNotesForFolder = { path -> getSortedNotesForFolder(path) },
                             onNoteSelect = onNoteSelect,
                             onClose = onClose,
                             onPinToggle = onPinToggle,
@@ -1154,13 +1160,8 @@ fun NotesManagerScreen(
                     }
 
 
-                    val rootNotes = filteredNotes.filter { note ->
-                        val f = note.folder.trim()
-                        f.isBlank() || (!allTreePaths.any { it.equals(f, ignoreCase = true) })
-                    }
                     if (rootNotes.isNotEmpty()) {
-                        val sortedRoot = getSortedNotesForFolder(rootNotes)
-                        items(sortedRoot, key = { "root_${it.id}" }) { note ->
+                        items(rootNotes, key = { "root_${it.id}" }) { note ->
                             NoteTreeItem(
                                 note = note,
                                 isCurrentlyOpen = note.id == currentNoteId,
@@ -1883,7 +1884,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.renderFolderTreeNode(
     onCreateSubfolder: (String) -> Unit,
     onRenameFolder: (String, String) -> Unit,
     onDeleteFolder: (String) -> Unit,
-    getSortedNotesForFolder: (List<Note>) -> List<Note>,
+    getSortedNotesForFolder: (String) -> List<Note>,
     onNoteSelect: (Note) -> Unit,
     onClose: () -> Unit,
     onPinToggle: (Note) -> Unit,
@@ -1894,7 +1895,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.renderFolderTreeNode(
     onDeleteNoteConfirm: (Note) -> Unit,
     onStartMultiSelect: (Note) -> Unit
 ) {
-    val notesInFolder = filteredNotes.filter { it.folder.equals(node.fullPath, ignoreCase = true) }
+    val notesInFolder = getSortedNotesForFolder(node.fullPath)
     val isExpanded = expandedFolders.contains(node.fullPath)
 
     item(key = "folder_${node.fullPath}") {
@@ -1932,7 +1933,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.renderFolderTreeNode(
     }
 
     if (isExpanded) {
-        val sortedNotes = getSortedNotesForFolder(notesInFolder)
+        val sortedNotes = notesInFolder
         if (sortedNotes.isEmpty() && node.subfolders.isEmpty()) {
             item(key = "empty_notes_${node.fullPath}") {
                 IndentedGuideLineContainer(depth = node.depth + 1) {
@@ -2747,11 +2748,13 @@ private fun getDisplayTitle(note: Note): String {
     if (title.isNotBlank() && !title.equals("Untitled Note", ignoreCase = true) && !title.equals("Untitled", ignoreCase = true)) {
         return title
     }
-    val firstLine = note.content.lines().map { it.trim() }.firstOrNull { it.isNotBlank() }
-    if (!firstLine.isNullOrBlank()) {
+    val content = note.content
+    val firstLineEnd = content.indexOf('\n')
+    val firstLine = (if (firstLineEnd == -1) content else content.substring(0, firstLineEnd)).trim()
+    if (firstLine.isNotBlank()) {
         return firstLine.take(45)
     }
-    val dateStr = DateFormat.format("MMM dd", Date(note.createdAt)).toString()
-    return "Untitled • $dateStr"
+    val dateStr = com.example.ui.notes.NoteMetricsConfig.formatDateOnly(note.createdAt)
+    return if (dateStr.isNotBlank()) "Untitled • $dateStr" else "Untitled Note"
 }
 

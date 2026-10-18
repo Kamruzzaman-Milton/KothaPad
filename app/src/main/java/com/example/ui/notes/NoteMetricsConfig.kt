@@ -78,15 +78,54 @@ object NoteMetricsConfig {
         )
     )
 
-    fun parseOrder(orderStr: String): List<String> {
-        val parsed = orderStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-        val result = parsed.toMutableList()
-        for (item in DEFAULT_ORDER) {
-            if (!result.contains(item)) {
-                result.add(item)
+    private val orderCache = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+
+    private val dateTimeFormatThreadLocal = ThreadLocal.withInitial {
+        java.text.SimpleDateFormat("MMM dd, hh:mm a", java.util.Locale.getDefault())
+    }
+
+    private val dateFormatThreadLocal = ThreadLocal.withInitial {
+        java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault())
+    }
+
+    fun fastWordCount(text: String): Int {
+        if (text.isEmpty()) return 0
+        var count = 0
+        var inWord = false
+        val len = text.length
+        for (i in 0 until len) {
+            val c = text[i]
+            if (c.isWhitespace()) {
+                inWord = false
+            } else if (!inWord) {
+                inWord = true
+                count++
             }
         }
-        return result
+        return count
+    }
+
+    fun formatDateTime(timestamp: Long): String {
+        if (timestamp <= 0L) return ""
+        return dateTimeFormatThreadLocal.get()?.format(Date(timestamp)) ?: ""
+    }
+
+    fun formatDateOnly(timestamp: Long): String {
+        if (timestamp <= 0L) return ""
+        return dateFormatThreadLocal.get()?.format(Date(timestamp)) ?: ""
+    }
+
+    fun parseOrder(orderStr: String): List<String> {
+        return orderCache.computeIfAbsent(orderStr) { str ->
+            val parsed = str.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            val result = parsed.toMutableList()
+            for (item in DEFAULT_ORDER) {
+                if (!result.contains(item)) {
+                    result.add(item)
+                }
+            }
+            result
+        }
     }
 
     fun formatMetrics(
@@ -98,14 +137,14 @@ object NoteMetricsConfig {
         val isDetailed = style.equals("DETAILED", ignoreCase = true)
         val orderedKeys = parseOrder(orderStr)
 
-        val words = if (note.content.isBlank()) 0 else note.content.trim().split("\\s+".toRegex()).size
+        val words = fastWordCount(note.content)
         val chars = note.content.length
         val readMins = ceil(words / 200.0).toInt().coerceAtLeast(1)
         val sessionStr = NoteTimeFormatter.formatDuration(note.sessionDurationSec)
-        val modDate = DateFormat.format("MMM dd, hh:mm a", Date(note.updatedAt)).toString()
-        val createdDate = DateFormat.format("MMM dd, hh:mm a", Date(note.createdAt)).toString()
+        val modDate = formatDateTime(note.updatedAt)
+        val createdDate = formatDateTime(note.createdAt)
 
-        val tokens = mutableListOf<String>()
+        val tokens = ArrayList<String>(orderedKeys.size)
         for (key in orderedKeys) {
             if (hiddenItems.contains(key)) continue
             val part = when (key) {
@@ -132,7 +171,7 @@ object NoteMetricsConfig {
         val isDetailed = style.equals("DETAILED", ignoreCase = true)
         val orderedKeys = parseOrder(orderStr)
 
-        val tokens = mutableListOf<String>()
+        val tokens = ArrayList<String>(orderedKeys.size)
         for (key in orderedKeys) {
             if (hiddenItems.contains(key)) continue
             val meta = ALL_ITEMS.find { it.key == key }

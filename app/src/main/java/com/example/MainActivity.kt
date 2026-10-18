@@ -104,8 +104,10 @@ class MainActivity : ComponentActivity() {
             var acknowledgedSafeWarning by remember { mutableStateOf<String?>(null) }
 
             val density = LocalDensity.current
-            val imeBottom = WindowInsets.ime.getBottom(density)
-            val isImeVisible = imeBottom > 0
+            val imeInsets = WindowInsets.ime
+            val isImeVisible = remember(density, imeInsets) {
+                androidx.compose.runtime.derivedStateOf { imeInsets.getBottom(density) > 0 }
+            }.value
 
             var lastBackPressTime by remember { mutableStateOf(0L) }
 
