@@ -63,7 +63,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.example.ui.theme.SaffronPrimary
+
 
 @Composable
 fun FinishSetupDialog(
@@ -148,7 +148,7 @@ fun FinishSetupDialog(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(SaffronPrimary.copy(alpha = 0.2f)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("🛡️", fontSize = 18.sp)
@@ -316,7 +316,7 @@ fun FinishSetupDialog(
         confirmButton = {
             Button(
                 onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -356,7 +356,7 @@ private fun SetupChecklistItem(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = SaffronPrimary,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -405,7 +405,7 @@ private fun SetupChecklistItem(
                 Spacer(modifier = Modifier.height(6.dp))
                 Button(
                     onClick = onActionClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     shape = RoundedCornerShape(6.dp),
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)

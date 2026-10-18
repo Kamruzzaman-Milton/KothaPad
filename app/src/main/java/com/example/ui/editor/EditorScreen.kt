@@ -384,10 +384,11 @@ fun EditorScreen(
         textFieldValue.text.length
     }
 
+    val primaryColor = MaterialTheme.colorScheme.primary
     // Note highlight tint
-    val highlightBgColor = remember(currentNote?.highlightColor) {
+    val highlightBgColor = remember(currentNote?.highlightColor, primaryColor) {
         when (currentNote?.highlightColor) {
-            "SAFFRON" -> HighlightSaffron
+            "SAFFRON" -> primaryColor.copy(alpha = 0.2f)
             "GOLD" -> HighlightGold
             "CORAL" -> HighlightCoral
             "MINT" -> HighlightMint

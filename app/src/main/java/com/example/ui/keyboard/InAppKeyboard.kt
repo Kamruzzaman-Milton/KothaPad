@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.KeyActionType
 import com.example.data.model.KeyboardKey
 import com.example.data.model.KeyboardLayout
-import com.example.ui.theme.SaffronPrimary
+
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive

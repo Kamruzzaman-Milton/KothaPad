@@ -918,7 +918,12 @@ fun SettingsScreen(
                                     surfaceColor = customSurfaceColor,
                                     textColor = customTextColor,
                                     secondaryColor = customSecondaryColor,
-                                    onColorsChanged = onCustomThemeColorsChange
+                                    onColorsChanged = { p, b, s, t, sec ->
+                                        onCustomThemeColorsChange(p, b, s, t, sec)
+                                        if (appTheme != "CUSTOM") {
+                                            onAppThemeChange("CUSTOM")
+                                        }
+                                    }
                                 )
                             }
                         )
@@ -1651,8 +1656,8 @@ fun SettingsScreen(
                         items(otherVaults) { vault ->
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
-                                color = AmoledSurface,
-                                border = BorderStroke(1.dp, AmoledBorder),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp)
@@ -1742,8 +1747,8 @@ fun SettingsScreen(
                         val isCurrent = vault.uriString == vaultState.currentVault?.uriString
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = AmoledSurface,
-                            border = BorderStroke(1.dp, if (isCurrent) MaterialTheme.colorScheme.primary else AmoledBorder),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
@@ -1897,11 +1902,10 @@ fun NavigationSettingCard(
             .fillMaxWidth()
             .testTag("headline_${section.id}"),
         shape = RoundedCornerShape(14.dp),
-        color = AmoledSurfaceVariant.takeIf { it != AmoledSurface }
-            ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = BorderStroke(
             width = 1.dp,
-            color = AmoledBorder.copy(alpha = 0.5f)
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
         )
     ) {
         Row(
@@ -1971,11 +1975,10 @@ fun HeadlineCard(
             .fillMaxWidth()
             .testTag("headline_${section.id}"),
         shape = RoundedCornerShape(14.dp),
-        color = AmoledSurfaceVariant.takeIf { it != AmoledSurface }
-            ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = BorderStroke(
             width = 1.dp,
-            color = if (isExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else AmoledBorder.copy(alpha = 0.5f)
+            color = if (isExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
         )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {

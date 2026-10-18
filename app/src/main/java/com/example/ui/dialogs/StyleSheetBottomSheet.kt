@@ -146,7 +146,7 @@ fun StyleSheetBottomSheet(
             ) {
                 val tints = listOf(
                     null to Color.Transparent,
-                    "SAFFRON" to HighlightSaffron,
+                    "SAFFRON" to MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
                     "GOLD" to HighlightGold,
                     "CORAL" to HighlightCoral,
                     "MINT" to HighlightMint,

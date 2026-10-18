@@ -67,7 +67,7 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.AmoledBorder
 import com.example.ui.theme.AmoledSurface
 import com.example.ui.theme.AmoledSurfaceVariant
-import com.example.ui.theme.SaffronPrimary
+
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -129,7 +129,7 @@ fun MarkdownSettingsScreen(
                         ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     border = BorderStroke(
                         width = 1.dp,
-                        color = if (settings.markdownEnabled) SaffronPrimary.copy(alpha = 0.8f) else AmoledBorder.copy(alpha = 0.5f)
+                        color = if (settings.markdownEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) else AmoledBorder.copy(alpha = 0.5f)
                     ),
                     modifier = Modifier.fillMaxWidth().testTag("master_markdown_toggle_card")
                 ) {
@@ -144,7 +144,7 @@ fun MarkdownSettingsScreen(
                                 text = "Enable Markdown in Reading Mode",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (settings.markdownEnabled) SaffronPrimary else MaterialTheme.colorScheme.onSurface
+                                color = if (settings.markdownEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -163,8 +163,8 @@ fun MarkdownSettingsScreen(
                                 onUpdateSettings { it.copy(markdownEnabled = checked) }
                             },
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = SaffronPrimary,
-                                checkedTrackColor = SaffronPrimary.copy(alpha = 0.4f)
+                                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                             ),
                             modifier = Modifier.testTag("markdown_master_switch")
                         )
@@ -197,7 +197,7 @@ fun MarkdownSettingsScreen(
                                 text = "${"%.1f".format(settings.readingFontScale)}x",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = SaffronPrimary
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
@@ -210,8 +210,8 @@ fun MarkdownSettingsScreen(
                             valueRange = 0.8f..1.8f,
                             steps = 9,
                             colors = SliderDefaults.colors(
-                                thumbColor = SaffronPrimary,
-                                activeTrackColor = SaffronPrimary
+                                thumbColor = MaterialTheme.colorScheme.primary,
+                                activeTrackColor = MaterialTheme.colorScheme.primary
                             ),
                             modifier = Modifier.testTag("reading_font_scale_slider")
                         )
@@ -289,7 +289,7 @@ fun MarkdownSettingsScreen(
                                 text = "${"%.1f".format(settings.headingSizeScale)}x",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = if (settings.markdownEnabled && settings.liveStylingEnabled) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                color = if (settings.markdownEnabled && settings.liveStylingEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
@@ -303,8 +303,8 @@ fun MarkdownSettingsScreen(
                             steps = 6,
                             enabled = settings.markdownEnabled && settings.liveStylingEnabled,
                             colors = SliderDefaults.colors(
-                                thumbColor = SaffronPrimary,
-                                activeTrackColor = SaffronPrimary
+                                thumbColor = MaterialTheme.colorScheme.primary,
+                                activeTrackColor = MaterialTheme.colorScheme.primary
                             ),
                             modifier = Modifier.testTag("heading_size_scale_slider")
                         )
@@ -592,7 +592,7 @@ fun MarkdownSettingsScreen(
                         onResetToDefaults()
                         showResetDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Text("Reset")
                 }
@@ -615,7 +615,7 @@ private fun MarkdownGroupCard(
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge,
-            color = SaffronPrimary,
+            color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
@@ -667,8 +667,8 @@ private fun MarkdownToggleRow(
             onCheckedChange = onCheckedChange,
             enabled = enabled,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = SaffronPrimary,
-                checkedTrackColor = SaffronPrimary.copy(alpha = 0.4f)
+                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
             ),
             modifier = Modifier.testTag(testTag)
         )
@@ -714,7 +714,7 @@ private fun FormatBarReorderList(
             val isDragging = draggingIndex == index
 
             val rowElevation = if (isDragging) 8.dp else 0.dp
-            val rowBorderColor = if (isDragging) SaffronPrimary else AmoledBorder.copy(alpha = 0.35f)
+            val rowBorderColor = if (isDragging) MaterialTheme.colorScheme.primary else AmoledBorder.copy(alpha = 0.35f)
             val rowBgColor = if (isDragging) {
                 MaterialTheme.colorScheme.surfaceVariant
             } else {
@@ -753,7 +753,7 @@ private fun FormatBarReorderList(
                             }
                         },
                         enabled = enabled,
-                        colors = CheckboxDefaults.colors(checkedColor = SaffronPrimary),
+                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary),
                         modifier = Modifier.testTag("format_bar_check_${btn.id}")
                     )
 
@@ -763,7 +763,7 @@ private fun FormatBarReorderList(
                             .size(32.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(
-                                if (isChecked) SaffronPrimary.copy(alpha = 0.15f)
+                                if (isChecked) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
                             ),
                         contentAlignment = Alignment.Center
@@ -793,7 +793,7 @@ private fun FormatBarReorderList(
                             Text(
                                 text = "($posLabel)",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (isChecked) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                color = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -825,7 +825,7 @@ private fun FormatBarReorderList(
                         Icon(
                             imageVector = Icons.Default.ArrowUpward,
                             contentDescription = "Move Up",
-                            tint = if (enabled && index > 0) SaffronPrimary
+                            tint = if (enabled && index > 0) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
                             modifier = Modifier.size(17.dp)
                         )
@@ -852,7 +852,7 @@ private fun FormatBarReorderList(
                         Icon(
                             imageVector = Icons.Default.ArrowDownward,
                             contentDescription = "Move Down",
-                            tint = if (enabled && index < currentOrder.size - 1) SaffronPrimary
+                            tint = if (enabled && index < currentOrder.size - 1) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
                             modifier = Modifier.size(17.dp)
                         )

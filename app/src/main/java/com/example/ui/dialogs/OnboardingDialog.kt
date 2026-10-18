@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.PermissionChecker
-import com.example.ui.theme.SaffronPrimary
+
 
 @Composable
 fun OnboardingDialog(
@@ -84,7 +84,7 @@ fun OnboardingDialog(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(SaffronPrimary.copy(alpha = 0.2f)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("🎙️", fontSize = 18.sp)
@@ -95,7 +95,7 @@ fun OnboardingDialog(
                         text = "Welcome to KothaPad",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold,
-                            color = SaffronPrimary
+                            color = MaterialTheme.colorScheme.primary
                         )
                     )
                     Text(
@@ -136,11 +136,11 @@ fun OnboardingDialog(
                                     Icon(
                                         imageVector = Icons.Default.Check,
                                         contentDescription = null,
-                                        tint = SaffronPrimary,
+                                        tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Granted", fontSize = 12.sp, color = SaffronPrimary, fontWeight = FontWeight.SemiBold)
+                                    Text("Granted", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                         }
@@ -155,7 +155,7 @@ fun OnboardingDialog(
                             Spacer(modifier = Modifier.height(8.dp))
                             Button(
                                 onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -233,7 +233,7 @@ fun OnboardingDialog(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.BatteryAlert, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.BatteryAlert, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "4. Background Dictation",
@@ -271,7 +271,7 @@ fun OnboardingDialog(
         confirmButton = {
             Button(
                 onClick = onCompleteOnboarding,
-                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {

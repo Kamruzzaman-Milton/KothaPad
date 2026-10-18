@@ -207,7 +207,7 @@ fun WelcomeScreen(
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                        border = BorderStroke(1.dp, AmoledBorder.copy(alpha = 0.5f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -260,8 +260,8 @@ fun WelcomeScreen(
                     items(vaultState.recentVaults) { recent ->
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = AmoledSurface,
-                            border = BorderStroke(1.dp, AmoledBorder),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
@@ -442,8 +442,8 @@ private fun VaultActionCard(
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = AmoledSurface,
-        border = BorderStroke(1.5.dp, AmoledBorder),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)

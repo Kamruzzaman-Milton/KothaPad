@@ -47,7 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.model.KeyActionType
 import com.example.data.model.KeyboardKey
-import com.example.ui.theme.SaffronPrimary
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,7 +127,7 @@ fun EditKeyDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("edit_key_label_field"),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = SaffronPrimary,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                     )
                 )
@@ -148,7 +148,7 @@ fun EditKeyDialog(
                             .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                             .testTag("edit_key_action_dropdown"),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SaffronPrimary,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
                             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                         )
                     )
@@ -179,7 +179,7 @@ fun EditKeyDialog(
                         maxLines = 6,
                         modifier = Modifier.fillMaxWidth().testTag("edit_key_text_field"),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SaffronPrimary,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
                             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                         )
                     )
@@ -189,7 +189,7 @@ fun EditKeyDialog(
                         text = "Current (Dynamic) Date & Time",
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.SemiBold,
-                            color = SaffronPrimary
+                            color = MaterialTheme.colorScheme.primary
                         )
                     )
 
@@ -218,7 +218,7 @@ fun EditKeyDialog(
                                     text = btnText,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = SaffronPrimary
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -237,7 +237,7 @@ fun EditKeyDialog(
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = SaffronPrimary,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
                                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             )
                         )
@@ -249,7 +249,7 @@ fun EditKeyDialog(
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = SaffronPrimary,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
                                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             )
                         )
@@ -278,7 +278,7 @@ fun EditKeyDialog(
                             onCheckedChange = { smartSpacing = it },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = MaterialTheme.colorScheme.surface,
-                                checkedTrackColor = SaffronPrimary
+                                checkedTrackColor = MaterialTheme.colorScheme.primary
                             )
                         )
                     }
@@ -322,7 +322,7 @@ fun EditKeyDialog(
                                 onSaveKey(updatedKey)
                                 onDismiss()
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Text("SAVE")

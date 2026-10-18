@@ -16,7 +16,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.HighlightGold
-import com.example.ui.theme.SaffronPrimary
+
 
 /**
  * Creates and remembers a VisualTransformation that applies live Markdown styling

@@ -131,7 +131,7 @@ fun EditorSideRailLayout(
     }
 
     val targetColor = when (micButtonColor.uppercase()) {
-        "SAFFRON" -> Color(0xFFFF7043)
+        "SAFFRON" -> MaterialTheme.colorScheme.primary
         "CORAL" -> Color(0xFFFF5252)
         "EMERALD" -> Color(0xFF2E7D32)
         "BLUE" -> Color(0xFF1976D2)
@@ -334,7 +334,7 @@ fun EditorSideRailLayout(
                     shape = CircleShape,
                     color = micColor,
                     shadowElevation = 6.dp,
-                    border = BorderStroke(1.dp, AmoledBorder.copy(alpha = 0.35f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
                     modifier = Modifier
                         .size(micBtnSize)
                         .clip(CircleShape)
@@ -414,7 +414,7 @@ fun EditorSideRailLayout(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
                 shadowElevation = 5.dp,
-                border = BorderStroke(1.dp, AmoledBorder.copy(alpha = 0.4f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
                 modifier = Modifier
                     .size(toggleBtnSize)
                     .testTag("reading_mode_button_container")
@@ -456,7 +456,7 @@ fun EditorSideRailLayout(
             Surface(
                 shape = RoundedCornerShape((22 * railScale).dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
-                border = BorderStroke(1.dp, AmoledBorder.copy(alpha = 0.45f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
                 shadowElevation = 6.dp,
                 modifier = Modifier
                     .width(railWidth)
@@ -537,7 +537,7 @@ fun EditorSideRailLayout(
                     Surface(
                         shape = RoundedCornerShape(18.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f),
-                        border = BorderStroke(1.dp, AmoledBorder.copy(alpha = 0.45f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
                         shadowElevation = 5.dp,
                         modifier = Modifier
                             .fillMaxWidth()

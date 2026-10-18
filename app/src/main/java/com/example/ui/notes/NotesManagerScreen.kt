@@ -584,9 +584,9 @@ fun NotesManagerScreen(
             AnimatedVisibility(visible = isMultiSelectMode && (selectedNoteIds.isNotEmpty() || selectedFolderPaths.isNotEmpty())) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    color = AmoledSurfaceVariant,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
                     tonalElevation = 8.dp,
-                    border = BorderStroke(1.dp, AmoledBorder)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                 ) {
                     Row(
                         modifier = Modifier
@@ -764,7 +764,7 @@ fun NotesManagerScreen(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.background,
-                border = BorderStroke(0.5.dp, AmoledBorder.copy(alpha = 0.4f))
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
             ) {
                 Row(
                     modifier = Modifier
@@ -915,7 +915,7 @@ fun NotesManagerScreen(
                     shape = RoundedCornerShape(10.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = AmoledBorder
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                     )
                 )
             }
@@ -1436,8 +1436,8 @@ fun NotesManagerScreen(
                         allActiveFolders.take(4).forEach { f ->
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
-                                color = if (targetMoveFolderInput.equals(f, ignoreCase = true)) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else AmoledSurfaceVariant,
-                                border = BorderStroke(1.dp, if (targetMoveFolderInput.equals(f, ignoreCase = true)) MaterialTheme.colorScheme.primary else AmoledBorder),
+                                color = if (targetMoveFolderInput.equals(f, ignoreCase = true)) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, if (targetMoveFolderInput.equals(f, ignoreCase = true)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
                                 modifier = Modifier.clickable { targetMoveFolderInput = f }
                             ) {
                                 Text(
@@ -2043,7 +2043,7 @@ private fun IndentedGuideLineContainer(
                 .width(1.5.dp)
                 .fillMaxHeight()
                 .padding(vertical = 2.dp)
-                .background(AmoledBorder.copy(alpha = 0.5f))
+                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
         )
         Spacer(modifier = Modifier.width(6.dp))
         Box(modifier = Modifier.weight(1f)) {
@@ -2088,7 +2088,7 @@ private fun FolderTreeHeader(
         },
         border = BorderStroke(
             width = if (isSelected) 1.dp else 0.5.dp,
-            color = if (isSelected) MaterialTheme.colorScheme.primary else AmoledBorder.copy(alpha = 0.25f)
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -2295,7 +2295,7 @@ private fun NoteTreeItem(
             color = when {
                 isSelected -> MaterialTheme.colorScheme.primary
                 isCurrentlyOpen -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                else -> AmoledBorder.copy(alpha = 0.25f)
+                else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
             }
         ),
         modifier = Modifier
@@ -2540,7 +2540,7 @@ private fun TemplateTreeRow(
     Surface(
         shape = RoundedCornerShape(6.dp),
         color = Color.Transparent,
-        border = BorderStroke(0.5.dp, AmoledBorder.copy(alpha = 0.25f)),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
@@ -2684,8 +2684,8 @@ private fun TrashHeaderBanner(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp),
         shape = RoundedCornerShape(10.dp),
-        color = AmoledSurfaceVariant,
-        border = BorderStroke(1.dp, AmoledBorder)
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
         Row(
             modifier = Modifier

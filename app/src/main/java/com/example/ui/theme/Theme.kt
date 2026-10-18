@@ -94,6 +94,27 @@ fun KothaPadTheme(
         customSecondary
     }
 
+    // Dynamically synchronize global color references so custom theme colors apply everywhere
+    SaffronPrimary = customPrimary
+    SaffronDark = customPrimary
+    SaffronLight = customPrimary.copy(alpha = 0.5f)
+    SaffronContainer = customPrimary.copy(alpha = 0.25f)
+    OnSaffronContainer = customPrimary
+    EmberAccent = effectiveSecondary
+    EmberGold = effectiveSecondary
+    MicListeningSaffron = customPrimary
+    HighlightSaffron = customPrimary.copy(alpha = 0.25f)
+
+    if (isCustom) {
+        AmoledBackground = customBackground
+        AmoledSurface = customSurface
+        AmoledSurfaceVariant = customSurface.copy(alpha = 0.85f)
+        AmoledBorder = customPrimary.copy(alpha = 0.35f)
+        AmoledTextPrimary = customText
+        AmoledTextSecondary = customText.copy(alpha = 0.7f)
+        AmoledTextTertiary = customText.copy(alpha = 0.5f)
+    }
+
     val customColorScheme = if (bgLuminance < 0.5f) {
         darkColorScheme(
             primary = customPrimary,

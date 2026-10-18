@@ -227,7 +227,7 @@ fun EditorFloatingCluster(
     }
 
     val targetColor = when (micButtonColor.uppercase()) {
-        "SAFFRON" -> Color(0xFFFF7043)
+        "SAFFRON" -> MaterialTheme.colorScheme.primary
         "CORAL" -> Color(0xFFFF5252)
         "EMERALD" -> Color(0xFF2E7D32)
         "BLUE" -> Color(0xFF1976D2)

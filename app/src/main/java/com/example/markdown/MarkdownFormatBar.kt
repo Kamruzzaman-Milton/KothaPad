@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.AmoledBorder
 import com.example.ui.theme.HighlightGold
-import com.example.ui.theme.SaffronPrimary
+
 
 /**
  * Compact horizontally scrollable format bar for inserting Markdown syntax.

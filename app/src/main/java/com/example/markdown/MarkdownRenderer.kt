@@ -44,7 +44,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.HighlightGold
-import com.example.ui.theme.SaffronPrimary
+
 
 @Composable
 fun MarkdownRenderer(
@@ -270,7 +270,7 @@ fun MarkdownRenderer(
                                         Icon(
                                             imageVector = if (item.isChecked) Icons.Filled.CheckBox else Icons.Outlined.CheckBoxOutlineBlank,
                                             contentDescription = if (item.isChecked) "Completed. Tap to mark incomplete" else "Incomplete. Tap to mark complete",
-                                            tint = if (item.isChecked) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            tint = if (item.isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size((18 * fontScale).dp)
                                         )
                                     }
@@ -325,7 +325,7 @@ fun MarkdownRenderer(
                                         text = if (item.isOrdered) "${item.bullet} " else "• ",
                                         style = effectiveBaseStyle.copy(
                                             fontWeight = FontWeight.Bold,
-                                            color = if (item.isOrdered) SaffronPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (item.isOrdered) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                         ),
                                         modifier = Modifier.widthIn(min = (16 * fontScale).dp)
                                     )
