@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -122,11 +123,13 @@ fun DailyJournalManagerScreen(
     }
 
     val listState = rememberLazyListState()
+    var isInitialScrollDone by remember { mutableStateOf(false) }
 
     // Scroll to latest (current) month at the bottom on initial display
     LaunchedEffect(Unit) {
         if (monthsList.isNotEmpty()) {
             listState.scrollToItem(monthsList.size - 1)
+            isInitialScrollDone = true
         }
     }
 
@@ -134,7 +137,7 @@ fun DailyJournalManagerScreen(
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex }
             .collect { firstIndex ->
-                if (firstIndex == 0 && pastMonthsCount < 120) {
+                if (isInitialScrollDone && firstIndex == 0 && pastMonthsCount < 120 && listState.canScrollBackward) {
                     val prevCount = pastMonthsCount
                     pastMonthsCount += 12
                     // Smoothly preserve scroll offset

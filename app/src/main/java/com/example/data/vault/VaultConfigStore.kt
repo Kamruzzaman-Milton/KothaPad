@@ -175,35 +175,29 @@ class VaultConfigStore(
     suspend fun getOrCreateTrashDir(vaultRoot: DocumentFile): DocumentFile? = mutex.withLock {
         withContext(Dispatchers.IO) {
             val configDir = resolveConfigDirInternal(vaultRoot) ?: return@withContext null
-            val treeUri = fastLister.getTreeUriFromDoc(vaultRoot)
+            val treeUri = fastLister.getTreeUriFromDoc(vaultRoot) ?: vaultRoot.uri
             val children = fastLister.listChildrenFast(configDir, treeUri)
             val existing = children.firstOrNull { it.isDirectory && it.displayName.equals(TRASH_DIR_NAME, ignoreCase = true) }
             if (existing != null) {
-                val doc = if (treeUri != null) existing.toDirectoryDocumentFile(context, treeUri) else existing.toDocumentFile(context)
+                val doc = configDir.findFile(existing.displayName)
                 if (doc != null && doc.exists()) return@withContext doc
             }
             val created = configDir.createDirectory(TRASH_DIR_NAME)
             fastLister.invalidate(fastLister.getDocumentIdFromDoc(configDir))
-            val relisted = fastLister.listChildrenFast(configDir, treeUri)
-            val verified = relisted.firstOrNull { it.isDirectory && it.displayName.equals(TRASH_DIR_NAME, ignoreCase = true) }
-            if (verified != null && treeUri != null) {
-                verified.toDirectoryDocumentFile(context, treeUri) ?: created
-            } else {
-                created
-            }
+            created
         }
     }
 
     suspend fun getTrashDir(vaultRoot: DocumentFile): DocumentFile? = mutex.withLock {
         withContext(Dispatchers.IO) {
             val configDir = resolveConfigDirInternal(vaultRoot) ?: return@withContext null
-            val treeUri = fastLister.getTreeUriFromDoc(vaultRoot)
+            val treeUri = fastLister.getTreeUriFromDoc(vaultRoot) ?: vaultRoot.uri
             val children = fastLister.listChildrenFast(configDir, treeUri)
             val existing = children.firstOrNull { it.isDirectory && it.displayName.equals(TRASH_DIR_NAME, ignoreCase = true) }
-            if (existing != null && treeUri != null) {
-                existing.toDirectoryDocumentFile(context, treeUri) ?: existing.toDocumentFile(context)
+            if (existing != null) {
+                configDir.findFile(existing.displayName)
             } else {
-                existing?.toDocumentFile(context)
+                null
             }
         }
     }
@@ -211,7 +205,7 @@ class VaultConfigStore(
     private fun resolveConfigDirInternal(vaultRoot: DocumentFile): DocumentFile? {
         if (!vaultRoot.exists() || !vaultRoot.canWrite()) return null
 
-        val treeUri = fastLister.getTreeUriFromDoc(vaultRoot)
+        val treeUri = fastLister.getTreeUriFromDoc(vaultRoot) ?: vaultRoot.uri
         val children = fastLister.listChildrenFast(vaultRoot, treeUri)
         // Find existing folder named .KOTHAPAD (case-insensitive)
         val exactMatch = children.firstOrNull { it.isDirectory && it.displayName == CONFIG_DIR_NAME }
@@ -219,11 +213,7 @@ class VaultConfigStore(
         val existing = exactMatch ?: caseMatch
 
         if (existing != null) {
-            val existingDoc = if (treeUri != null) {
-                existing.toDirectoryDocumentFile(context, treeUri)
-            } else {
-                existing.toDocumentFile(context)
-            }
+            val existingDoc = vaultRoot.findFile(existing.displayName)
             if (existingDoc != null && existingDoc.exists()) {
                 return existingDoc
             }
@@ -232,13 +222,7 @@ class VaultConfigStore(
         // None exists: create once with canonical name
         val created = vaultRoot.createDirectory(CONFIG_DIR_NAME)
         fastLister.invalidate(fastLister.getDocumentIdFromDoc(vaultRoot))
-        val relisted = fastLister.listChildrenFast(vaultRoot, treeUri)
-        val verified = relisted.firstOrNull { it.isDirectory && isConfigDir(it.displayName) }
-        return if (verified != null && treeUri != null) {
-            verified.toDirectoryDocumentFile(context, treeUri) ?: created
-        } else {
-            created
-        }
+        return created
     }
 
     /**
@@ -254,10 +238,11 @@ class VaultConfigStore(
     private fun getOrCreateFileInternal(configDir: DocumentFile, name: String): DocumentFile? {
         require(ALLOWED_FILES.contains(name)) { "Unauthorized config file: $name" }
 
-        val children = fastLister.listChildrenFast(configDir)
+        val treeUri = fastLister.getTreeUriFromDoc(configDir)
+        val children = fastLister.listChildrenFast(configDir, treeUri)
         val existing = children.firstOrNull { it.isFile && it.displayName.equals(name, ignoreCase = true) }
         if (existing != null) {
-            val doc = existing.toDocumentFile(context)
+            val doc = configDir.findFile(existing.displayName) ?: existing.toDocumentFile(context)
             if (doc != null && doc.exists()) {
                 return doc
             }
@@ -309,7 +294,8 @@ class VaultConfigStore(
             jsonCache[fileName]?.let { return@withContext JSONObject(it.toString()) }
 
             val configDir = resolveConfigDirInternal(vaultRoot) ?: return@withContext null
-            val children = fastLister.listChildrenFast(configDir)
+            val treeUri = fastLister.getTreeUriFromDoc(vaultRoot) ?: vaultRoot.uri
+            val children = fastLister.listChildrenFast(configDir, treeUri)
             val entry = children.firstOrNull { it.isFile && it.displayName.equals(fileName, ignoreCase = true) }
             val file = entry?.toDocumentFile(context)
 
@@ -466,7 +452,8 @@ class VaultConfigStore(
 
     private fun readConfigFileInternal(vaultRoot: DocumentFile, fileName: String): JSONObject? {
         val configDir = resolveConfigDirInternal(vaultRoot) ?: return null
-        val entry = fastLister.listChildrenFast(configDir).firstOrNull { it.isFile && it.displayName.equals(fileName, ignoreCase = true) } ?: return null
+        val treeUri = fastLister.getTreeUriFromDoc(vaultRoot) ?: vaultRoot.uri
+        val entry = fastLister.listChildrenFast(configDir, treeUri).firstOrNull { it.isFile && it.displayName.equals(fileName, ignoreCase = true) } ?: return null
         val file = entry.toDocumentFile(context) ?: return null
         val text = readFileText(file)
         if (text.isBlank()) return null
@@ -570,15 +557,16 @@ class VaultConfigStore(
 
     private fun cleanupAndMigrateDuplicatesInternal(vaultRoot: DocumentFile, canonicalDir: DocumentFile) {
         try {
-            val treeUri = fastLister.getTreeUriFromDoc(vaultRoot)
+            val treeUri = fastLister.getTreeUriFromDoc(vaultRoot) ?: vaultRoot.uri
             val rootEntries = fastLister.listChildrenFast(vaultRoot, treeUri)
+            val canonicalDocId = fastLister.getDocumentId(treeUri, canonicalDir)
 
             // 1. Identify stray duplicate directories (e.g. .KOTHAPAD (1), .kothapad (2), stray .kothapad)
             val duplicateDirEntries = rootEntries.filter {
-                it.isDirectory && it.uri != canonicalDir.uri && (
-                        it.displayName.startsWith(".KOTHAPAD", ignoreCase = true) ||
-                        it.displayName.startsWith(".kothapad", ignoreCase = true)
-                )
+                it.isDirectory &&
+                it.documentId != canonicalDocId &&
+                !it.displayName.equals(CONFIG_DIR_NAME, ignoreCase = false) &&
+                it.displayName.startsWith(".kothapad", ignoreCase = true)
             }
 
             // 2. Identify stray config files sitting directly inside the vault root

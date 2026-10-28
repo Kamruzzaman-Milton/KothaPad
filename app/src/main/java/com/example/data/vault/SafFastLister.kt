@@ -19,20 +19,11 @@ data class FastEntry(
     val isFile: Boolean get() = !isDirectory
 
     fun toDocumentFile(context: Context, treeUri: Uri? = null): DocumentFile? {
-        return if (isDirectory && treeUri != null) {
-            toDirectoryDocumentFile(context, treeUri)
-        } else {
-            DocumentFile.fromSingleUri(context, uri)
-        }
+        return DocumentFile.fromSingleUri(context, uri)
     }
 
-    fun toDirectoryDocumentFile(context: Context, treeUri: Uri): DocumentFile? {
-        return try {
-            val subTreeUri = DocumentsContract.buildTreeDocumentUri(treeUri.authority, documentId)
-            DocumentFile.fromTreeUri(context, subTreeUri) ?: DocumentFile.fromSingleUri(context, uri)
-        } catch (_: Exception) {
-            DocumentFile.fromSingleUri(context, uri)
-        }
+    fun toDirectoryDocumentFile(context: Context, treeUri: Uri? = null): DocumentFile? {
+        return DocumentFile.fromSingleUri(context, uri)
     }
 }
 
