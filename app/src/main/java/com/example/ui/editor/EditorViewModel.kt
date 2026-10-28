@@ -564,19 +564,25 @@ class EditorViewModel(
             autoSaveJob?.cancel()
         }
         isCurrentNoteAutoCreated = false
-        vaultNoteRepository.currentlyOpenNoteId = note.id
-        _currentNote.value = note
+        val cachedBody = vaultNoteRepository.getCachedBody(note.id)
+        val noteToLoad = if (note.content.isEmpty() && !cachedBody.isNullOrEmpty()) {
+            note.copy(content = cachedBody)
+        } else {
+            note
+        }
+        vaultNoteRepository.currentlyOpenNoteId = noteToLoad.id
+        _currentNote.value = noteToLoad
         _textFieldValue.value = TextFieldValue(
-            text = note.content,
-            selection = TextRange(note.content.length)
+            text = noteToLoad.content,
+            selection = TextRange(noteToLoad.content.length)
         )
         undoStack.clear()
         redoStack.clear()
         updateUndoRedoStates()
 
-        if (note.content.isEmpty()) {
+        if (noteToLoad.content.isEmpty()) {
             viewModelScope.launch(Dispatchers.IO) {
-                val full = vaultNoteRepository.ensureNoteContentLoaded(note)
+                val full = vaultNoteRepository.ensureNoteContentLoaded(noteToLoad)
                 if (full.content.isNotEmpty() && _currentNote.value?.id == full.id) {
                     withContext(Dispatchers.Main) {
                         if (_textFieldValue.value.text.isEmpty()) {

@@ -137,8 +137,23 @@ object NoteMetricsConfig {
         val isDetailed = style.equals("DETAILED", ignoreCase = true)
         val orderedKeys = parseOrder(orderStr)
 
-        val words = fastWordCount(note.content)
-        val chars = note.content.length
+        val hasStoredStats = note.wordCount > 0 || note.charCount > 0
+        val isStaleWithoutStats = note.statsStale && !hasStoredStats && note.content.isEmpty()
+
+        val words = if (note.wordCount > 0) {
+            note.wordCount
+        } else if (note.content.isNotEmpty()) {
+            fastWordCount(note.content)
+        } else {
+            0
+        }
+        val chars = if (note.charCount > 0) {
+            note.charCount
+        } else if (note.content.isNotEmpty()) {
+            note.content.length
+        } else {
+            0
+        }
         val readMins = ceil(words / 200.0).toInt().coerceAtLeast(1)
         val sessionStr = NoteTimeFormatter.formatDuration(note.sessionDurationSec)
         val modDate = formatDateTime(note.updatedAt)
@@ -148,10 +163,28 @@ object NoteMetricsConfig {
         for (key in orderedKeys) {
             if (hiddenItems.contains(key)) continue
             val part = when (key) {
-                METRIC_WORDS -> if (isDetailed) "$words words" else "${words}w"
+                METRIC_WORDS -> {
+                    if (isStaleWithoutStats) {
+                        if (isDetailed) "— words" else "—w"
+                    } else {
+                        if (isDetailed) "$words words" else "${words}w"
+                    }
+                }
                 METRIC_SESSION_TIME -> "$sessionStr spent"
-                METRIC_CHARS -> if (isDetailed) "$chars characters" else "${chars}c"
-                METRIC_READ_TIME -> if (isDetailed) "~$readMins min read" else "~${readMins}m read"
+                METRIC_CHARS -> {
+                    if (isStaleWithoutStats) {
+                        if (isDetailed) "— characters" else "—c"
+                    } else {
+                        if (isDetailed) "$chars characters" else "${chars}c"
+                    }
+                }
+                METRIC_READ_TIME -> {
+                    if (isStaleWithoutStats) {
+                        if (isDetailed) "~— min read" else "~—m read"
+                    } else {
+                        if (isDetailed) "~$readMins min read" else "~${readMins}m read"
+                    }
+                }
                 METRIC_MODIFIED_TIME -> if (isDetailed) "Modified: $modDate" else "Mod: $modDate"
                 METRIC_CREATED_TIME -> if (isDetailed) "Created: $createdDate" else "Created: $createdDate"
                 else -> null

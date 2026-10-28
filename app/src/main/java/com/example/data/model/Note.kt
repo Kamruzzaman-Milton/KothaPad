@@ -22,5 +22,8 @@ data class Note(
     val isDeleted: Boolean = false,
     val deletedAt: Long? = null,
     val sessionDurationSec: Long = 0L,
-    val sessionCount: Int = 0
+    val sessionCount: Int = 0,
+    val wordCount: Int = 0,
+    val charCount: Int = 0,
+    val statsStale: Boolean = false
 )

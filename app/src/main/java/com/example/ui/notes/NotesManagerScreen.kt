@@ -381,7 +381,7 @@ fun NotesManagerScreen(
             NoteSortOption.NAME_ASC -> filteredNotes.sortedWith(compareByDescending<Note> { it.isPinned }.thenBy { getDisplayTitle(it).lowercase() })
             NoteSortOption.NAME_DESC -> filteredNotes.sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending { getDisplayTitle(it).lowercase() })
             NoteSortOption.WORD_COUNT_DESC -> filteredNotes.sortedWith(compareByDescending<Note> { it.isPinned }.thenByDescending {
-                com.example.ui.notes.NoteMetricsConfig.fastWordCount(it.content)
+                if (it.wordCount > 0) it.wordCount else com.example.ui.notes.NoteMetricsConfig.fastWordCount(it.content)
             })
         }
     }
