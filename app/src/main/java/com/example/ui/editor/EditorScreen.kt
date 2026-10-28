@@ -83,6 +83,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -219,6 +220,17 @@ fun EditorScreen(
     val noteSortOption by viewModel.noteSortOption.collectAsState()
     val markdownSettings by viewModel.markdownSettings.collectAsState()
     val floatingLayoutSettings by viewModel.floatingLayoutSettings.collectAsState()
+
+    val currentDailyJournalDate by viewModel.currentDailyJournalDate.collectAsState()
+    val noteNavContext by viewModel.noteNavigationContext.collectAsState()
+    val isDailyJournalMode = noteNavContext == com.example.ui.editor.EditorViewModel.NoteNavigationContext.DAILY_JOURNAL && currentDailyJournalDate != null
+
+    val hasNextJournalEntry by remember(isDailyJournalMode, currentDailyJournalDate, currentNote?.id, allNotes) {
+        derivedStateOf { if (isDailyJournalMode) viewModel.hasNextJournalEntry() else false }
+    }
+    val hasPrevJournalEntry by remember(isDailyJournalMode, currentDailyJournalDate, currentNote?.id, allNotes) {
+        derivedStateOf { if (isDailyJournalMode) viewModel.hasPreviousJournalEntry() else false }
+    }
 
     val isVaultScanning by viewModel.isVaultScanning.collectAsState()
     val vaultScanProgress by viewModel.vaultScanProgress.collectAsState()
@@ -410,17 +422,25 @@ fun EditorScreen(
                 .fillMaxSize()
                 .horizontalSwipeNavigation(
                     enabled = isEditorActive && !isAnyDialogOpen,
-                    allowSwipeLeft = true,   // right-to-left: opens Main Settings menu
-                    allowSwipeRight = true,  // left-to-right: opens Note Manager list
+                    allowSwipeLeft = if (isDailyJournalMode) hasNextJournalEntry else true,
+                    allowSwipeRight = if (isDailyJournalMode) hasPrevJournalEntry else true,
                     onSwipeLeft = {
                         keyboardController?.hide()
                         focusManager.clearFocus(force = true)
-                        viewModel.navigateTo("SETTINGS")
+                        if (isDailyJournalMode) {
+                            viewModel.navigateToNextJournalEntry()
+                        } else {
+                            viewModel.navigateTo("SETTINGS")
+                        }
                     },
                     onSwipeRight = {
                         keyboardController?.hide()
                         focusManager.clearFocus(force = true)
-                        viewModel.isNoteManagerOpen.value = true
+                        if (isDailyJournalMode) {
+                            viewModel.navigateToPreviousJournalEntry()
+                        } else {
+                            viewModel.isNoteManagerOpen.value = true
+                        }
                     },
                     dragResistance = 0.35f
                 )
@@ -1119,6 +1139,7 @@ fun EditorScreen(
                 onDuplicateNote = { viewModel.duplicateNote(it) },
                 onRenameNote = { note, title -> viewModel.renameNote(note, title) },
                 onNoteSelect = { note ->
+                    viewModel.clearDailyJournalNavigation()
                     viewModel.loadNote(note)
                     viewModel.isNoteManagerOpen.value = false
                 },
