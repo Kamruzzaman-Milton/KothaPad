@@ -78,7 +78,7 @@ class VaultConfigStore(
         fun isConfigFileOrDuplicate(fileName: String): Boolean {
             val lower = fileName.lowercase()
             return (lower.startsWith("settings") || lower.startsWith("notes-meta") || lower.startsWith("workspace")) &&
-                    (lower.endsWith(".json") || lower.endsWith(".bak"))
+                    (lower.endsWith(".json") || lower.endsWith(".bak") || lower.contains(".bak") || lower.contains(".tmp"))
         }
 
         fun deepMerge(target: JSONObject, source: JSONObject): JSONObject {
@@ -334,22 +334,25 @@ class VaultConfigStore(
                 }
             } catch (_: Exception) {}
 
-            // 2. Try to recover from .bak backup if present
+            // 2. Try to recover from internal or vault backup if present
             val bakName = "$fileName.bak"
-            val bakEntry = children.firstOrNull { it.isFile && it.displayName.equals(bakName, ignoreCase = true) }
-            val bakFile = bakEntry?.toDocumentFile(context)
-            if (bakFile != null && bakFile.exists()) {
-                val bakText = readFileText(bakFile)
-                if (bakText.isNotBlank()) {
-                    try {
-                        val recoveredJson = JSONObject(bakText)
-                        jsonCache[fileName] = JSONObject(recoveredJson.toString())
-                        lastWrittenContent[fileName] = bakText
-                        safeModeFiles[fileName] = false
-                        _safeModeWarning.value = "Warning: $fileName was corrupted. Successfully recovered from $bakName. Corrupt copy preserved as $corruptName."
-                        return@withContext recoveredJson
-                    } catch (_: Exception) {}
-                }
+            val internalBakFile = java.io.File(context.filesDir.resolve("kothapad_vault_backups"), bakName)
+            val bakText = if (internalBakFile.exists()) {
+                try { internalBakFile.readText(Charsets.UTF_8) } catch (_: Exception) { "" }
+            } else {
+                val bakEntry = children.firstOrNull { it.isFile && (it.displayName.equals(bakName, ignoreCase = true) || it.displayName.startsWith("$fileName.bak", ignoreCase = true)) }
+                val bakFile = bakEntry?.toDocumentFile(context)
+                if (bakFile != null && bakFile.exists()) readFileText(bakFile) else ""
+            }
+            if (bakText.isNotBlank()) {
+                try {
+                    val recoveredJson = JSONObject(bakText)
+                    jsonCache[fileName] = JSONObject(recoveredJson.toString())
+                    lastWrittenContent[fileName] = bakText
+                    safeModeFiles[fileName] = false
+                    _safeModeWarning.value = "Warning: $fileName was corrupted. Successfully recovered from backup. Corrupt copy preserved as $corruptName."
+                    return@withContext recoveredJson
+                } catch (_: Exception) {}
             }
 
             _safeModeWarning.value = "Warning: $fileName was corrupted and could not be recovered. Safe mode enabled to prevent overwriting."
@@ -484,49 +487,15 @@ class VaultConfigStore(
 
             val configDir = resolveConfigDirInternal(vaultRoot) ?: return false
 
-            // SAFE ATOMIC WRITE:
-            // 1. Write to temporary file in .KOTHAPAD
-            val tempName = "$fileName.tmp"
-            val tempEntry = fastLister.listChildrenFast(configDir).firstOrNull { it.displayName.equals(tempName, ignoreCase = true) }
-            val tempFile = tempEntry?.toDocumentFile(context) ?: configDir.createFile("application/json", tempName)
-            if (tempFile != null && tempFile.exists()) {
-                context.contentResolver.openOutputStream(tempFile.uri, "wt")?.use { stream ->
-                    stream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                        writer.write(formatted)
-                        writer.flush()
-                    }
-                }
-                // Verify temp file parses correctly
-                val verifyText = readFileText(tempFile)
-                if (verifyText.isBlank()) {
-                    tempFile.delete()
-                    return false
-                }
-                JSONObject(verifyText) // Will throw if invalid
-                tempFile.delete()
-                fastLister.invalidate(fastLister.getDocumentIdFromDoc(configDir))
-            }
-
-            val file = getOrCreateFileInternal(configDir, fileName) ?: return false
-
-            // 2. Before overwriting, keep a backup of the last good version if file already has content
+            // Keep an internal disaster backup copy in app's private storage (never polluting the user's vault folder)
             if (!lastSaved.isNullOrBlank()) {
                 try {
-                    val bakName = "$fileName.bak"
-                    val bakEntry = fastLister.listChildrenFast(configDir).firstOrNull { it.displayName.equals(bakName, ignoreCase = true) }
-                    val bakFile = bakEntry?.toDocumentFile(context) ?: configDir.createFile("application/json", bakName)
-                    if (bakFile != null) {
-                        context.contentResolver.openOutputStream(bakFile.uri, "wt")?.use { stream ->
-                            stream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                                writer.write(lastSaved)
-                                writer.flush()
-                            }
-                        }
-                    }
+                    val internalBakDir = context.filesDir.resolve("kothapad_vault_backups").apply { mkdirs() }
+                    java.io.File(internalBakDir, "$fileName.bak").writeText(lastSaved, Charsets.UTF_8)
                 } catch (_: Exception) {}
             }
 
-            // 3. Write verified content to target file
+            val file = getOrCreateFileInternal(configDir, fileName) ?: return false
             context.contentResolver.openOutputStream(file.uri, "wt")?.use { stream ->
                 stream.bufferedWriter(Charsets.UTF_8).use { writer ->
                     writer.write(formatted)
@@ -623,7 +592,9 @@ class VaultConfigStore(
                     }
                 }
 
-                if (candidateEntries.size > 1) {
+                val hasNonCanonicalCandidate = candidateEntries.any { !it.displayName.equals(targetFileName, ignoreCase = true) }
+
+                if (candidateEntries.isNotEmpty() && (candidateEntries.size > 1 || hasNonCanonicalCandidate)) {
                     // Sort candidate files from oldest to newest by lastModified (NO IPC!)
                     val sorted = candidateEntries.sortedBy { it.lastModified }
                     val newestCanonical = getOrCreateFileInternal(canonicalDir, targetFileName) ?: continue
@@ -649,6 +620,26 @@ class VaultConfigStore(
                         } catch (_: Exception) {}
                     }
                 }
+            }
+
+            // Explicit cleanup pass: delete any remaining backup/duplicate files in canonical .KOTHAPAD
+            for (dupEntry in duplicateCanonicalEntries) {
+                try {
+                    val doc = dupEntry.toDocumentFile(context)
+                    if (doc != null && doc.exists()) {
+                        doc.delete()
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // Also clean up any stray root files
+            for (strayEntry in strayRootEntries) {
+                try {
+                    val doc = strayEntry.toDocumentFile(context)
+                    if (doc != null && doc.exists()) {
+                        doc.delete()
+                    }
+                } catch (_: Exception) {}
             }
 
             // Clean up any empty duplicate directories
