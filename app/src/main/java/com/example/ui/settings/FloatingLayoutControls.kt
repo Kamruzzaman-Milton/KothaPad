@@ -1,6 +1,7 @@
 package com.example.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -356,72 +357,81 @@ fun FormatBarButtonsReorderControl(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Checkbox(
-                            checked = isChecked,
-                            onCheckedChange = { checked ->
-                                if (enabled) {
-                                    onToggleCheck(buttonId, checked)
-                                }
-                            },
-                            enabled = enabled,
-                            colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary),
-                            modifier = Modifier.testTag("format_bar_check_${btn.id}")
-                        )
-
-                        Box(
+                        // Tappable box area (Checkbox + Icon + Label) to toggle item visibility
+                        Row(
                             modifier = Modifier
-                                .size(32.dp)
+                                .weight(1f)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    if (isChecked) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-                                ),
-                            contentAlignment = Alignment.Center
+                                .clickable {
+                                    onToggleCheck(buttonId, !isChecked)
+                                }
+                                .padding(vertical = 4.dp, horizontal = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            btn.renderIcon()
-                        }
+                            Checkbox(
+                                checked = isChecked,
+                                onCheckedChange = { checked ->
+                                    onToggleCheck(buttonId, checked)
+                                },
+                                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.testTag("format_bar_check_${btn.id}")
+                            )
 
-                        Spacer(modifier = Modifier.width(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (isChecked) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                btn.renderIcon()
+                            }
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = btn.label,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (enabled && isChecked) MaterialTheme.colorScheme.onSurface
-                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                val posLabel = when (index) {
-                                    0 -> "1st"
-                                    1 -> "2nd"
-                                    2 -> "3rd"
-                                    else -> "${index + 1}th"
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = btn.label,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isChecked) MaterialTheme.colorScheme.onSurface
+                                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    val posLabel = when (index) {
+                                        0 -> "1st"
+                                        1 -> "2nd"
+                                        2 -> "3rd"
+                                        else -> "${index + 1}th"
+                                    }
+                                    Text(
+                                        text = "($posLabel)",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 11.sp,
+                                            color = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                        )
+                                    )
                                 }
                                 Text(
-                                    text = "($posLabel)",
-                                    style = MaterialTheme.typography.labelSmall.copy(
+                                    text = btn.contentDescription,
+                                    style = MaterialTheme.typography.bodySmall.copy(
                                         fontSize = 11.sp,
-                                        color = if (enabled && isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                        color = if (isChecked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                                     )
                                 )
                             }
-                            Text(
-                                text = btn.contentDescription,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 11.sp,
-                                    color = if (enabled && isChecked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                                )
-                            )
                         }
 
                         IconButton(
                             onClick = {
-                                if (enabled && index > 0) {
+                                if (index > 0) {
                                     val list = currentOrder.toMutableList()
                                     val item = list.removeAt(index)
                                     list.add(index - 1, item)
@@ -431,7 +441,7 @@ fun FormatBarButtonsReorderControl(
                                     onReorder(list)
                                 }
                             },
-                            enabled = enabled && index > 0,
+                            enabled = index > 0,
                             modifier = Modifier
                                 .size(32.dp)
                                 .testTag("move_up_${buttonId}")
@@ -439,7 +449,7 @@ fun FormatBarButtonsReorderControl(
                             Icon(
                                 imageVector = Icons.Default.ArrowUpward,
                                 contentDescription = "Move Up",
-                                tint = if (enabled && index > 0) MaterialTheme.colorScheme.primary
+                                tint = if (index > 0) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
                                 modifier = Modifier.size(17.dp)
                             )
@@ -447,7 +457,7 @@ fun FormatBarButtonsReorderControl(
 
                         IconButton(
                             onClick = {
-                                if (enabled && index < currentOrder.size - 1) {
+                                if (index < currentOrder.size - 1) {
                                     val list = currentOrder.toMutableList()
                                     val item = list.removeAt(index)
                                     list.add(index + 1, item)
@@ -457,7 +467,7 @@ fun FormatBarButtonsReorderControl(
                                     onReorder(list)
                                 }
                             },
-                            enabled = enabled && index < currentOrder.size - 1,
+                            enabled = index < currentOrder.size - 1,
                             modifier = Modifier
                                 .size(32.dp)
                                 .testTag("move_down_${buttonId}")
@@ -465,7 +475,7 @@ fun FormatBarButtonsReorderControl(
                             Icon(
                                 imageVector = Icons.Default.ArrowDownward,
                                 contentDescription = "Move Down",
-                                tint = if (enabled && index < currentOrder.size - 1) MaterialTheme.colorScheme.primary
+                                tint = if (index < currentOrder.size - 1) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
                                 modifier = Modifier.size(17.dp)
                             )

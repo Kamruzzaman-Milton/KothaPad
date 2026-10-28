@@ -431,7 +431,7 @@ fun SettingsScreen(
         micButtonSize, micButtonShape, micButtonColor, micButtonPosition, micButtonOffsetY,
         statusChipStyle, uiDensity, cornerRadiusDp, dictationAnimationStyle, hapticsLevel,
         pipelineSpacing, pipelineAutoCap, pipelineCommands, needsDndPermission,
-        floatingLayoutSettings, vaultState
+        floatingLayoutSettings, markdownSettings, vaultState
     ) {
         listOf(
             // Vault Section
@@ -793,20 +793,24 @@ fun SettingsScreen(
                             FormatBarButtonsReorderControl(
                                 formatBarOrder = markdownSettings.formatBarOrder,
                                 formatBarButtons = markdownSettings.formatBarButtons,
-                                enabled = markdownSettings.formatBarEnabled,
+                                enabled = true,
                                 onReorder = { newOrder ->
-                                    val newButtons = newOrder.filter { markdownSettings.formatBarButtons.contains(it) }
-                                    onUpdateMarkdownSettings { it.copy(formatBarOrder = newOrder, formatBarButtons = newButtons) }
+                                    onUpdateMarkdownSettings { current ->
+                                        val newButtons = newOrder.filter { current.formatBarButtons.contains(it) }
+                                        current.copy(formatBarOrder = newOrder, formatBarButtons = newButtons)
+                                    }
                                 },
                                 onToggleCheck = { buttonId, isChecked ->
-                                    val newButtons = if (isChecked) {
-                                        markdownSettings.formatBarOrder.filter {
-                                            it == buttonId || markdownSettings.formatBarButtons.contains(it)
+                                    onUpdateMarkdownSettings { current ->
+                                        val newButtons = if (isChecked) {
+                                            current.formatBarOrder.filter {
+                                                it == buttonId || current.formatBarButtons.contains(it)
+                                            }
+                                        } else {
+                                            current.formatBarButtons.filter { it != buttonId }
                                         }
-                                    } else {
-                                        markdownSettings.formatBarButtons.filter { it != buttonId }
+                                        current.copy(formatBarButtons = newButtons)
                                     }
-                                    onUpdateMarkdownSettings { it.copy(formatBarButtons = newButtons) }
                                 },
                                 onSelectAll = {
                                     onUpdateMarkdownSettings { it.copy(formatBarButtons = it.formatBarOrder) }
