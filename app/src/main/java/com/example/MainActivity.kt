@@ -151,9 +151,22 @@ class MainActivity : ComponentActivity() {
                         viewModel.navigateTo("SETTINGS")
                     }
 
+                    currentScreen == "DAILY_JOURNAL_DAY" -> {
+                        viewModel.onBackFromDailyJournalDay()
+                    }
+
+                    currentScreen == "DAILY_JOURNAL_MANAGER" -> {
+                        viewModel.onBackFromDailyJournalManager()
+                    }
+
                     // Priority 4: Settings screen or any sub-screen open -> return to editor (preserves reading/editing mode)
                     currentScreen != "EDITOR" -> {
                         viewModel.navigateTo("EDITOR")
+                    }
+
+                    // Note editor open from Day Notes -> return to Day Notes screen
+                    viewModel.currentDailyJournalDate.value != null -> {
+                        viewModel.returnToDailyJournalDay()
                     }
 
                     // Priority 5: Notes list drawer / manager open -> close drawer
@@ -508,6 +521,77 @@ class MainActivity : ComponentActivity() {
                                     onUpdateSettings = { viewModel.updateMarkdownSettings(it) },
                                     onResetToDefaults = { viewModel.resetMarkdownSettingsToDefault() },
                                     onBackClick = { viewModel.navigateTo("SETTINGS") }
+                                )
+                            }
+
+                            AnimatedVisibility(
+                                visible = currentScreen == "DAILY_JOURNAL_MANAGER",
+                                enter = slideInHorizontally(tween(280)) { it } + fadeIn(tween(250)),
+                                exit = slideOutHorizontally(tween(250)) { it } + fadeOut(tween(200))
+                            ) {
+                                val allNotes by viewModel.allNotes.collectAsState()
+                                com.example.ui.notes.DailyJournalManagerScreen(
+                                    allNotes = allNotes,
+                                    onDateClick = { date ->
+                                        viewModel.openDailyJournalDay(date.toString())
+                                    },
+                                    onBackClick = {
+                                        viewModel.onBackFromDailyJournalManager()
+                                    }
+                                )
+                            }
+
+                            AnimatedVisibility(
+                                visible = currentScreen == "DAILY_JOURNAL_DAY",
+                                enter = slideInHorizontally(tween(280)) { it } + fadeIn(tween(250)),
+                                exit = slideOutHorizontally(tween(250)) { it } + fadeOut(tween(200))
+                            ) {
+                                val allNotes by viewModel.allNotes.collectAsState()
+                                val currentNote by viewModel.currentNote.collectAsState()
+                                val currentDailyJournalDate by viewModel.currentDailyJournalDate.collectAsState()
+                                val showNoteMetrics by viewModel.showNoteMetricsInList.collectAsState()
+                                val noteMetricsStyle by viewModel.noteMetricsStyle.collectAsState()
+                                val noteMetricsOrder by viewModel.noteMetricsOrder.collectAsState()
+                                val noteMetricsHiddenItems by viewModel.noteMetricsHiddenItems.collectAsState()
+
+                                val parsedDate = remember(currentDailyJournalDate) {
+                                    try {
+                                        if (currentDailyJournalDate != null) java.time.LocalDate.parse(currentDailyJournalDate)
+                                        else java.time.LocalDate.now()
+                                    } catch (_: Exception) {
+                                        java.time.LocalDate.now()
+                                    }
+                                }
+
+                                com.example.ui.notes.DailyJournalDayScreen(
+                                    selectedDate = parsedDate,
+                                    allNotes = allNotes,
+                                    currentNoteId = currentNote?.id ?: 0L,
+                                    showNoteMetrics = showNoteMetrics,
+                                    noteMetricsStyle = noteMetricsStyle,
+                                    noteMetricsOrder = noteMetricsOrder,
+                                    noteMetricsHiddenItems = noteMetricsHiddenItems,
+                                    onNoteClick = { note ->
+                                        viewModel.openDailyJournalNote(note, parsedDate.toString())
+                                    },
+                                    onCreateNoteForDate = { date ->
+                                        viewModel.createNewDailyJournalNote(date)
+                                    },
+                                    onRenameNote = { note, newTitle ->
+                                        viewModel.renameNote(note, newTitle)
+                                    },
+                                    onDeleteNote = { note ->
+                                        viewModel.trashNote(note)
+                                    },
+                                    onPinToggle = { note ->
+                                        viewModel.togglePinCurrentNote(note)
+                                    },
+                                    onDuplicateNote = { note ->
+                                        viewModel.duplicateNote(note)
+                                    },
+                                    onBackClick = {
+                                        viewModel.onBackFromDailyJournalDay()
+                                    }
                                 )
                             }
                         }

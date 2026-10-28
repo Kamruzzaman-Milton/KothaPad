@@ -2,6 +2,9 @@ package com.example.ui.editor
 
 import android.app.Application
 import android.net.Uri
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
@@ -297,6 +300,9 @@ class EditorViewModel(
 
     private val _currentScreen = MutableStateFlow("EDITOR") // "EDITOR" or "SETTINGS"
     val currentScreen: StateFlow<String> = _currentScreen.asStateFlow()
+
+    private val _currentDailyJournalDate = MutableStateFlow<String?>(null)
+    val currentDailyJournalDate: StateFlow<String?> = _currentDailyJournalDate.asStateFlow()
 
     // Dialog & Sheet states
     val showStyleSheet = MutableStateFlow(false)
@@ -2067,6 +2073,78 @@ class EditorViewModel(
 
     fun navigateTo(screen: String) {
         _currentScreen.value = screen
+    }
+
+    fun openDailyJournalManager() {
+        _currentScreen.value = "DAILY_JOURNAL_MANAGER"
+    }
+
+    fun openDailyJournalDay(dateStr: String) {
+        _currentDailyJournalDate.value = dateStr
+        _currentScreen.value = "DAILY_JOURNAL_DAY"
+    }
+
+    fun onBackFromDailyJournalManager() {
+        _currentScreen.value = "EDITOR"
+        isNoteManagerOpen.value = true
+    }
+
+    fun onBackFromDailyJournalDay() {
+        _currentScreen.value = "DAILY_JOURNAL_MANAGER"
+        _currentDailyJournalDate.value = null
+    }
+
+    fun returnToDailyJournalDay() {
+        flushAutoSave()
+        val date = _currentDailyJournalDate.value
+        if (date != null) {
+            _currentScreen.value = "DAILY_JOURNAL_DAY"
+        } else {
+            _currentScreen.value = "DAILY_JOURNAL_MANAGER"
+        }
+    }
+
+    fun clearDailyJournalNavigation() {
+        _currentDailyJournalDate.value = null
+    }
+
+    fun openDailyJournalNote(note: Note, dateStr: String) {
+        flushAutoSave()
+        loadNote(note)
+        setReadingMode(true)
+        _currentDailyJournalDate.value = dateStr
+        isNoteManagerOpen.value = false
+        navigateTo("EDITOR")
+    }
+
+    fun createNewDailyJournalNote(date: LocalDate) {
+        val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val timestamp = date.atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        _isReadingMode.value = false
+        flushAutoSave()
+        viewModelScope.launch(Dispatchers.IO) {
+            val defaultLang = defaultLanguage.value
+            val newNote = Note(
+                title = dateStr,
+                content = "",
+                languageCode = defaultLang,
+                folder = "Daily Journals",
+                createdAt = timestamp,
+                updatedAt = timestamp
+            )
+            val id = noteRepository.insert(newNote)
+            val inserted = noteRepository.getNoteOnce(id)
+            withContext(Dispatchers.Main) {
+                if (inserted != null) {
+                    loadNote(inserted)
+                    isCurrentNoteAutoCreated = true
+                    _isReadingMode.value = false
+                    _currentDailyJournalDate.value = dateStr
+                    isNoteManagerOpen.value = false
+                    navigateTo("EDITOR")
+                }
+            }
+        }
     }
 
     fun updateMarkdownSettings(transform: (com.example.markdown.MarkdownSettings) -> com.example.markdown.MarkdownSettings) {

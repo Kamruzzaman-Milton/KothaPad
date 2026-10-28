@@ -1150,6 +1150,7 @@ fun EditorScreen(
                 onUpdateTrashDays = { viewModel.setTrashAutoEmptyDaysPref(it) },
                 onClose = { viewModel.isNoteManagerOpen.value = false },
                 onReloadVault = { viewModel.reloadVaultFromDisk() },
+                onOpenDailyJournalManager = { viewModel.openDailyJournalManager() },
                 isVaultScanning = isVaultScanning,
                 vaultScanProgress = vaultScanProgress
             )

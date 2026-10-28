@@ -41,6 +41,7 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
@@ -192,6 +193,7 @@ fun NotesManagerScreen(
     onUpdateTrashDays: (Int) -> Unit,
     onClose: () -> Unit,
     onReloadVault: () -> Unit = {},
+    onOpenDailyJournalManager: () -> Unit = {},
     isVaultScanning: Boolean = false,
     vaultScanProgress: String? = null,
     modifier: Modifier = Modifier
@@ -288,6 +290,7 @@ fun NotesManagerScreen(
         val folders = linkedSetOf<String>()
         // General always first if present
         folders.add("General")
+        folders.add("Daily Journals")
         // Custom folders created by user
         folders.addAll(customFolders)
         // Folders from active notes
@@ -716,15 +719,28 @@ fun NotesManagerScreen(
         },
         floatingActionButton = {
             if (!isMultiSelectMode) {
-                FloatingActionButton(
-                    onClick = {
-                        handlePlusClick(defaultFolder)
-                    },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White,
-                    modifier = Modifier.testTag("notes_manager_fab")
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = "Create new note")
+                    FloatingActionButton(
+                        onClick = onOpenDailyJournalManager,
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                        modifier = Modifier.testTag("daily_journal_calendar_fab")
+                    ) {
+                        Icon(imageVector = Icons.Default.CalendarToday, contentDescription = "Daily Journal Manager")
+                    }
+                    FloatingActionButton(
+                        onClick = {
+                            handlePlusClick(defaultFolder)
+                        },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                        modifier = Modifier.testTag("notes_manager_fab")
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = "Create new note")
+                    }
                 }
             }
         }
@@ -2256,7 +2272,7 @@ private fun FolderTreeHeader(
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NoteTreeItem(
+internal fun NoteTreeItem(
     note: Note,
     isCurrentlyOpen: Boolean,
     isMultiSelectMode: Boolean,
@@ -2751,7 +2767,7 @@ private fun TrashHeaderBanner(
  * First line of non-empty content -> first line
  * Otherwise -> "Untitled • MMM dd"
  */
-private fun getDisplayTitle(note: Note): String {
+internal fun getDisplayTitle(note: Note): String {
     val title = note.title.trim()
     if (title.isNotBlank() && !title.equals("Untitled Note", ignoreCase = true) && !title.equals("Untitled", ignoreCase = true)) {
         return title

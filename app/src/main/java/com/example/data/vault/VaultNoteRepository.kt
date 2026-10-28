@@ -142,6 +142,7 @@ class VaultNoteRepository(
         const val WORKSPACE_FILE = VaultConfigStore.FILE_WORKSPACE
         const val TEMPLATES_DIR = "Templates"
         const val GENERAL_DIR = "General"
+        const val DAILY_JOURNALS_DIR = "Daily Journals"
         const val TRASH_PREFIX = ".KOTHAPAD/trash/"
         private const val META_SCHEMA_VERSION = 2
         private const val WORKSPACE_SCHEMA_VERSION = 1
@@ -308,6 +309,7 @@ class VaultNoteRepository(
         // Ensure critical note content folders exist
         vaultManager.getOrCreateDirRecursive(vaultDoc, TEMPLATES_DIR)
         vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR)
+        vaultManager.getOrCreateDirRecursive(vaultDoc, DAILY_JOURNALS_DIR)
 
         // Load metadata & workspace via VaultConfigStore before scanning
         // This IMMEDIATELY populates activeNotes and allNotes flows in memory
