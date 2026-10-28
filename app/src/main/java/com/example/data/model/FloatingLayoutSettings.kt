@@ -21,6 +21,8 @@ data class FloatingLayoutSettings(
     val formatBarBottomOffsetDp: Int = 8, // 0 - 200 dp
     val formatBarWidthPercent: Int = 100, // 50% - 100%
     val formatBarAlignment: String = "LEFT", // "LEFT", "CENTER", "RIGHT"
+    val formatBarVisibleDuringDictation: Boolean = true,
+    val formatBarVisibleWithoutCursor: Boolean = true,
     val waveformScale: Float = 1.0f, // 0.5x - 1.5x
     val showWaveform: Boolean = true
 ) {

@@ -300,6 +300,10 @@ fun SettingsScreen(
     onFormatBarBottomOffsetChange: (Int) -> Unit = {},
     onFormatBarWidthPercentChange: (Int) -> Unit = {},
     onFormatBarAlignmentChange: (String) -> Unit = {},
+    onFormatBarVisibleDuringDictationChange: (Boolean) -> Unit = {},
+    onFormatBarVisibleWithoutCursorChange: (Boolean) -> Unit = {},
+    markdownSettings: com.example.markdown.MarkdownSettings = com.example.markdown.MarkdownSettings(),
+    onUpdateMarkdownSettings: ((com.example.markdown.MarkdownSettings) -> com.example.markdown.MarkdownSettings) -> Unit = {},
     onWaveformScaleChange: (Float) -> Unit = {},
     onWaveformShowChange: (Boolean) -> Unit = {},
     onResetFloatingLayout: () -> Unit = {},
@@ -721,6 +725,27 @@ fun SettingsScreen(
                         displayValue = "${floatingLayoutSettings.toggleGapDp} dp",
                         onValueChange = { onToggleGapChange(it.toInt()) }
                     ),
+                    SettingItem.Switch(
+                        id = "format_bar_enabled",
+                        title = "Quick Format Bar",
+                        subtitle = "Toolbar of Markdown syntax buttons for bold, headings, lists & more",
+                        checked = markdownSettings.formatBarEnabled,
+                        onCheckedChange = { chk -> onUpdateMarkdownSettings { it.copy(formatBarEnabled = chk) } }
+                    ),
+                    SettingItem.Switch(
+                        id = "format_bar_visible_during_dictation",
+                        title = "Format Bar: Visible During Dictation",
+                        subtitle = "Keep format bar visible while actively dictating your voice",
+                        checked = floatingLayoutSettings.formatBarVisibleDuringDictation,
+                        onCheckedChange = onFormatBarVisibleDuringDictationChange
+                    ),
+                    SettingItem.Switch(
+                        id = "format_bar_visible_without_cursor",
+                        title = "Format Bar: Visible Without Cursor",
+                        subtitle = "Keep format bar visible even when the cursor is not placed in the note",
+                        checked = floatingLayoutSettings.formatBarVisibleWithoutCursor,
+                        onCheckedChange = onFormatBarVisibleWithoutCursorChange
+                    ),
                     SettingItem.Slider(
                         id = "format_bar_scale",
                         title = "Format Bar: Size Scale",
@@ -761,6 +786,44 @@ fun SettingsScreen(
                         ),
                         selectedKey = floatingLayoutSettings.formatBarAlignment,
                         onOptionSelected = onFormatBarAlignmentChange
+                    ),
+                    SettingItem.CustomContent(
+                        id = "format_bar_buttons_reorder_control",
+                        content = {
+                            FormatBarButtonsReorderControl(
+                                formatBarOrder = markdownSettings.formatBarOrder,
+                                formatBarButtons = markdownSettings.formatBarButtons,
+                                enabled = markdownSettings.formatBarEnabled,
+                                onReorder = { newOrder ->
+                                    val newButtons = newOrder.filter { markdownSettings.formatBarButtons.contains(it) }
+                                    onUpdateMarkdownSettings { it.copy(formatBarOrder = newOrder, formatBarButtons = newButtons) }
+                                },
+                                onToggleCheck = { buttonId, isChecked ->
+                                    val newButtons = if (isChecked) {
+                                        markdownSettings.formatBarOrder.filter {
+                                            it == buttonId || markdownSettings.formatBarButtons.contains(it)
+                                        }
+                                    } else {
+                                        markdownSettings.formatBarButtons.filter { it != buttonId }
+                                    }
+                                    onUpdateMarkdownSettings { it.copy(formatBarButtons = newButtons) }
+                                },
+                                onSelectAll = {
+                                    onUpdateMarkdownSettings { it.copy(formatBarButtons = it.formatBarOrder) }
+                                },
+                                onSelectNone = {
+                                    onUpdateMarkdownSettings { it.copy(formatBarButtons = emptyList()) }
+                                },
+                                onResetOrder = {
+                                    onUpdateMarkdownSettings {
+                                        val defOrder = com.example.markdown.MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER
+                                        val defButtons = defOrder.filter { id -> it.formatBarButtons.contains(id) }
+                                            .takeIf { it.isNotEmpty() } ?: defOrder
+                                        it.copy(formatBarOrder = defOrder, formatBarButtons = defButtons)
+                                    }
+                                }
+                            )
+                        }
                     ),
                     SettingItem.Slider(
                         id = "waveform_scale",

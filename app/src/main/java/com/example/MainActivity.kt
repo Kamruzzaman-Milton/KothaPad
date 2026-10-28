@@ -293,6 +293,7 @@ class MainActivity : ComponentActivity() {
                                 val dictationAnimationStyle by viewModel.dictationAnimationStyle.collectAsState()
                                 val hapticsLevel by viewModel.hapticsLevel.collectAsState()
                                 val floatingLayoutSettings by viewModel.floatingLayoutSettings.collectAsState()
+                                val markdownSettings by viewModel.markdownSettings.collectAsState()
 
                                 SettingsScreen(
                                     dictationMode = dictationMode,
@@ -410,6 +411,10 @@ class MainActivity : ComponentActivity() {
                                     onFormatBarBottomOffsetChange = { viewModel.setFormatBarBottomOffsetDp(it) },
                                     onFormatBarWidthPercentChange = { viewModel.setFormatBarWidthPercent(it) },
                                     onFormatBarAlignmentChange = { viewModel.setFormatBarAlignment(it) },
+                                    onFormatBarVisibleDuringDictationChange = { viewModel.setFormatBarVisibleDuringDictation(it) },
+                                    onFormatBarVisibleWithoutCursorChange = { viewModel.setFormatBarVisibleWithoutCursor(it) },
+                                    markdownSettings = markdownSettings,
+                                    onUpdateMarkdownSettings = { viewModel.updateMarkdownSettings(it) },
                                     onWaveformScaleChange = { viewModel.setWaveformScale(it) },
                                     onWaveformShowChange = { viewModel.setWaveformShow(it) },
                                     onResetFloatingLayout = { viewModel.resetFloatingLayoutToDefaults() },

@@ -964,9 +964,8 @@ fun EditorScreen(
                         val isRecording = dictationState !is DictationState.Idle
                         val showFormatBar = markdownSettings.markdownEnabled &&
                                 markdownSettings.formatBarEnabled &&
-                                isTextFieldFocused &&
-                                isKeyboardOpen &&
-                                !isRecording
+                                (floatingLayoutSettings.formatBarVisibleWithoutCursor || (isTextFieldFocused && isKeyboardOpen)) &&
+                                (floatingLayoutSettings.formatBarVisibleDuringDictation || !isRecording)
 
                         Column(
                             modifier = Modifier

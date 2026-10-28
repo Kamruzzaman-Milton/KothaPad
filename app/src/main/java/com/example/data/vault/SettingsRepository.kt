@@ -118,6 +118,8 @@ data class AppSettings(
     val formatBarBottomOffsetDp: Int = 8,
     val formatBarWidthPercent: Int = 100,
     val formatBarAlignment: String = "LEFT",
+    val formatBarVisibleDuringDictation: Boolean = true,
+    val formatBarVisibleWithoutCursor: Boolean = true,
     val waveformScale: Float = 1.0f,
     val waveformShow: Boolean = true,
 
@@ -310,6 +312,8 @@ class SettingsRepository(
                 formatBarBottomOffsetDp = floatings.formatBarBottomOffsetDp,
                 formatBarWidthPercent = floatings.formatBarWidthPercent,
                 formatBarAlignment = floatings.formatBarAlignment,
+                formatBarVisibleDuringDictation = floatings.formatBarVisibleDuringDictation,
+                formatBarVisibleWithoutCursor = floatings.formatBarVisibleWithoutCursor,
                 waveformScale = floatings.waveformScale,
                 waveformShow = floatings.showWaveform
             )
@@ -413,6 +417,8 @@ class SettingsRepository(
             pm.setFormatBarBottomOffsetDp(s.formatBarBottomOffsetDp)
             pm.setFormatBarWidthPercent(s.formatBarWidthPercent)
             pm.setFormatBarAlignment(s.formatBarAlignment)
+            pm.setFormatBarVisibleDuringDictation(s.formatBarVisibleDuringDictation)
+            pm.setFormatBarVisibleWithoutCursor(s.formatBarVisibleWithoutCursor)
             pm.setWaveformScale(s.waveformScale)
             pm.setWaveformShow(s.waveformShow)
         } catch (_: Exception) {
@@ -559,6 +565,8 @@ class SettingsRepository(
             put("format_bar_bottom_offset_dp", s.formatBarBottomOffsetDp)
             put("format_bar_width_percent", s.formatBarWidthPercent)
             put("format_bar_alignment", s.formatBarAlignment)
+            put("format_bar_visible_during_dictation", s.formatBarVisibleDuringDictation)
+            put("format_bar_visible_without_cursor", s.formatBarVisibleWithoutCursor)
             put("waveform_scale", s.waveformScale.toDouble())
             put("waveform_show", s.waveformShow)
         }
@@ -770,6 +778,8 @@ class SettingsRepository(
             val fbBottom = fcObj?.optInt("format_bar_bottom_offset_dp", def.formatBarBottomOffsetDp) ?: root.optInt("format_bar_bottom_offset_dp", def.formatBarBottomOffsetDp)
             val fbWidth = fcObj?.optInt("format_bar_width_percent", def.formatBarWidthPercent) ?: root.optInt("format_bar_width_percent", def.formatBarWidthPercent)
             val fbAlign = fcObj?.optString("format_bar_alignment", def.formatBarAlignment) ?: root.optString("format_bar_alignment", def.formatBarAlignment)
+            val fbVisDict = fcObj?.optBoolean("format_bar_visible_during_dictation", def.formatBarVisibleDuringDictation) ?: root.optBoolean("format_bar_visible_during_dictation", def.formatBarVisibleDuringDictation)
+            val fbVisNoCur = fcObj?.optBoolean("format_bar_visible_without_cursor", def.formatBarVisibleWithoutCursor) ?: root.optBoolean("format_bar_visible_without_cursor", def.formatBarVisibleWithoutCursor)
             val wfScale = (fcObj?.optDouble("waveform_scale", def.waveformScale.toDouble()) ?: root.optDouble("waveform_scale", def.waveformScale.toDouble())).toFloat()
             val wfShow = fcObj?.optBoolean("waveform_show", def.waveformShow) ?: root.optBoolean("waveform_show", def.waveformShow)
 
@@ -884,6 +894,8 @@ class SettingsRepository(
                 formatBarBottomOffsetDp = fbBottom,
                 formatBarWidthPercent = fbWidth,
                 formatBarAlignment = fbAlign,
+                formatBarVisibleDuringDictation = fbVisDict,
+                formatBarVisibleWithoutCursor = fbVisNoCur,
                 waveformScale = wfScale,
                 waveformShow = wfShow,
                 mdEnabled = mdEn,

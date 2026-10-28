@@ -2398,6 +2398,12 @@ class EditorViewModel(
     fun setFormatBarBottomOffsetDp(offset: Int) = viewModelScope.launch { preferencesManager.setFormatBarBottomOffsetDp(offset) }
     fun setFormatBarWidthPercent(percent: Int) = viewModelScope.launch { preferencesManager.setFormatBarWidthPercent(percent) }
     fun setFormatBarAlignment(align: String) = viewModelScope.launch { preferencesManager.setFormatBarAlignment(align) }
+    fun setFormatBarVisibleDuringDictation(visible: Boolean) = viewModelScope.launch {
+        preferencesManager.setFormatBarVisibleDuringDictation(visible)
+    }
+    fun setFormatBarVisibleWithoutCursor(visible: Boolean) = viewModelScope.launch {
+        preferencesManager.setFormatBarVisibleWithoutCursor(visible)
+    }
     fun setWaveformScale(scale: Float) = viewModelScope.launch { preferencesManager.setWaveformScale(scale) }
     fun setWaveformShow(show: Boolean) = viewModelScope.launch { preferencesManager.setWaveformShow(show) }
     fun resetFloatingLayoutToDefaults() = viewModelScope.launch { preferencesManager.resetFloatingLayoutToDefaults() }

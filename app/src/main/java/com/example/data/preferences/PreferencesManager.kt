@@ -159,6 +159,8 @@ class PreferencesManager(private val context: Context) {
         val KEY_FORMAT_BAR_BOTTOM_OFFSET_DP = intPreferencesKey("format_bar_bottom_offset_dp")
         val KEY_FORMAT_BAR_WIDTH_PERCENT = intPreferencesKey("format_bar_width_percent")
         val KEY_FORMAT_BAR_ALIGNMENT = stringPreferencesKey("format_bar_alignment")
+        val KEY_FORMAT_BAR_VISIBLE_DURING_DICTATION = booleanPreferencesKey("format_bar_visible_during_dictation")
+        val KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR = booleanPreferencesKey("format_bar_visible_without_cursor")
         val KEY_WAVEFORM_SCALE = floatPreferencesKey("waveform_scale")
         val KEY_WAVEFORM_SHOW = booleanPreferencesKey("waveform_show")
 
@@ -272,6 +274,8 @@ class PreferencesManager(private val context: Context) {
             KEY_FORMAT_BAR_BOTTOM_OFFSET_DP.name to PrefType.INT,
             KEY_FORMAT_BAR_WIDTH_PERCENT.name to PrefType.INT,
             KEY_FORMAT_BAR_ALIGNMENT.name to PrefType.STRING,
+            KEY_FORMAT_BAR_VISIBLE_DURING_DICTATION.name to PrefType.BOOLEAN,
+            KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR.name to PrefType.BOOLEAN,
             KEY_WAVEFORM_SCALE.name to PrefType.FLOAT,
             KEY_WAVEFORM_SHOW.name to PrefType.BOOLEAN
         )
@@ -857,6 +861,8 @@ class PreferencesManager(private val context: Context) {
             formatBarBottomOffsetDp = prefs[KEY_FORMAT_BAR_BOTTOM_OFFSET_DP] ?: 8,
             formatBarWidthPercent = prefs[KEY_FORMAT_BAR_WIDTH_PERCENT] ?: 100,
             formatBarAlignment = prefs[KEY_FORMAT_BAR_ALIGNMENT] ?: "LEFT",
+            formatBarVisibleDuringDictation = prefs[KEY_FORMAT_BAR_VISIBLE_DURING_DICTATION] ?: true,
+            formatBarVisibleWithoutCursor = prefs[KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR] ?: true,
             waveformScale = prefs[KEY_WAVEFORM_SCALE] ?: 1.0f,
             showWaveform = prefs[KEY_WAVEFORM_SHOW] ?: true
         )
@@ -918,6 +924,14 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { it[KEY_FORMAT_BAR_ALIGNMENT] = alignment }
         notifyRepo { it.copy(formatBarAlignment = alignment) }
     }
+    suspend fun setFormatBarVisibleDuringDictation(visible: Boolean) {
+        context.dataStore.edit { it[KEY_FORMAT_BAR_VISIBLE_DURING_DICTATION] = visible }
+        notifyRepo { it.copy(formatBarVisibleDuringDictation = visible) }
+    }
+    suspend fun setFormatBarVisibleWithoutCursor(visible: Boolean) {
+        context.dataStore.edit { it[KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR] = visible }
+        notifyRepo { it.copy(formatBarVisibleWithoutCursor = visible) }
+    }
     suspend fun setWaveformScale(scale: Float) {
         context.dataStore.edit { it[KEY_WAVEFORM_SCALE] = scale }
         notifyRepo { it.copy(waveformScale = scale) }
@@ -944,6 +958,8 @@ class PreferencesManager(private val context: Context) {
             prefs[KEY_FORMAT_BAR_BOTTOM_OFFSET_DP] = defaults.formatBarBottomOffsetDp
             prefs[KEY_FORMAT_BAR_WIDTH_PERCENT] = defaults.formatBarWidthPercent
             prefs[KEY_FORMAT_BAR_ALIGNMENT] = defaults.formatBarAlignment
+            prefs[KEY_FORMAT_BAR_VISIBLE_DURING_DICTATION] = defaults.formatBarVisibleDuringDictation
+            prefs[KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR] = defaults.formatBarVisibleWithoutCursor
             prefs[KEY_WAVEFORM_SCALE] = defaults.waveformScale
             prefs[KEY_WAVEFORM_SHOW] = defaults.showWaveform
         }
@@ -963,6 +979,8 @@ class PreferencesManager(private val context: Context) {
                 formatBarBottomOffsetDp = defaults.formatBarBottomOffsetDp,
                 formatBarWidthPercent = defaults.formatBarWidthPercent,
                 formatBarAlignment = defaults.formatBarAlignment,
+                formatBarVisibleDuringDictation = defaults.formatBarVisibleDuringDictation,
+                formatBarVisibleWithoutCursor = defaults.formatBarVisibleWithoutCursor,
                 waveformScale = defaults.waveformScale,
                 waveformShow = defaults.showWaveform
             )

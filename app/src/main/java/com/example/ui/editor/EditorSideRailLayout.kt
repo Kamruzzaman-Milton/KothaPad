@@ -161,9 +161,8 @@ fun EditorSideRailLayout(
 
     val showFormatBar = markdownSettings.markdownEnabled &&
             markdownSettings.formatBarEnabled &&
-            isTextFieldFocused &&
-            isKeyboardOpen &&
-            !isRecording
+            (settings.formatBarVisibleWithoutCursor || (isTextFieldFocused && isKeyboardOpen)) &&
+            (settings.formatBarVisibleDuringDictation || !isRecording)
 
     val screenMargin = 8.dp
     val isRailOnLeft = settings.railSide.uppercase() == "LEFT"

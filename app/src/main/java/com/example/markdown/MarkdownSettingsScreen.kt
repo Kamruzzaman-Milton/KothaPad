@@ -449,114 +449,26 @@ fun MarkdownSettingsScreen(
                 }
             }
 
-            // Group: Format Bar (Phase 3)
+            // Group: Format Bar (Moved to Floating layout settings)
             item {
                 MarkdownGroupCard(title = "Format Bar") {
-                    MarkdownToggleRow(
-                        title = "Quick Format Bar",
-                        subtitle = "Toolbar of Markdown syntax buttons above keyboard while editing",
-                        checked = settings.formatBarEnabled,
-                        enabled = settings.markdownEnabled,
-                        onCheckedChange = { chk -> onUpdateSettings { it.copy(formatBarEnabled = chk) } },
-                        testTag = "toggle_format_bar"
-                    )
-                    HorizontalDivider(color = AmoledBorder.copy(alpha = 0.3f))
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Format Buttons & Order",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (settings.markdownEnabled && settings.formatBarEnabled) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                                }
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                TextButton(
-                                    onClick = {
-                                        onUpdateSettings { it.copy(formatBarButtons = it.formatBarOrder) }
-                                    },
-                                    enabled = settings.markdownEnabled && settings.formatBarEnabled
-                                ) {
-                                    Text("All", fontSize = 12.sp)
-                                }
-                                TextButton(
-                                    onClick = {
-                                        onUpdateSettings { it.copy(formatBarButtons = emptyList()) }
-                                    },
-                                    enabled = settings.markdownEnabled && settings.formatBarEnabled
-                                ) {
-                                    Text("None", fontSize = 12.sp)
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Drag and drop the handle (≡) or use arrows to customize their order. Toggle checkboxes to show/hide.",
+                            text = "Format Bar settings have moved to Floating Layout",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Format bar visibility (always visible during dictation or without cursor), scaling, bottom offset, alignment, and button ordering are now customized in Settings > Floating layout.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (settings.markdownEnabled && settings.formatBarEnabled) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            }
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        FormatBarReorderList(
-                            formatBarOrder = settings.formatBarOrder,
-                            formatBarButtons = settings.formatBarButtons,
-                            enabled = settings.markdownEnabled && settings.formatBarEnabled,
-                            onReorder = { newOrder ->
-                                val newButtons = newOrder.filter { settings.formatBarButtons.contains(it) }
-                                onUpdateSettings { it.copy(formatBarOrder = newOrder, formatBarButtons = newButtons) }
-                            },
-                            onToggleCheck = { buttonId, isChecked ->
-                                val newButtons = if (isChecked) {
-                                    settings.formatBarOrder.filter {
-                                        it == buttonId || settings.formatBarButtons.contains(it)
-                                    }
-                                } else {
-                                    settings.formatBarButtons.filter { it != buttonId }
-                                }
-                                onUpdateSettings { it.copy(formatBarButtons = newButtons) }
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                onUpdateSettings {
-                                    val defOrder = MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER
-                                    val defButtons = defOrder.filter { id -> it.formatBarButtons.contains(id) }
-                                        .takeIf { it.isNotEmpty() } ?: defOrder
-                                    it.copy(formatBarOrder = defOrder, formatBarButtons = defButtons)
-                                }
-                            },
-                            enabled = settings.markdownEnabled && settings.formatBarEnabled,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("reset_format_bar_order_button"),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Reset order to default sequence", fontSize = 12.sp)
-                        }
                     }
                 }
             }
