@@ -1,46 +1,59 @@
 package com.example.ui.notes
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Today
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,15 +64,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Note
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
+import java.time.Month
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 /**
- * Parses date from note filename (YYYY-MM-DD...), falling back to createdAt date.
+ * Parses date from note title (YYYY-MM-DD...), falling back to createdAt date.
  */
 fun extractNoteJournalDate(note: Note): LocalDate? {
     val title = note.title.trim()
@@ -78,11 +95,48 @@ fun extractNoteJournalDate(note: Note): LocalDate? {
     }
 }
 
+private val START_YEAR_MONTH: YearMonth = YearMonth.of(2010, 1)
+
+@Immutable
+data class MonthCalendarData(
+    val yearMonth: YearMonth,
+    val title: String,
+    val weeks: List<List<LocalDate?>>
+)
+
+private fun precomputeMonthData(ym: YearMonth): MonthCalendarData {
+    val title = ym.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
+    val firstDay = ym.atDay(1)
+    val startOffset = (firstDay.dayOfWeek.value + 1) % 7 // Saturday is 0
+    val totalDays = ym.lengthOfMonth()
+
+    val cells = ArrayList<LocalDate?>(startOffset + totalDays + 7)
+    for (i in 0 until startOffset) {
+        cells.add(null)
+    }
+    for (day in 1..totalDays) {
+        cells.add(ym.atDay(day))
+    }
+    val remainder = cells.size % 7
+    if (remainder != 0) {
+        for (i in 0 until (7 - remainder)) {
+            cells.add(null)
+        }
+    }
+
+    return MonthCalendarData(
+        yearMonth = ym,
+        title = title,
+        weeks = cells.chunked(7)
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyJournalManagerScreen(
     allNotes: List<Note>,
     onDateClick: (LocalDate) -> Unit,
+    onTodayPlusClick: () -> Unit,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -93,60 +147,35 @@ fun DailyJournalManagerScreen(
         }
     }
 
-    val notesByDate = remember(journalNotes) {
-        journalNotes.mapNotNull { note ->
-            extractNoteJournalDate(note)?.let { it to note }
-        }.groupBy({ it.first }, { it.second })
+    // High performance O(1) date lookup for notes
+    val datesWithNotes = remember(journalNotes) {
+        journalNotes.mapNotNull { extractNoteJournalDate(it) }.toSet()
     }
 
     val today = remember { LocalDate.now() }
     val currentMonth = remember { YearMonth.now() }
-    var pastMonthsCount by remember { mutableIntStateOf(24) }
 
-    val earliestNoteDate = remember(notesByDate) {
-        notesByDate.keys.minOrNull()
-    }
-    val earliestMonth = earliestNoteDate?.let { YearMonth.from(it) }
-    val minMonthsNeeded = remember(earliestMonth, currentMonth) {
-        if (earliestMonth != null && earliestMonth.isBefore(currentMonth)) {
-            val diff = (currentMonth.year - earliestMonth.year) * 12 + (currentMonth.monthValue - earliestMonth.monthValue)
-            maxOf(diff + 1, 24)
-        } else 24
-    }
-    val effectiveMonthsCount = maxOf(pastMonthsCount, minMonthsNeeded)
-
-    // Month list from past months down to currentMonth
-    val monthsList = remember(effectiveMonthsCount, currentMonth) {
-        (effectiveMonthsCount downTo 0).map { offset ->
-            currentMonth.minusMonths(offset.toLong())
+    // Calendar fixed start at Jan 2010 and dynamically ends at current month
+    val monthDataList = remember(currentMonth) {
+        val totalMonths = ChronoUnit.MONTHS.between(START_YEAR_MONTH, currentMonth)
+        (0L..totalMonths).map { offset ->
+            precomputeMonthData(START_YEAR_MONTH.plusMonths(offset))
         }
     }
 
-    val listState = rememberLazyListState()
-    var isInitialScrollDone by remember { mutableStateOf(false) }
-
-    // Scroll to latest (current) month at the bottom on initial display
-    LaunchedEffect(Unit) {
-        if (monthsList.isNotEmpty()) {
-            listState.scrollToItem(monthsList.size - 1)
-            isInitialScrollDone = true
-        }
-    }
-
-    // Lazy load older past months when scrolling to the top
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex }
-            .collect { firstIndex ->
-                if (isInitialScrollDone && firstIndex == 0 && pastMonthsCount < 120 && listState.canScrollBackward) {
-                    val prevCount = pastMonthsCount
-                    pastMonthsCount += 12
-                    // Smoothly preserve scroll offset
-                    listState.scrollToItem(12, listState.firstVisibleItemScrollOffset)
-                }
-            }
-    }
-
+    // Initial scroll position: immediately display the current month (last item)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = monthDataList.lastIndex)
+    val coroutineScope = rememberCoroutineScope()
     val weekDays = remember { listOf("Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri") }
+
+    var showMonthYearDialog by remember { mutableStateOf(false) }
+
+    // Derived state to determine if user has scrolled away from the current month
+    val isAwayFromCurrentMonth by remember(monthDataList) {
+        derivedStateOf {
+            listState.firstVisibleItemIndex < monthDataList.lastIndex
+        }
+    }
 
     Scaffold(
         modifier = modifier
@@ -156,7 +185,7 @@ fun DailyJournalManagerScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Daily Journal Manager",
+                        text = "Daily Journal",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold,
                             fontSize = 20.sp
@@ -182,47 +211,300 @@ fun DailyJournalManagerScreen(
             )
         }
     ) { innerPadding ->
-        LazyColumn(
-            state = listState,
+        val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val bottomInset = maxOf(innerPadding.calculateBottomPadding(), navBarBottom)
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(top = innerPadding.calculateTopPadding())
         ) {
-            item {
-                Spacer(modifier = Modifier.height(4.dp))
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                items(
+                    items = monthDataList,
+                    key = { it.yearMonth.toString() }
+                ) { monthData ->
+                    OptimizedMonthBlock(
+                        data = monthData,
+                        today = today,
+                        datesWithNotes = datesWithNotes,
+                        weekDays = weekDays,
+                        onDateClick = onDateClick
+                    )
+                }
+
+                // Generous bottom spacing: last row of calendar dates will always be
+                // scrolled completely above the floating action buttons and system nav bar.
+                item {
+                    Spacer(modifier = Modifier.height(bottomInset + 104.dp))
+                }
             }
 
-            items(monthsList, key = { it.toString() }) { ym ->
-                MonthBlock(
-                    yearMonth = ym,
-                    today = today,
-                    notesByDate = notesByDate,
-                    weekDays = weekDays,
-                    onDateClick = onDateClick
-                )
-            }
+            // Bottom Floating Buttons Row
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        bottom = bottomInset + 16.dp
+                    ),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Bottom-Left Button Group: Month/Year Selector and Return-to-Current-Month FAB
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Month and Year Selector (Bottom Left)
+                    FloatingActionButton(
+                        onClick = { showMonthYearDialog = true },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.testTag("month_year_selector_fab")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Select Month and Year"
+                        )
+                    }
 
-            item {
-                Spacer(modifier = Modifier.height(24.dp))
+                    // Return to Current Month FAB: appears immediately when scrolled away
+                    AnimatedVisibility(
+                        visible = isAwayFromCurrentMonth,
+                        enter = fadeIn() + scaleIn(),
+                        exit = fadeOut() + scaleOut()
+                    ) {
+                        FloatingActionButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    listState.scrollToItem(monthDataList.lastIndex)
+                                }
+                            },
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.testTag("daily_journal_return_today_fab")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Today,
+                                contentDescription = "Return to current month"
+                            )
+                        }
+                    }
+                }
+
+                // Plus Button (Bottom Right)
+                FloatingActionButton(
+                    onClick = onTodayPlusClick,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                    modifier = Modifier.testTag("daily_journal_today_fab")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Create or open today's note"
+                    )
+                }
             }
         }
+    }
+
+    if (showMonthYearDialog) {
+        val currentVisibleMonth = remember {
+            val visibleIndex = listState.firstVisibleItemIndex.coerceIn(0, monthDataList.lastIndex)
+            monthDataList[visibleIndex].yearMonth
+        }
+
+        MonthYearPickerDialog(
+            initialYearMonth = currentVisibleMonth,
+            startYear = START_YEAR_MONTH.year,
+            currentMonth = currentMonth,
+            onDismiss = { showMonthYearDialog = false },
+            onSelect = { selectedYm ->
+                showMonthYearDialog = false
+                val targetIndex = ChronoUnit.MONTHS.between(START_YEAR_MONTH, selectedYm).toInt()
+                    .coerceIn(0, monthDataList.lastIndex)
+                coroutineScope.launch {
+                    listState.scrollToItem(targetIndex)
+                }
+            }
+        )
     }
 }
 
 @Composable
-private fun MonthBlock(
-    yearMonth: YearMonth,
+private fun MonthYearPickerDialog(
+    initialYearMonth: YearMonth,
+    startYear: Int,
+    currentMonth: YearMonth,
+    onDismiss: () -> Unit,
+    onSelect: (YearMonth) -> Unit
+) {
+    var selectedYear by remember { mutableIntStateOf(initialYearMonth.year.coerceIn(startYear, currentMonth.year)) }
+    var selectedMonth by remember {
+        val maxMonthForYear = if (selectedYear == currentMonth.year) currentMonth.monthValue else 12
+        mutableIntStateOf(initialYearMonth.monthValue.coerceIn(1, maxMonthForYear))
+    }
+
+    val years = remember(startYear, currentMonth.year) {
+        (startYear..currentMonth.year).toList()
+    }
+    val yearIndex = remember(years, selectedYear) {
+        years.indexOf(selectedYear).coerceAtLeast(0)
+    }
+    val yearListState = rememberLazyListState(initialFirstVisibleItemIndex = (yearIndex - 2).coerceAtLeast(0))
+    val monthListState = rememberLazyListState(initialFirstVisibleItemIndex = (selectedMonth - 3).coerceAtLeast(0))
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Select Month & Year",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+            )
+        },
+        text = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(260.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Scrollable Month Column
+                Column(
+                    modifier = Modifier
+                        .weight(1.15f)
+                        .fillMaxSize()
+                ) {
+                    Text(
+                        text = "Month",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    val maxMonth = if (selectedYear == currentMonth.year) currentMonth.monthValue else 12
+                    LazyColumn(
+                        state = monthListState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                            .padding(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items((1..maxMonth).toList()) { mValue ->
+                            val isSelected = mValue == selectedMonth
+                            val monthName = Month.of(mValue).getDisplayName(TextStyle.FULL, Locale.getDefault())
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { selectedMonth = mValue }
+                            ) {
+                                Text(
+                                    text = monthName,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    ),
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Scrollable Year Column
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                ) {
+                    Text(
+                        text = "Year",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    LazyColumn(
+                        state = yearListState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                            .padding(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(years) { y ->
+                            val isSelected = y == selectedYear
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        selectedYear = y
+                                        val maxM = if (y == currentMonth.year) currentMonth.monthValue else 12
+                                        if (selectedMonth > maxM) {
+                                            selectedMonth = maxM
+                                        }
+                                    }
+                            ) {
+                                Text(
+                                    text = y.toString(),
+                                    textAlign = TextAlign.Center,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    ),
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSelect(YearMonth.of(selectedYear, selectedMonth))
+                }
+            ) {
+                Text("Select")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun OptimizedMonthBlock(
+    data: MonthCalendarData,
     today: LocalDate,
-    notesByDate: Map<LocalDate, List<Note>>,
+    datesWithNotes: Set<LocalDate>,
     weekDays: List<String>,
     onDateClick: (LocalDate) -> Unit
 ) {
-    val monthTitle = remember(yearMonth) {
-        yearMonth.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
-    }
-
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
@@ -238,7 +520,7 @@ private fun MonthBlock(
         ) {
             // Month Header
             Text(
-                text = monthTitle,
+                text = data.title,
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 17.sp
@@ -269,37 +551,8 @@ private fun MonthBlock(
                 }
             }
 
-            // Grid calculation: Saturday starts at index 0
-            val firstDay = yearMonth.atDay(1)
-            val startOffset = (firstDay.dayOfWeek.value + 1) % 7
-            val totalDays = yearMonth.lengthOfMonth()
-
-            val calendarCells = remember(yearMonth) {
-                val cells = mutableListOf<LocalDate?>()
-                // Leading empty days
-                for (i in 0 until startOffset) {
-                    cells.add(null)
-                }
-                // Days of month
-                for (day in 1..totalDays) {
-                    cells.add(yearMonth.atDay(day))
-                }
-                // Trailing empty days to complete row
-                val remainder = cells.size % 7
-                if (remainder != 0) {
-                    for (i in 0 until (7 - remainder)) {
-                        cells.add(null)
-                    }
-                }
-                cells
-            }
-
-            val weeks = remember(calendarCells) {
-                calendarCells.chunked(7)
-            }
-
-            // Render week rows
-            weeks.forEach { week ->
+            // Render precomputed week rows
+            data.weeks.forEach { week ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -315,16 +568,16 @@ private fun MonthBlock(
                         ) {
                             if (date != null) {
                                 val isToday = (date == today)
-                                val dayNotes = notesByDate[date] ?: emptyList()
-                                val hasNotes = dayNotes.isNotEmpty()
-                                val noteCount = dayNotes.size
+                                val isFuture = date.isAfter(today)
+                                val hasNote = datesWithNotes.contains(date)
 
                                 CalendarDayCell(
-                                    date = date,
+                                    dayNumber = date.dayOfMonth,
                                     isToday = isToday,
-                                    hasNotes = hasNotes,
-                                    noteCount = noteCount,
-                                    onClick = { onDateClick(date) }
+                                    isFuture = isFuture,
+                                    hasNote = hasNote,
+                                    onClick = if (isFuture) null else { { onDateClick(date) } },
+                                    testTagDate = date.toString()
                                 )
                             }
                         }
@@ -337,28 +590,36 @@ private fun MonthBlock(
 
 @Composable
 private fun CalendarDayCell(
-    date: LocalDate,
+    dayNumber: Int,
     isToday: Boolean,
-    hasNotes: Boolean,
-    noteCount: Int,
-    onClick: () -> Unit
+    isFuture: Boolean,
+    hasNote: Boolean,
+    onClick: (() -> Unit)?,
+    testTagDate: String
 ) {
     val shape = RoundedCornerShape(8.dp)
 
     val backgroundColor = when {
-        hasNotes -> MaterialTheme.colorScheme.primary
+        hasNote -> MaterialTheme.colorScheme.primary
         else -> Color.Transparent
     }
 
     val contentColor = when {
-        hasNotes -> MaterialTheme.colorScheme.onPrimary
+        hasNote -> MaterialTheme.colorScheme.onPrimary
+        isFuture -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
         else -> MaterialTheme.colorScheme.onSurface
     }
 
-    val border = when {
-        isToday && !hasNotes -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.75f))
-        isToday && hasNotes -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.onPrimary)
-        else -> null
+    val borderModifier = when {
+        isToday && !hasNote -> Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.75f), shape)
+        isToday && hasNote -> Modifier.border(1.5.dp, MaterialTheme.colorScheme.onPrimary, shape)
+        else -> Modifier
+    }
+
+    val clickModifier = if (onClick != null) {
+        Modifier.clickable(onClick = onClick)
+    } else {
+        Modifier
     }
 
     Box(
@@ -366,50 +627,18 @@ private fun CalendarDayCell(
             .fillMaxSize()
             .clip(shape)
             .background(backgroundColor)
-            .then(if (border != null) Modifier.background(backgroundColor, shape).padding(1.dp) else Modifier)
-            .clickable(onClick = onClick)
-            .testTag("calendar_day_${date}")
+            .then(borderModifier)
+            .then(clickModifier)
+            .testTag("calendar_day_$testTagDate"),
+        contentAlignment = Alignment.Center
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            shape = shape,
-            color = backgroundColor,
-            border = border
-        ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Text(
-                    text = date.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = if (hasNotes || isToday) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 13.5.sp
-                    ),
-                    color = contentColor
-                )
-
-                // Small badge if date has more than 1 note
-                if (hasNotes && noteCount > 1) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(2.dp)
-                            .size(14.dp)
-                            .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (noteCount > 9) "9+" else noteCount.toString(),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                }
-            }
-        }
+        Text(
+            text = dayNumber.toString(),
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = if (hasNote || isToday) FontWeight.Bold else FontWeight.Normal,
+                fontSize = 13.5.sp
+            ),
+            color = contentColor
+        )
     }
 }

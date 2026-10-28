@@ -2085,50 +2085,86 @@ class EditorViewModel(
         _currentScreen.value = "DAILY_JOURNAL_MANAGER"
     }
 
-    fun openDailyJournalDay(dateStr: String) {
-        _currentDailyJournalDate.value = dateStr
-        _currentScreen.value = "DAILY_JOURNAL_DAY"
-    }
-
     fun onBackFromDailyJournalManager() {
         _currentScreen.value = "EDITOR"
         isNoteManagerOpen.value = true
     }
 
-    fun onBackFromDailyJournalDay() {
-        _currentScreen.value = "DAILY_JOURNAL_MANAGER"
-        _currentDailyJournalDate.value = null
-    }
-
-    fun returnToDailyJournalDay() {
+    fun returnToDailyJournalManager() {
         flushAutoSave()
-        val date = _currentDailyJournalDate.value
-        if (date != null) {
-            _currentScreen.value = "DAILY_JOURNAL_DAY"
-        } else {
-            _currentScreen.value = "DAILY_JOURNAL_MANAGER"
-        }
+        _currentDailyJournalDate.value = null
+        _currentScreen.value = "DAILY_JOURNAL_MANAGER"
     }
 
     fun clearDailyJournalNavigation() {
         _currentDailyJournalDate.value = null
     }
 
-    fun openDailyJournalNote(note: Note, dateStr: String) {
+    fun openDailyJournalNote(note: Note, dateStr: String, startInEditMode: Boolean = false) {
         flushAutoSave()
         loadNote(note)
-        setReadingMode(true)
+        setReadingMode(!startInEditMode)
         _currentDailyJournalDate.value = dateStr
         isNoteManagerOpen.value = false
         navigateTo("EDITOR")
     }
 
-    fun createNewDailyJournalNote(date: LocalDate) {
+    fun findDailyJournalNoteForDate(date: LocalDate): Note? {
+        return allNotes.value.firstOrNull {
+            it.folder.trim().equals("Daily Journals", ignoreCase = true) &&
+                    !it.isDeleted &&
+                    com.example.ui.notes.extractNoteJournalDate(it) == date
+        }
+    }
+
+    fun handleDailyJournalDateTap(date: LocalDate) {
+        val today = LocalDate.now()
+        val existing = findDailyJournalNoteForDate(date)
+        if (existing != null) {
+            val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+            openDailyJournalNote(existing, dateStr, startInEditMode = false)
+        } else if (!date.isAfter(today)) {
+            createNewDailyJournalNote(date, startInEditMode = true)
+        }
+    }
+
+    fun handleDailyJournalTodayFabClick() {
+        val today = LocalDate.now()
+        val dateStr = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val existing = findDailyJournalNoteForDate(today)
+        if (existing != null) {
+            openDailyJournalNote(existing, dateStr, startInEditMode = true)
+        } else {
+            createNewDailyJournalNote(today, startInEditMode = true)
+        }
+    }
+
+    fun createNewDailyJournalNote(date: LocalDate, startInEditMode: Boolean = true) {
+        if (date.isAfter(LocalDate.now())) return
         val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        // Guard against duplicate notes for the same date
+        val existing = findDailyJournalNoteForDate(date)
+        if (existing != null) {
+            openDailyJournalNote(existing, dateStr, startInEditMode = startInEditMode)
+            return
+        }
+
         val timestamp = date.atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        _isReadingMode.value = false
+        _isReadingMode.value = !startInEditMode
         flushAutoSave()
         viewModelScope.launch(Dispatchers.IO) {
+            val currentExisting = noteRepository.allNotes.first().firstOrNull {
+                it.folder.trim().equals("Daily Journals", ignoreCase = true) &&
+                        !it.isDeleted &&
+                        com.example.ui.notes.extractNoteJournalDate(it) == date
+            }
+            if (currentExisting != null) {
+                withContext(Dispatchers.Main) {
+                    openDailyJournalNote(currentExisting, dateStr, startInEditMode = startInEditMode)
+                }
+                return@launch
+            }
+
             val defaultLang = defaultLanguage.value
             val newNote = Note(
                 title = dateStr,
@@ -2144,7 +2180,7 @@ class EditorViewModel(
                 if (inserted != null) {
                     loadNote(inserted)
                     isCurrentNoteAutoCreated = true
-                    _isReadingMode.value = false
+                    _isReadingMode.value = !startInEditMode
                     _currentDailyJournalDate.value = dateStr
                     isNoteManagerOpen.value = false
                     navigateTo("EDITOR")
