@@ -31,6 +31,10 @@ class VaultManager(private val context: Context) {
 
     private val prefs = context.getSharedPreferences("kothapad_vault_storage", Context.MODE_PRIVATE)
 
+    val fastLister = SafFastLister(context)
+
+    fun getVaultTreeUri(): Uri? = _vaultState.value.currentVault?.uriString?.let { Uri.parse(it) }
+
     private val _vaultState = MutableStateFlow(loadInitialState())
     val vaultState: StateFlow<VaultState> = _vaultState.asStateFlow()
 
@@ -271,10 +275,44 @@ class VaultManager(private val context: Context) {
     // Reusable, Safe IO Helpers on DocumentFile (Off Main Thread)
     // =========================================================================
 
+    suspend fun listChildrenFast(treeUri: Uri, parentDocumentId: String): List<FastEntry> = withContext(Dispatchers.IO) {
+        fastLister.listChildrenFast(treeUri, parentDocumentId)
+    }
+
+    suspend fun listChildrenFast(dir: DocumentFile, treeUri: Uri? = null): List<FastEntry> = withContext(Dispatchers.IO) {
+        fastLister.listChildrenFast(dir, treeUri ?: getVaultTreeUri())
+    }
+
+    suspend fun findChildFast(dir: DocumentFile, name: String, treeUri: Uri? = null): FastEntry? = withContext(Dispatchers.IO) {
+        val tUri = treeUri ?: getVaultTreeUri() ?: return@withContext null
+        val docId = fastLister.getDocumentId(tUri, dir)
+        fastLister.findChildByName(tUri, docId, name)
+    }
+
+    fun invalidateDirCache(parentDocumentId: String?) {
+        fastLister.invalidate(parentDocumentId)
+    }
+
+    fun invalidateDirCache(dir: DocumentFile) {
+        val treeUri = getVaultTreeUri() ?: return
+        val docId = fastLister.getDocumentId(treeUri, dir)
+        fastLister.invalidate(docId)
+    }
+
+    fun clearDirCache() {
+        fastLister.invalidateAll()
+    }
+
     suspend fun listChildren(dir: DocumentFile): List<DocumentFile> = withContext(Dispatchers.IO) {
         try {
-            if (!dir.exists() || !dir.isDirectory) emptyList()
-            else dir.listFiles().toList()
+            val treeUri = getVaultTreeUri()
+            if (treeUri != null) {
+                val entries = fastLister.listChildrenFast(dir, treeUri)
+                entries.mapNotNull { it.toDocumentFile(context, treeUri) }
+            } else {
+                if (!dir.exists() || !dir.isDirectory) emptyList()
+                else dir.listFiles().toList()
+            }
         } catch (e: Exception) {
             emptyList()
         }
@@ -312,15 +350,40 @@ class VaultManager(private val context: Context) {
     ): DocumentFile? = withContext(Dispatchers.IO) {
         try {
             val cleanName = sanitizeFilename(fileName)
-            val children = listChildren(parentDir)
-            val existingFile = children.firstOrNull {
-                it.name.equals(cleanName, ignoreCase = true) ||
-                (cleanName.endsWith(".json", ignoreCase = true) && it.name.equals("$cleanName.json", ignoreCase = true)) ||
-                (cleanName.endsWith(".md", ignoreCase = true) && it.name.equals("$cleanName.md", ignoreCase = true))
+            val treeUri = getVaultTreeUri()
+            val existingEntry = if (treeUri != null) {
+                val children = fastLister.listChildrenFast(parentDir, treeUri)
+                children.firstOrNull {
+                    it.displayName.equals(cleanName, ignoreCase = true) ||
+                    (cleanName.endsWith(".json", ignoreCase = true) && it.displayName.equals("$cleanName.json", ignoreCase = true)) ||
+                    (cleanName.endsWith(".md", ignoreCase = true) && it.displayName.equals("$cleanName.md", ignoreCase = true))
+                }
+            } else {
+                val children = listChildren(parentDir)
+                children.firstOrNull {
+                    it.name.equals(cleanName, ignoreCase = true) ||
+                    (cleanName.endsWith(".json", ignoreCase = true) && it.name.equals("$cleanName.json", ignoreCase = true)) ||
+                    (cleanName.endsWith(".md", ignoreCase = true) && it.name.equals("$cleanName.md", ignoreCase = true))
+                }?.let { doc ->
+                    val docId = try { DocumentsContract.getDocumentId(doc.uri) } catch (_: Exception) { doc.name ?: "" }
+                    FastEntry(
+                        documentId = docId,
+                        displayName = doc.name ?: "",
+                        mimeType = doc.type ?: "",
+                        lastModified = doc.lastModified(),
+                        size = doc.length(),
+                        isDirectory = doc.isDirectory,
+                        uri = doc.uri
+                    )
+                }
             }
-            if (existingFile != null && existingFile.exists()) {
-                val ok = writeText(existingFile, text)
-                return@withContext if (ok) existingFile else null
+
+            if (existingEntry != null) {
+                val existingFile = existingEntry.toDocumentFile(context, treeUri)
+                if (existingFile != null && existingFile.exists()) {
+                    val ok = writeText(existingFile, text)
+                    return@withContext if (ok) existingFile else null
+                }
             }
 
             // Create new file
@@ -332,6 +395,7 @@ class VaultManager(private val context: Context) {
             val targetFile = parentDir.createFile(mimeType, baseName)
                 ?: parentDir.createFile(mimeType, cleanName)
                 ?: return@withContext null
+            invalidateDirCache(parentDir)
             val writeOk = writeText(targetFile, text)
             if (writeOk) targetFile else null
         } catch (e: Exception) {
@@ -346,7 +410,11 @@ class VaultManager(private val context: Context) {
     ): DocumentFile? = withContext(Dispatchers.IO) {
         try {
             val cleanName = sanitizeFilename(displayName)
-            parentDir.createFile(mimeType, cleanName)
+            val file = parentDir.createFile(mimeType, cleanName)
+            if (file != null) {
+                invalidateDirCache(parentDir)
+            }
+            file
         } catch (e: Exception) {
             null
         }
@@ -358,11 +426,25 @@ class VaultManager(private val context: Context) {
     ): DocumentFile? = withContext(Dispatchers.IO) {
         try {
             val cleanName = sanitizeFilename(displayName)
-            val existing = parentDir.findFile(cleanName)
-            if (existing != null && existing.isDirectory) {
-                return@withContext existing
+            val treeUri = getVaultTreeUri()
+            if (treeUri != null) {
+                val existing = findChildFast(parentDir, cleanName, treeUri)
+                if (existing != null && existing.isDirectory) {
+                    return@withContext existing.toDirectoryDocumentFile(context, treeUri)
+                        ?: DocumentFile.fromTreeUri(context, existing.uri)
+                        ?: parentDir.findFile(cleanName)
+                }
+            } else {
+                val existing = parentDir.findFile(cleanName)
+                if (existing != null && existing.isDirectory) {
+                    return@withContext existing
+                }
             }
-            parentDir.createDirectory(cleanName)
+            val created = parentDir.createDirectory(cleanName)
+            if (created != null) {
+                invalidateDirCache(parentDir)
+            }
+            created
         } catch (e: Exception) {
             null
         }
@@ -391,13 +473,26 @@ class VaultManager(private val context: Context) {
         if (trimmed.isEmpty()) return@withContext rootDir
         val segments = trimmed.split("/").filter { it.isNotBlank() }
         var current: DocumentFile = rootDir
+        val treeUri = getVaultTreeUri()
         for (seg in segments) {
             val cleanName = sanitizeFilename(seg)
-            val next = current.findFile(cleanName)
-            if (next != null && next.isDirectory) {
-                current = next
+            if (treeUri != null) {
+                val entry = findChildFast(current, cleanName, treeUri)
+                if (entry != null && entry.isDirectory) {
+                    current = entry.toDirectoryDocumentFile(context, treeUri)
+                        ?: DocumentFile.fromTreeUri(context, entry.uri)
+                        ?: current.findFile(cleanName)
+                        ?: return@withContext null
+                } else {
+                    return@withContext null
+                }
             } else {
-                return@withContext null
+                val next = current.findFile(cleanName)
+                if (next != null && next.isDirectory) {
+                    current = next
+                } else {
+                    return@withContext null
+                }
             }
         }
         current
@@ -410,20 +505,35 @@ class VaultManager(private val context: Context) {
         val trimmed = relativeFilePath.trim().trim('/')
         if (trimmed.isEmpty()) return@withContext null
         val idx = trimmed.lastIndexOf('/')
+        val treeUri = getVaultTreeUri()
         if (idx == -1) {
-            rootDir.findFile(trimmed)
+            if (treeUri != null) {
+                val entry = findChildFast(rootDir, trimmed, treeUri)
+                entry?.toDocumentFile(context, treeUri) ?: rootDir.findFile(trimmed)
+            } else {
+                rootDir.findFile(trimmed)
+            }
         } else {
             val dirPath = trimmed.substring(0, idx)
             val fileName = trimmed.substring(idx + 1)
             val dir = findDirRecursive(rootDir, dirPath) ?: return@withContext null
-            dir.findFile(fileName)
+            if (treeUri != null) {
+                val entry = findChildFast(dir, fileName, treeUri)
+                entry?.toDocumentFile(context, treeUri) ?: dir.findFile(fileName)
+            } else {
+                dir.findFile(fileName)
+            }
         }
     }
 
     suspend fun rename(file: DocumentFile, newName: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val cleanName = sanitizeFilename(newName)
-            file.renameTo(cleanName)
+            val ok = file.renameTo(cleanName)
+            if (ok) {
+                clearDirCache()
+            }
+            ok
         } catch (e: Exception) {
             false
         }
@@ -435,6 +545,9 @@ class VaultManager(private val context: Context) {
         targetParent: DocumentFile
     ): DocumentFile? = withContext(Dispatchers.IO) {
         try {
+            invalidateDirCache(sourceParent)
+            invalidateDirCache(targetParent)
+
             // Attempt DocumentsContract.moveDocument if supported
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 try {
@@ -445,6 +558,8 @@ class VaultManager(private val context: Context) {
                         targetParent.uri
                     )
                     if (movedUri != null) {
+                        invalidateDirCache(sourceParent)
+                        invalidateDirCache(targetParent)
                         return@withContext DocumentFile.fromSingleUri(context, movedUri)
                     }
                 } catch (_: Exception) {
@@ -467,6 +582,8 @@ class VaultManager(private val context: Context) {
 
             if (copySuccess) {
                 source.delete()
+                invalidateDirCache(sourceParent)
+                invalidateDirCache(targetParent)
                 targetFile
             } else {
                 targetFile.delete()
@@ -479,7 +596,11 @@ class VaultManager(private val context: Context) {
 
     suspend fun delete(file: DocumentFile): Boolean = withContext(Dispatchers.IO) {
         try {
-            file.delete()
+            val ok = file.delete()
+            if (ok) {
+                clearDirCache()
+            }
+            ok
         } catch (e: Exception) {
             false
         }
@@ -500,7 +621,12 @@ class VaultManager(private val context: Context) {
         val cleanBase = sanitizeFilename(proposedName.removeSuffix(dotExt))
         var candidate = "$cleanBase$dotExt"
         var counter = 1
-        val existingNames = listChildren(parent).mapNotNull { it.name }.toSet()
+        val treeUri = getVaultTreeUri()
+        val existingNames = if (treeUri != null) {
+            fastLister.listChildrenFast(parent, treeUri).map { it.displayName }.toSet()
+        } else {
+            listChildren(parent).mapNotNull { it.name }.toSet()
+        }
         while (existingNames.contains(candidate)) {
             candidate = "$cleanBase $counter$dotExt"
             counter++

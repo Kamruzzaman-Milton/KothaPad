@@ -360,13 +360,14 @@ class VaultNoteRepository(
         val discoveredFolders = mutableSetOf<String>()
         var count = 0
         var metadataChanged = false
+        val treeUri = vaultManager.getVaultTreeUri() ?: vaultDoc.uri
 
         suspend fun traverse(dir: DocumentFile, currentRelPath: String) {
-            val children = vaultManager.listChildren(dir)
+            val children = vaultManager.listChildrenFast(dir, treeUri)
             for (child in children) {
-                val name = child.name ?: continue
+                val name = child.displayName
                 // Ignore hidden files/folders (names starting with ".")
-                if (name.startsWith(".")) {
+                if (name.isBlank() || name.startsWith(".")) {
                     continue
                 }
 
@@ -376,7 +377,10 @@ class VaultNoteRepository(
                     }
                     val nextRel = if (currentRelPath.isEmpty()) name else "$currentRelPath/$name"
                     discoveredFolders.add(nextRel)
-                    traverse(child, nextRel)
+                    val subDir = child.toDirectoryDocumentFile(context, treeUri)
+                        ?: DocumentFile.fromTreeUri(context, child.uri)
+                        ?: DocumentFile.fromSingleUri(context, child.uri)
+                    traverse(subDir, nextRel)
                 } else if (child.isFile && name.endsWith(".md", ignoreCase = true)) {
                     val fileRelPath = if (currentRelPath.isEmpty()) name else "$currentRelPath/$name"
                     foundPaths.add(fileRelPath)
@@ -388,13 +392,14 @@ class VaultNoteRepository(
 
                     val baseTitle = name.removeSuffix(".md")
                     val folderName = if (currentRelPath.isEmpty()) GENERAL_DIR else currentRelPath
-                    val lastMod = child.lastModified()
-                    val fileSize = child.length()
+                    val lastMod = child.lastModified
+                    val fileSize = child.size
 
                     var meta = getMetadataForPath(fileRelPath)
                     val isUnchanged = (meta != null && Math.abs(meta.modifiedAt - lastMod) < 2000L && (meta.fileSize <= 0L || meta.fileSize == fileSize))
 
                     val existingCache = cache[fileRelPath]
+                    val childDoc = child.toDocumentFile(context, treeUri)
                     val content = if (isUnchanged) {
                         if (existingCache != null && existingCache.note.content.isNotEmpty()) {
                             existingCache.note.content
@@ -402,7 +407,7 @@ class VaultNoteRepository(
                             readContentFromLocalCache(meta!!.id) ?: ""
                         }
                     } else {
-                        val text = vaultManager.readText(child)
+                        val text = if (childDoc != null) vaultManager.readText(childDoc) else ""
                         val effectiveId = meta?.id ?: java.util.UUID.randomUUID().toString()
                         saveContentToLocalCache(effectiveId, text)
                         text
@@ -510,9 +515,10 @@ class VaultNoteRepository(
                         )
                     }
 
+                    val targetFile = childDoc ?: DocumentFile.fromSingleUri(context, child.uri)
                     val entry = CachedNoteEntry(
                         note = note,
-                        file = child,
+                        file = targetFile,
                         parentDir = dir,
                         relPath = fileRelPath,
                         lastModified = lastMod
@@ -534,12 +540,12 @@ class VaultNoteRepository(
             }.toList()
 
             if (trashedInNormalFolder.isNotEmpty()) {
-                val trashChildren = vaultManager.listChildren(trashDir)
+                val trashChildren = vaultManager.listChildrenFast(trashDir, treeUri)
                 for (entryItem in trashedInNormalFolder) {
                     val oldRel = entryItem.key
                     val oldEntry = entryItem.value
                     val currentFileName = oldEntry.file.name ?: "${oldEntry.note.title}.md"
-                    val nameCollision = trashChildren.any { it.name.equals(currentFileName, ignoreCase = true) }
+                    val nameCollision = trashChildren.any { it.displayName.equals(currentFileName, ignoreCase = true) }
                     val targetTrashName = if (nameCollision) {
                         val base = currentFileName.removeSuffix(".md")
                         "${base}_${System.currentTimeMillis()}.md"
@@ -571,10 +577,10 @@ class VaultNoteRepository(
             }
 
             // Reconcile in-app Trash view with physical .KOTHAPAD/trash/ folder
-            val trashFiles = vaultManager.listChildren(trashDir).filter { it.isFile && it.name?.endsWith(".md", ignoreCase = true) == true }
+            val trashFiles = vaultManager.listChildrenFast(trashDir, treeUri).filter { it.isFile && it.displayName.endsWith(".md", ignoreCase = true) }
             val trashRelPathsOnDisk = mutableSetOf<String>()
             for (tFile in trashFiles) {
-                val tName = tFile.name ?: continue
+                val tName = tFile.displayName
                 val trashRel = "$TRASH_PREFIX$tName"
                 trashRelPathsOnDisk.add(trashRel)
                 foundPaths.add(trashRel)
@@ -586,24 +592,25 @@ class VaultNoteRepository(
                     ?: tName.removeSuffix(".md").replace(Regex("_\\d{10,}$"), "")
 
                 val effectiveMeta = (meta ?: NoteMetadata(
-                    createdAt = tFile.lastModified(),
-                    updatedAt = tFile.lastModified(),
-                    modifiedAt = tFile.lastModified()
+                    createdAt = tFile.lastModified,
+                    updatedAt = tFile.lastModified,
+                    modifiedAt = tFile.lastModified
                 )).copy(
                     path = trashRel,
                     isDeleted = true,
-                    deletedAt = meta?.deletedAt ?: tFile.lastModified(),
+                    deletedAt = meta?.deletedAt ?: tFile.lastModified,
                     originalRelPath = origRel,
                     trashFileName = tName
                 )
                 putMetadata(effectiveMeta)
 
                 val id = getOrCreateIdForPath(trashRel)
-                val content = if (meta != null && Math.abs(meta.modifiedAt - tFile.lastModified()) < 2000L) {
+                val content = if (meta != null && Math.abs(meta.modifiedAt - tFile.lastModified) < 2000L) {
                     val existing = cache[trashRel]?.note?.content
                     if (!existing.isNullOrEmpty()) existing else (readContentFromLocalCache(effectiveMeta.id) ?: "")
                 } else {
-                    val text = vaultManager.readText(tFile)
+                    val tDoc = tFile.toDocumentFile(context, treeUri)
+                    val text = if (tDoc != null) vaultManager.readText(tDoc) else ""
                     saveContentToLocalCache(effectiveMeta.id, text)
                     text
                 }
@@ -625,12 +632,13 @@ class VaultNoteRepository(
                     sessionDurationSec = effectiveMeta.timeSpent.coerceAtLeast(effectiveMeta.sessionDurationSec),
                     sessionCount = effectiveMeta.sessionCount
                 )
+                val tDocFile = tFile.toDocumentFile(context, treeUri) ?: DocumentFile.fromSingleUri(context, tFile.uri)
                 val entry = CachedNoteEntry(
                     note = note,
-                    file = tFile,
+                    file = tDocFile,
                     parentDir = trashDir,
                     relPath = trashRel,
-                    lastModified = tFile.lastModified()
+                    lastModified = tFile.lastModified
                 )
                 cache[trashRel] = entry
             }
@@ -1145,8 +1153,8 @@ class VaultNoteRepository(
             val trashDir = vaultConfigStore.getOrCreateTrashDir(vaultDoc)
             if (trashDir != null) {
                 val currentFileName = currentFile.name ?: "${VaultManager.sanitizeFilename(note.title)}.md"
-                val trashChildren = vaultManager.listChildren(trashDir)
-                val nameCollision = trashChildren.any { it.name.equals(currentFileName, ignoreCase = true) }
+                val trashChildren = vaultManager.listChildrenFast(trashDir)
+                val nameCollision = trashChildren.any { it.displayName.equals(currentFileName, ignoreCase = true) }
                 val targetTrashName = if (nameCollision) {
                     val base = currentFileName.removeSuffix(".md")
                     "${base}_${System.currentTimeMillis()}.md"
@@ -1478,8 +1486,8 @@ class VaultNoteRepository(
             if (vaultDoc != null) {
                 val trashDir = vaultConfigStore.getTrashDir(vaultDoc)
                 if (trashDir != null && trashDir.exists()) {
-                    for (f in vaultManager.listChildren(trashDir)) {
-                        vaultManager.delete(f)
+                    for (f in vaultManager.listChildrenFast(trashDir)) {
+                        f.toDocumentFile(context)?.let { vaultManager.delete(it) }
                     }
                 }
             }
@@ -1523,10 +1531,11 @@ class VaultNoteRepository(
         if (!deleteContainedNotes) {
             // Move contained notes to General first
             val generalDir = vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR) ?: vaultDoc
-            val children = vaultManager.listChildren(dir)
+            val children = vaultManager.listChildrenFast(dir)
             for (ch in children) {
-                if (ch.isFile && ch.name?.endsWith(".md") == true) {
-                    vaultManager.move(ch, dir, generalDir)
+                if (ch.isFile && ch.displayName.endsWith(".md", ignoreCase = true)) {
+                    val chDoc = ch.toDocumentFile(context) ?: continue
+                    vaultManager.move(chDoc, dir, generalDir)
                 }
             }
         }
@@ -1553,8 +1562,9 @@ class VaultNoteRepository(
     suspend fun deleteTemplateFile(template: Stamp): Boolean = withContext(Dispatchers.IO) {
         val vaultDoc = currentVaultDoc ?: return@withContext false
         val templatesDir = vaultManager.findDirRecursive(vaultDoc, TEMPLATES_DIR) ?: return@withContext false
-        val fileName = "${VaultManager.sanitizeFilename(template.label)}.md"
-        val file = templatesDir.findFile(fileName) ?: return@withContext false
+        val cleanName = "${VaultManager.sanitizeFilename(template.label)}.md"
+        val fileEntry = vaultManager.findChildFast(templatesDir, cleanName) ?: return@withContext false
+        val file = fileEntry.toDocumentFile(context) ?: return@withContext false
         vaultManager.delete(file)
     }
 
@@ -1564,13 +1574,14 @@ class VaultNoteRepository(
     ) = withContext(Dispatchers.IO) {
         val vaultDoc = currentVaultDoc ?: return@withContext
         val templatesDir = vaultManager.findDirRecursive(vaultDoc, TEMPLATES_DIR) ?: return@withContext
-        val files = vaultManager.listChildren(templatesDir)
+        val files = vaultManager.listChildrenFast(templatesDir)
         var order = existingTemplates.size
         for (f in files) {
-            if (f.isFile && f.name?.endsWith(".md") == true) {
-                val label = f.name!!.removeSuffix(".md")
+            if (f.isFile && f.displayName.endsWith(".md", ignoreCase = true)) {
+                val label = f.displayName.removeSuffix(".md")
                 if (existingTemplates.none { it.label.equals(label, ignoreCase = true) }) {
-                    val content = vaultManager.readText(f)
+                    val fDoc = f.toDocumentFile(context)
+                    val content = if (fDoc != null) vaultManager.readText(fDoc) else ""
                     val stamp = Stamp(
                         label = label,
                         templateText = content,
@@ -1582,12 +1593,11 @@ class VaultNoteRepository(
             }
         }
         // Bidirectional sync: make sure existing DB templates exist on disk
-        val existingFileNames = files.mapNotNull { it.name }.toSet()
+        val existingFileNames = files.map { it.displayName }.toSet()
         for (st in existingTemplates) {
             val fileName = "${VaultManager.sanitizeFilename(st.label)}.md"
             if (!existingFileNames.contains(fileName)) {
                 saveTemplateFile(st)
-            }
         }
     }
 

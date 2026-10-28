@@ -66,15 +66,18 @@ class VaultMigrationManager(
     suspend fun doesVaultHaveData(vaultDoc: DocumentFile): Boolean = withContext(Dispatchers.IO) {
         try {
             if (vaultConfigStore.hasConfigDir(vaultDoc)) return@withContext true
-            val children = vaultManager.listChildren(vaultDoc)
+            val children = vaultManager.listChildrenFast(vaultDoc)
             for (child in children) {
-                val name = child.name ?: continue
-                if (name.startsWith(".")) continue
+                val name = child.displayName
+                if (name.isBlank() || name.startsWith(".")) continue
                 if (child.isFile && name.endsWith(".md", ignoreCase = true)) return@withContext true
                 if (child.isDirectory && !name.equals(TEMPLATES_DIR, ignoreCase = true)) {
-                    val subChildren = vaultManager.listChildren(child)
-                    if (subChildren.any { it.name?.endsWith(".md", ignoreCase = true) == true }) {
-                        return@withContext true
+                    val subDoc = child.toDocumentFile(context)
+                    if (subDoc != null) {
+                        val subChildren = vaultManager.listChildrenFast(subDoc)
+                        if (subChildren.any { it.isFile && it.displayName.endsWith(".md", ignoreCase = true) }) {
+                            return@withContext true
+                        }
                     }
                 }
             }
@@ -93,12 +96,14 @@ class VaultMigrationManager(
         val snapshot = mutableMapOf<String, ByteArray>()
         try {
             suspend fun snapshotDir(dir: DocumentFile, currentRelPath: String) {
-                val children = vaultManager.listChildren(dir)
+                val children = vaultManager.listChildrenFast(dir)
                 for (child in children) {
-                    val name = child.name ?: continue
+                    val name = child.displayName
+                    if (name.isBlank()) continue
                     val relPath = if (currentRelPath.isEmpty()) name else "$currentRelPath/$name"
                     if (child.isDirectory) {
-                        snapshotDir(child, relPath)
+                        val subDir = child.toDirectoryDocumentFile(context, vaultDoc.uri) ?: child.toDocumentFile(context)
+                        if (subDir != null) snapshotDir(subDir, relPath)
                     } else if (child.isFile) {
                         context.contentResolver.openInputStream(child.uri)?.use { stream ->
                             val buffer = java.io.ByteArrayOutputStream()
@@ -113,12 +118,12 @@ class VaultMigrationManager(
 
         suspend fun performRollback() {
             try {
-                val currentChildren = vaultManager.listChildren(vaultDoc)
+                val currentChildren = vaultManager.listChildrenFast(vaultDoc)
                 for (ch in currentChildren) {
-                    val name = ch.name ?: ""
+                    val name = ch.displayName
                     // Do not delete external hidden folders like .obsidian
                     if (!name.startsWith(".") || name == KOTHAPAD_DIR) {
-                        vaultManager.delete(ch)
+                        ch.toDocumentFile(context)?.let { vaultManager.delete(it) }
                     }
                 }
                 for ((relPath, bytes) in snapshot) {
@@ -138,11 +143,11 @@ class VaultMigrationManager(
             // If user explicitly chose Replace, remove existing non-hidden files and .kothapad
             if (replaceExisting) {
                 onProgress("Clearing previous vault data...")
-                val children = vaultManager.listChildren(vaultDoc)
+                val children = vaultManager.listChildrenFast(vaultDoc)
                 for (child in children) {
-                    val name = child.name ?: continue
+                    val name = child.displayName
                     if (!name.startsWith(".") || name == KOTHAPAD_DIR) {
-                        vaultManager.delete(child)
+                        child.toDocumentFile(context)?.let { vaultManager.delete(it) }
                     }
                 }
             }

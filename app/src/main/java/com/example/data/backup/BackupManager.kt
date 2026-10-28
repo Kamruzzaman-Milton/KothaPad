@@ -88,9 +88,10 @@ object BackupManager {
         ZipOutputStream(BufferedOutputStream(outputStream)).use { zipOut ->
             // Recursively collect all files from the vault
             suspend fun addDirToZip(dir: DocumentFile, currentRelPath: String) {
-                val children = vaultManager.listChildren(dir)
+                val children = vaultManager.listChildrenFast(dir)
                 for (child in children) {
-                    val name = child.name ?: continue
+                    val name = child.displayName
+                    if (name.isBlank()) continue
                     // Skip hidden folders/files other than .KOTHAPAD (e.g. .obsidian, .trash)
                     if (name.startsWith(".") && !com.example.data.vault.VaultConfigStore.isConfigDir(name)) {
                         continue
@@ -98,7 +99,8 @@ object BackupManager {
                     val relPath = if (currentRelPath.isEmpty()) name else "$currentRelPath/$name"
 
                     if (child.isDirectory) {
-                        addDirToZip(child, relPath)
+                        val subDir = child.toDirectoryDocumentFile(context, vaultDoc.uri) ?: child.toDocumentFile(context)
+                        if (subDir != null) addDirToZip(subDir, relPath)
                     } else if (child.isFile) {
                         if (name.endsWith(".md", ignoreCase = true)) {
                             if (relPath.startsWith("Templates/", ignoreCase = true)) {
@@ -382,12 +384,14 @@ object BackupManager {
         val snapshot = mutableMapOf<String, ByteArray>()
         try {
             suspend fun snapshotDir(dir: DocumentFile, currentRelPath: String) {
-                val children = vaultManager.listChildren(dir)
+                val children = vaultManager.listChildrenFast(dir)
                 for (child in children) {
-                    val name = child.name ?: continue
+                    val name = child.displayName
+                    if (name.isBlank()) continue
                     val relPath = if (currentRelPath.isEmpty()) name else "$currentRelPath/$name"
                     if (child.isDirectory) {
-                        snapshotDir(child, relPath)
+                        val subDir = child.toDirectoryDocumentFile(context, vaultDoc.uri) ?: child.toDocumentFile(context)
+                        if (subDir != null) snapshotDir(subDir, relPath)
                     } else if (child.isFile) {
                         context.contentResolver.openInputStream(child.uri)?.use { stream ->
                             val buffer = ByteArrayOutputStream()
@@ -404,11 +408,11 @@ object BackupManager {
         suspend fun performRollback() {
             try {
                 // Clear damaged files (preserving external hidden folders)
-                val currentChildren = vaultManager.listChildren(vaultDoc)
+                val currentChildren = vaultManager.listChildrenFast(vaultDoc)
                 for (ch in currentChildren) {
-                    val name = ch.name ?: ""
+                    val name = ch.displayName
                     if (!name.startsWith(".") || com.example.data.vault.VaultConfigStore.isConfigDir(name)) {
-                        vaultManager.delete(ch)
+                        ch.toDocumentFile(context)?.let { vaultManager.delete(it) }
                     }
                 }
                 // Restore snapshot
@@ -425,11 +429,11 @@ object BackupManager {
 
         try {
             // Delete existing files in vault (preserving external hidden folders like .obsidian)
-            val currentChildren = vaultManager.listChildren(vaultDoc)
+            val currentChildren = vaultManager.listChildrenFast(vaultDoc)
             for (ch in currentChildren) {
-                val name = ch.name ?: ""
+                val name = ch.displayName
                 if (!name.startsWith(".") || com.example.data.vault.VaultConfigStore.isConfigDir(name)) {
-                    vaultManager.delete(ch)
+                    ch.toDocumentFile(context)?.let { vaultManager.delete(it) }
                 }
             }
 
