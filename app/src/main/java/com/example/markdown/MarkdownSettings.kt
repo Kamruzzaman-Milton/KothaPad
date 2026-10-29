@@ -42,7 +42,9 @@ data class MarkdownSettings(
 ) {
     companion object {
         val DEFAULT_FORMAT_BAR_ORDER = listOf(
-            "heading",
+            "h1",
+            "h2",
+            "h3",
             "bold",
             "highlight",
             "numbered_list",
@@ -93,7 +95,16 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
     val settingsFlow: Flow<MarkdownSettings> = preferencesManager.dataStore.data.map { prefs ->
         val order = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ORDER]?.let { str ->
             val list = str.split(",").map { it.trim() }.filter { it.isNotBlank() }
-            val full = list.toMutableList()
+            val full = mutableListOf<String>()
+            list.forEach { id ->
+                if (id == "heading") {
+                    if (!full.contains("h1")) full.add("h1")
+                    if (!full.contains("h2")) full.add("h2")
+                    if (!full.contains("h3")) full.add("h3")
+                } else if (!full.contains(id)) {
+                    full.add(id)
+                }
+            }
             MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER.forEach { id ->
                 if (!full.contains(id)) full.add(id)
             }
@@ -101,7 +112,17 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
         } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER
 
         val buttons = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_BUTTONS]?.let { str ->
-            val set = str.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+            val rawList = str.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            val set = mutableSetOf<String>()
+            rawList.forEach { id ->
+                if (id == "heading") {
+                    set.add("h1")
+                    set.add("h2")
+                    set.add("h3")
+                } else {
+                    set.add(id)
+                }
+            }
             order.filter { set.contains(it) }
         } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS
 
@@ -137,7 +158,16 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
         preferencesManager.dataStore.edit { prefs ->
             val order = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ORDER]?.let { str ->
                 val list = str.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                val full = list.toMutableList()
+                val full = mutableListOf<String>()
+                list.forEach { id ->
+                    if (id == "heading") {
+                        if (!full.contains("h1")) full.add("h1")
+                        if (!full.contains("h2")) full.add("h2")
+                        if (!full.contains("h3")) full.add("h3")
+                    } else if (!full.contains(id)) {
+                        full.add(id)
+                    }
+                }
                 MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER.forEach { id ->
                     if (!full.contains(id)) full.add(id)
                 }
@@ -145,7 +175,17 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
             } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER
 
             val buttons = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_BUTTONS]?.let { str ->
-                val set = str.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+                val rawList = str.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                val set = mutableSetOf<String>()
+                rawList.forEach { id ->
+                    if (id == "heading") {
+                        set.add("h1")
+                        set.add("h2")
+                        set.add("h3")
+                    } else {
+                        set.add(id)
+                    }
+                }
                 order.filter { set.contains(it) }
             } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS
 

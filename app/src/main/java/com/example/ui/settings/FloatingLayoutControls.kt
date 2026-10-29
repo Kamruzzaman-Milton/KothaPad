@@ -267,7 +267,16 @@ fun FormatBarButtonsReorderControl(
     val allDefMap = remember { getFormatBarButtonDefinitions().associateBy { it.id } }
 
     val currentOrder = remember(formatBarOrder) {
-        val list = formatBarOrder.toMutableList()
+        val list = mutableListOf<String>()
+        formatBarOrder.forEach { id ->
+            if (id == "heading") {
+                if (!list.contains("h1")) list.add("h1")
+                if (!list.contains("h2")) list.add("h2")
+                if (!list.contains("h3")) list.add("h3")
+            } else if (!list.contains(id)) {
+                list.add(id)
+            }
+        }
         MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER.forEach { id ->
             if (!list.contains(id)) list.add(id)
         }

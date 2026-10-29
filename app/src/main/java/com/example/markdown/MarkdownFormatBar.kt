@@ -13,15 +13,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.BorderColor
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.FormatItalic
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.FormatStrikethrough
-import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -118,8 +119,47 @@ data class FormatBarButtonDef(
 fun getFormatBarButtonDefinitions(): List<FormatBarButtonDef> {
     return listOf(
         FormatBarButtonDef(
+            id = "h1",
+            label = "Heading 1",
+            contentDescription = "Heading 1 (#)",
+            renderIcon = {
+                Text(
+                    text = "H1",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        ),
+        FormatBarButtonDef(
+            id = "h2",
+            label = "Heading 2",
+            contentDescription = "Heading 2 (##)",
+            renderIcon = {
+                Text(
+                    text = "H2",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        ),
+        FormatBarButtonDef(
+            id = "h3",
+            label = "Heading 3",
+            contentDescription = "Heading 3 (###)",
+            renderIcon = {
+                Text(
+                    text = "H3",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        ),
+        FormatBarButtonDef(
             id = "heading",
-            label = "Heading",
+            label = "Heading (Cycle)",
             contentDescription = "Heading (cycles H1 to H3)",
             renderIcon = {
                 Text(
@@ -146,12 +186,12 @@ fun getFormatBarButtonDefinitions(): List<FormatBarButtonDef> {
         FormatBarButtonDef(
             id = "highlight",
             label = "Highlight",
-            contentDescription = "Highlight",
+            contentDescription = "Highlight (==text==)",
             renderIcon = {
                 Icon(
-                    imageVector = Icons.Default.Highlight,
+                    imageVector = Icons.Default.BorderColor,
                     contentDescription = "Highlight",
-                    tint = HighlightGold,
+                    tint = Color(0xFFFFD54F),
                     modifier = Modifier.size(20.dp)
                 )
             }

@@ -14,6 +14,9 @@ object MarkdownActions {
 
     fun applyActionById(id: String, value: TextFieldValue): TextFieldValue {
         return when (id) {
+            "h1" -> applyHeadingLevel(value, 1)
+            "h2" -> applyHeadingLevel(value, 2)
+            "h3" -> applyHeadingLevel(value, 3)
             "heading" -> cycleHeading(value)
             "bold" -> applyBold(value)
             "italic" -> applyItalic(value)
@@ -29,6 +32,41 @@ object MarkdownActions {
             "horizontal_rule" -> applyHorizontalRule(value)
             else -> value
         }
+    }
+
+    /**
+     * Applies a specific heading level (1, 2, or 3) to the current line.
+     * If the line already has this exact heading level, it toggles it off (returns to normal text).
+     * If the line has a different heading level (or none), it updates the prefix to the requested level.
+     */
+    fun applyHeadingLevel(value: TextFieldValue, targetLevel: Int): TextFieldValue {
+        val text = value.text
+        val cursor = value.selection.start.coerceIn(0, text.length)
+        val lineStart = text.lastIndexOf('\n', cursor - 1).let { if (it == -1) 0 else it + 1 }
+        val lineEnd = text.indexOf('\n', cursor).let { if (it == -1) text.length else it }
+        val currentLine = text.substring(lineStart, lineEnd)
+
+        val targetPrefix = "#".repeat(targetLevel.coerceIn(1, 6)) + " "
+        val headingRegex = Regex("^(#{1,6})\\s*")
+        val match = headingRegex.find(currentLine)
+
+        val (newLine, delta) = when {
+            currentLine.startsWith(targetPrefix) -> {
+                val stripped = currentLine.removePrefix(targetPrefix)
+                Pair(stripped, -targetPrefix.length)
+            }
+            match != null -> {
+                val stripped = currentLine.substring(match.value.length)
+                Pair(targetPrefix + stripped, targetPrefix.length - match.value.length)
+            }
+            else -> {
+                Pair(targetPrefix + currentLine, targetPrefix.length)
+            }
+        }
+
+        val newText = text.substring(0, lineStart) + newLine + text.substring(lineEnd)
+        val newCursor = (cursor + delta).coerceIn(lineStart, lineStart + newLine.length)
+        return TextFieldValue(newText, TextRange(newCursor))
     }
 
     /**

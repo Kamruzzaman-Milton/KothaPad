@@ -1,9 +1,11 @@
 package com.example.data.vault
 
 import android.content.Context
+import androidx.datastore.preferences.core.edit
 import androidx.documentfile.provider.DocumentFile
 import com.example.data.model.FloatingLayoutSettings
 import com.example.data.preferences.PreferencesManager
+import com.example.markdown.MarkdownSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -145,12 +147,12 @@ data class AppSettings(
     val mdAutoContinueLists: Boolean = true,
     val mdFormatBarEnabled: Boolean = true,
     val mdFormatBarButtons: List<String> = listOf(
-        "heading", "bold", "highlight", "numbered_list", "checkbox", "horizontal_rule",
+        "h1", "h2", "h3", "bold", "highlight", "numbered_list", "checkbox", "horizontal_rule",
         "italic", "strikethrough", "bullet_list", "quote",
         "inline_code", "code_block", "link"
     ),
     val mdFormatBarOrder: List<String> = listOf(
-        "heading", "bold", "highlight", "numbered_list", "checkbox", "horizontal_rule",
+        "h1", "h2", "h3", "bold", "highlight", "numbered_list", "checkbox", "horizontal_rule",
         "italic", "strikethrough", "bullet_list", "quote",
         "inline_code", "code_block", "link"
     ),
@@ -229,6 +231,7 @@ class SettingsRepository(
 
     private suspend fun seedFromPreferencesManager(pm: PreferencesManager): AppSettings = withContext(Dispatchers.IO) {
         try {
+            val prefs = pm.dataStore.data.first()
             val floatings = pm.floatingLayoutSettings.first()
             AppSettings(
                 dictationMode = pm.dictationMode.first(),
@@ -315,7 +318,29 @@ class SettingsRepository(
                 formatBarVisibleDuringDictation = floatings.formatBarVisibleDuringDictation,
                 formatBarVisibleWithoutCursor = floatings.formatBarVisibleWithoutCursor,
                 waveformScale = floatings.waveformScale,
-                waveformShow = floatings.showWaveform
+                waveformShow = floatings.showWaveform,
+                mdEnabled = prefs[MarkdownSettings.KEY_MD_ENABLED] ?: true,
+                mdHeadings = prefs[MarkdownSettings.KEY_MD_HEADINGS] ?: true,
+                mdBoldItalic = prefs[MarkdownSettings.KEY_MD_BOLD_ITALIC] ?: true,
+                mdStrikethrough = prefs[MarkdownSettings.KEY_MD_STRIKETHROUGH] ?: true,
+                mdHighlight = prefs[MarkdownSettings.KEY_MD_HIGHLIGHT] ?: true,
+                mdInlineCode = prefs[MarkdownSettings.KEY_MD_INLINE_CODE] ?: true,
+                mdCodeBlocks = prefs[MarkdownSettings.KEY_MD_CODE_BLOCKS] ?: true,
+                mdBlockquotes = prefs[MarkdownSettings.KEY_MD_BLOCKQUOTES] ?: true,
+                mdLists = prefs[MarkdownSettings.KEY_MD_LISTS] ?: true,
+                mdTaskLists = prefs[MarkdownSettings.KEY_MD_TASK_LISTS] ?: true,
+                mdLinks = prefs[MarkdownSettings.KEY_MD_LINKS] ?: true,
+                mdTables = prefs[MarkdownSettings.KEY_MD_TABLES] ?: true,
+                mdHorizontalRule = prefs[MarkdownSettings.KEY_MD_HORIZONTAL_RULE] ?: true,
+                mdReadingFontScale = prefs[MarkdownSettings.KEY_MD_READING_FONT_SCALE] ?: 1.0f,
+                mdLiveStyling = prefs[MarkdownSettings.KEY_MD_LIVE_STYLING] ?: true,
+                mdDimSyntax = prefs[MarkdownSettings.KEY_MD_DIM_SYNTAX] ?: true,
+                mdHeadingScale = prefs[MarkdownSettings.KEY_MD_HEADING_SCALE] ?: 1.0f,
+                mdCodeMonospace = prefs[MarkdownSettings.KEY_MD_CODE_MONOSPACE] ?: true,
+                mdAutoContinueLists = prefs[MarkdownSettings.KEY_MD_AUTO_CONTINUE_LISTS] ?: true,
+                mdFormatBarButtons = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_BUTTONS]?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }?.flatMap { if (it == "heading") listOf("h1", "h2", "h3") else listOf(it) } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_BUTTONS,
+                mdFormatBarOrder = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ORDER]?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }?.flatMap { if (it == "heading") listOf("h1", "h2", "h3") else listOf(it) } ?: MarkdownSettings.DEFAULT_FORMAT_BAR_ORDER,
+                mdTappableCheckboxes = prefs[MarkdownSettings.KEY_MD_TAPPABLE_CHECKBOXES] ?: true
             )
         } catch (_: Exception) {
             AppSettings()
@@ -421,6 +446,32 @@ class SettingsRepository(
             pm.setFormatBarVisibleWithoutCursor(s.formatBarVisibleWithoutCursor)
             pm.setWaveformScale(s.waveformScale)
             pm.setWaveformShow(s.waveformShow)
+
+            pm.dataStore.edit { prefs ->
+                prefs[MarkdownSettings.KEY_MD_ENABLED] = s.mdEnabled
+                prefs[MarkdownSettings.KEY_MD_HEADINGS] = s.mdHeadings
+                prefs[MarkdownSettings.KEY_MD_BOLD_ITALIC] = s.mdBoldItalic
+                prefs[MarkdownSettings.KEY_MD_STRIKETHROUGH] = s.mdStrikethrough
+                prefs[MarkdownSettings.KEY_MD_HIGHLIGHT] = s.mdHighlight
+                prefs[MarkdownSettings.KEY_MD_INLINE_CODE] = s.mdInlineCode
+                prefs[MarkdownSettings.KEY_MD_CODE_BLOCKS] = s.mdCodeBlocks
+                prefs[MarkdownSettings.KEY_MD_BLOCKQUOTES] = s.mdBlockquotes
+                prefs[MarkdownSettings.KEY_MD_LISTS] = s.mdLists
+                prefs[MarkdownSettings.KEY_MD_TASK_LISTS] = s.mdTaskLists
+                prefs[MarkdownSettings.KEY_MD_LINKS] = s.mdLinks
+                prefs[MarkdownSettings.KEY_MD_TABLES] = s.mdTables
+                prefs[MarkdownSettings.KEY_MD_HORIZONTAL_RULE] = s.mdHorizontalRule
+                prefs[MarkdownSettings.KEY_MD_READING_FONT_SCALE] = s.mdReadingFontScale
+                prefs[MarkdownSettings.KEY_MD_LIVE_STYLING] = s.mdLiveStyling
+                prefs[MarkdownSettings.KEY_MD_DIM_SYNTAX] = s.mdDimSyntax
+                prefs[MarkdownSettings.KEY_MD_HEADING_SCALE] = s.mdHeadingScale
+                prefs[MarkdownSettings.KEY_MD_CODE_MONOSPACE] = s.mdCodeMonospace
+                prefs[MarkdownSettings.KEY_MD_AUTO_CONTINUE_LISTS] = s.mdAutoContinueLists
+                prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ENABLED] = s.mdFormatBarEnabled
+                prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_BUTTONS] = s.mdFormatBarButtons.joinToString(",")
+                prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ORDER] = s.mdFormatBarOrder.joinToString(",")
+                prefs[MarkdownSettings.KEY_MD_TAPPABLE_CHECKBOXES] = s.mdTappableCheckboxes
+            }
         } catch (_: Exception) {
         } finally {
             isSyncingWithDataStore = false
