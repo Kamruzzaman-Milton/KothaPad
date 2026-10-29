@@ -406,6 +406,9 @@ class VaultNoteRepository(
         loadMetadata(vaultDoc)
         loadWorkspace(vaultDoc)
 
+        // Clean up or consolidate any stray markdown files accidentally saved in vault root
+        consolidateStrayRootFiles(vaultDoc)
+
         // Perform fast vault scan to index files without blocking UI startup
         startVaultScan(vaultDoc)
     }
@@ -441,7 +444,142 @@ class VaultNoteRepository(
         currentlyEditingNoteId = null
         loadMetadata(vaultDoc)
         loadWorkspace(vaultDoc)
+        consolidateStrayRootFiles(vaultDoc)
         startVaultScan(vaultDoc)
+    }
+
+    suspend fun consolidateStrayRootFiles(vaultDoc: DocumentFile) = withContext(Dispatchers.IO) {
+        try {
+            val treeUri = vaultManager.getVaultTreeUri() ?: vaultDoc.uri
+            val rootChildren = vaultManager.listChildrenFast(vaultDoc)
+            val rootMdFiles = rootChildren.filter { it.isFile && it.displayName.endsWith(".md", ignoreCase = true) }
+            val dailyJournalRegex = Regex("^\\d{4}-\\d{2}-\\d{2}", RegexOption.IGNORE_CASE)
+
+            var metadataModified = false
+
+            // 1. Process stray files in vault root
+            for (fileEntry in rootMdFiles) {
+                val fileName = fileEntry.displayName
+                val rootFileDoc = fileEntry.toDocumentFile(context, treeUri) ?: continue
+
+                // Check 1: Daily Journal notes in root
+                if (dailyJournalRegex.containsMatchIn(fileName)) {
+                    val dailyDir = vaultManager.getOrCreateDirRecursive(vaultDoc, DAILY_JOURNALS_DIR)
+                    if (dailyDir != null) {
+                        val dailyChildren = vaultManager.listChildrenFast(dailyDir, treeUri)
+                        val duplicateInDaily = dailyChildren.firstOrNull { it.isFile && it.displayName.equals(fileName, ignoreCase = true) }
+                        if (duplicateInDaily != null) {
+                            vaultManager.delete(rootFileDoc)
+                        } else {
+                            vaultManager.move(rootFileDoc, vaultDoc, dailyDir)
+                        }
+                        removeMetadataForPath(fileName)
+                        cache.remove(fileName)
+                        removeIdForPath(fileName)
+                        metadataModified = true
+                    }
+                    continue
+                }
+
+                // Check 2: ⚡ KothaPad features or tips duplicate in root
+                if (fileName.contains("KothaPad features", ignoreCase = true) || fileName.contains("KothaPad Tips", ignoreCase = true)) {
+                    val generalDir = vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR)
+                    if (generalDir != null) {
+                        val generalChildren = vaultManager.listChildrenFast(generalDir, treeUri)
+                        val duplicateInGeneral = generalChildren.firstOrNull { it.isFile && it.displayName.contains("features", ignoreCase = true) }
+                        if (duplicateInGeneral != null) {
+                            vaultManager.delete(rootFileDoc)
+                        } else {
+                            vaultManager.move(rootFileDoc, vaultDoc, generalDir)
+                        }
+                        removeMetadataForPath(fileName)
+                        cache.remove(fileName)
+                        removeIdForPath(fileName)
+                        metadataModified = true
+                    }
+                    continue
+                }
+
+                // Check 3: Check against metadata: if metadata says this note belongs to a folder
+                val meta = getMetadataForPath(fileName)
+                    ?: metadataByIdMap.values.firstOrNull { it.path.endsWith("/$fileName", ignoreCase = true) }
+                if (meta != null && meta.path.contains("/")) {
+                    val destFolder = meta.path.substringBeforeLast("/")
+                    val targetDir = vaultManager.getOrCreateDirRecursive(vaultDoc, destFolder)
+                    if (targetDir != null) {
+                        val folderChildren = vaultManager.listChildrenFast(targetDir, treeUri)
+                        val duplicateInFolder = folderChildren.firstOrNull { it.isFile && it.displayName.equals(fileName, ignoreCase = true) }
+                        if (duplicateInFolder != null) {
+                            vaultManager.delete(rootFileDoc)
+                        } else {
+                            vaultManager.move(rootFileDoc, vaultDoc, targetDir)
+                        }
+                        removeMetadataForPath(fileName)
+                        cache.remove(fileName)
+                        removeIdForPath(fileName)
+                        metadataModified = true
+                    }
+                }
+            }
+
+            // 2. Also check General folder for any misplaced Daily Journal files
+            val generalDir = vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR)
+            val dailyDir = vaultManager.getOrCreateDirRecursive(vaultDoc, DAILY_JOURNALS_DIR)
+            if (generalDir != null && dailyDir != null) {
+                val generalChildren = vaultManager.listChildrenFast(generalDir, treeUri)
+                val generalDailyFiles = generalChildren.filter { it.isFile && dailyJournalRegex.containsMatchIn(it.displayName) }
+                val dailyChildren = vaultManager.listChildrenFast(dailyDir, treeUri)
+                for (gFile in generalDailyFiles) {
+                    val gDoc = gFile.toDocumentFile(context, treeUri) ?: continue
+                    val duplicateInDaily = dailyChildren.firstOrNull { it.isFile && it.displayName.equals(gFile.displayName, ignoreCase = true) }
+                    val gRelPath = "$GENERAL_DIR/${gFile.displayName}"
+                    if (duplicateInDaily != null) {
+                        vaultManager.delete(gDoc)
+                    } else {
+                        vaultManager.move(gDoc, generalDir, dailyDir)
+                    }
+                    removeMetadataForPath(gRelPath)
+                    cache.remove(gRelPath)
+                    removeIdForPath(gRelPath)
+                    metadataModified = true
+                }
+            }
+
+            // 3. Clean up metadataByIdMap: ensure all date-titled notes have Daily Journals path
+            val keys = ArrayList(metadataByIdMap.keys)
+            for (id in keys) {
+                val meta = metadataByIdMap[id] ?: continue
+                val base = meta.path.substringAfterLast("/").removeSuffix(".md")
+                if (dailyJournalRegex.containsMatchIn(base)) {
+                    val expectedPath = "$DAILY_JOURNALS_DIR/$base.md"
+                    if (!meta.path.equals(expectedPath, ignoreCase = true)) {
+                        val existingDailyMeta = getMetadataForPath(expectedPath)
+                        if (existingDailyMeta != null && existingDailyMeta.id != id) {
+                            val merged = existingDailyMeta.copy(
+                                sessionCount = maxOf(existingDailyMeta.sessionCount, meta.sessionCount),
+                                timeSpent = maxOf(existingDailyMeta.timeSpent, meta.timeSpent),
+                                sessionDurationSec = maxOf(existingDailyMeta.sessionDurationSec, meta.sessionDurationSec)
+                            )
+                            putMetadata(merged)
+                            metadataByIdMap.remove(id)
+                            pathIndex.remove(meta.path)
+                            cache.remove(meta.path)
+                        } else {
+                            pathIndex.remove(meta.path)
+                            cache.remove(meta.path)
+                            putMetadata(meta.copy(path = expectedPath))
+                            updateIdPath(meta.path, expectedPath)
+                        }
+                        metadataModified = true
+                    }
+                }
+            }
+
+            vaultManager.clearDirCache()
+            if (metadataModified) {
+                saveMetadata()
+            }
+        } catch (_: Exception) {}
     }
 
     private suspend fun scanVaultRecursive(vaultDoc: DocumentFile) = withContext(Dispatchers.IO) {
@@ -480,7 +618,8 @@ class VaultNoteRepository(
                     }
 
                     val baseTitle = name.removeSuffix(".md")
-                    val folderName = if (currentRelPath.isEmpty()) GENERAL_DIR else currentRelPath
+                    val isDailyJournal = Regex("^\\d{4}-\\d{2}-\\d{2}").containsMatchIn(baseTitle)
+                    val folderName = if (isDailyJournal) DAILY_JOURNALS_DIR else if (currentRelPath.isEmpty()) GENERAL_DIR else currentRelPath
                     val lastMod = child.lastModified
                     val fileSize = child.size
 
@@ -969,7 +1108,10 @@ class VaultNoteRepository(
                 } else {
                     meta.path.substringAfterLast("/").removeSuffix(".md")
                 }
-                val folderName = if (isTrash) {
+                val isDailyJournal = Regex("""^\d{4}-\d{2}-\d{2}""").containsMatchIn(baseTitle)
+                val folderName = if (isDailyJournal) {
+                    DAILY_JOURNALS_DIR
+                } else if (isTrash) {
                     val orig = meta.originalRelPath ?: ""
                     if (orig.contains("/")) orig.substringBeforeLast("/") else GENERAL_DIR
                 } else {
@@ -1284,14 +1426,14 @@ class VaultNoteRepository(
         if (entry == null) {
             val guessedRel1 = "${note.folder}/${note.title}.md".trimStart('/')
             val guessedRel2 = "${note.folder}/${note.title}".trimStart('/')
-            val guessedRel3 = if (note.folder.equals(GENERAL_DIR, ignoreCase = true)) "${note.title}.md" else null
-            entry = cache[guessedRel1] ?: cache[guessedRel2] ?: (guessedRel3?.let { cache[it] })
+            val guessedRel3 = "${note.title}.md"
+            entry = cache[guessedRel1] ?: cache[guessedRel2] ?: cache[guessedRel3]
         }
 
         if (entry == null) {
             entry = cache.values.firstOrNull {
                 it.note.title.equals(note.title, ignoreCase = true) &&
-                it.note.folder.equals(note.folder, ignoreCase = true)
+                (it.note.folder.equals(note.folder, ignoreCase = true) || it.relPath.equals("${note.title}.md", ignoreCase = true))
             }
         }
 

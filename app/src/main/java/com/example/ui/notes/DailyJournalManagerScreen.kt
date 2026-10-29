@@ -131,6 +131,15 @@ private fun precomputeMonthData(ym: YearMonth): MonthCalendarData {
     )
 }
 
+fun isDailyJournalNote(note: Note): Boolean {
+    val f = note.folder.trim()
+    if (f.equals("Daily Journals", ignoreCase = true) || f.equals("Daily Journal", ignoreCase = true)) {
+        return true
+    }
+    val title = note.title.trim()
+    return Regex("""^\d{4}-\d{2}-\d{2}""").containsMatchIn(title)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyJournalManagerScreen(
@@ -140,10 +149,10 @@ fun DailyJournalManagerScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Only notes in "Daily Journals" folder that are not trashed
+    // Only notes in "Daily Journals" folder or with journal date titles that are not trashed
     val journalNotes = remember(allNotes) {
         allNotes.filter {
-            it.folder.trim().equals("Daily Journals", ignoreCase = true) && !it.isDeleted
+            !it.isDeleted && isDailyJournalNote(it)
         }
     }
 

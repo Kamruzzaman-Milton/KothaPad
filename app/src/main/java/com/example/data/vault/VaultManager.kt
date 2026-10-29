@@ -430,7 +430,14 @@ class VaultManager(private val context: Context) {
             if (treeUri != null) {
                 val existing = findChildFast(parentDir, cleanName, treeUri)
                 if (existing != null && existing.isDirectory) {
-                    return@withContext parentDir.findFile(cleanName)
+                    val dirDoc = existing.toDirectoryDocumentFile(context, treeUri)
+                    if (dirDoc != null && dirDoc.exists()) {
+                        return@withContext dirDoc
+                    }
+                    val found = parentDir.findFile(cleanName)
+                    if (found != null && found.isDirectory) {
+                        return@withContext found
+                    }
                 }
             } else {
                 val existing = parentDir.findFile(cleanName)
@@ -477,7 +484,8 @@ class VaultManager(private val context: Context) {
             if (treeUri != null) {
                 val entry = findChildFast(current, cleanName, treeUri)
                 if (entry != null && entry.isDirectory) {
-                    current = current.findFile(cleanName) ?: return@withContext null
+                    val dirDoc = entry.toDirectoryDocumentFile(context, treeUri)
+                    current = (if (dirDoc != null && dirDoc.exists()) dirDoc else current.findFile(cleanName)) ?: return@withContext null
                 } else {
                     return@withContext null
                 }

@@ -2124,7 +2124,7 @@ class EditorViewModel(
     fun getJournalNotesSortedChronologically(): List<Pair<LocalDate, Note>> {
         return allNotes.value
             .filter {
-                it.folder.trim().equals("Daily Journals", ignoreCase = true) && !it.isDeleted
+                !it.isDeleted && (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journals", ignoreCase = true) || it.folder.trim().equals("Daily Journal", ignoreCase = true))
             }
             .mapNotNull { note ->
                 val date = com.example.ui.notes.extractNoteJournalDate(note)
@@ -2187,8 +2187,8 @@ class EditorViewModel(
 
     fun findDailyJournalNoteForDate(date: LocalDate): Note? {
         return allNotes.value.firstOrNull {
-            it.folder.trim().equals("Daily Journals", ignoreCase = true) &&
-                    !it.isDeleted &&
+            !it.isDeleted &&
+                    (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journals", ignoreCase = true) || it.folder.trim().equals("Daily Journal", ignoreCase = true)) &&
                     com.example.ui.notes.extractNoteJournalDate(it) == date
         }
     }
@@ -2230,8 +2230,8 @@ class EditorViewModel(
         flushAutoSave()
         viewModelScope.launch(Dispatchers.IO) {
             val currentExisting = noteRepository.allNotes.first().firstOrNull {
-                it.folder.trim().equals("Daily Journals", ignoreCase = true) &&
-                        !it.isDeleted &&
+                !it.isDeleted &&
+                        (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journals", ignoreCase = true) || it.folder.trim().equals("Daily Journal", ignoreCase = true)) &&
                         com.example.ui.notes.extractNoteJournalDate(it) == date
             }
             if (currentExisting != null) {

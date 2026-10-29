@@ -387,18 +387,29 @@ fun NotesManagerScreen(
     }
 
     val notesByFolder = remember(sortedFilteredNotes) {
-        sortedFilteredNotes.groupBy { it.folder.trim().ifBlank { "General" }.lowercase() }
+        sortedFilteredNotes.groupBy { note ->
+            if (com.example.ui.notes.isDailyJournalNote(note)) {
+                "daily journals"
+            } else {
+                note.folder.trim().ifBlank { "General" }.lowercase()
+            }
+        }
     }
 
     val rootNotes = remember(sortedFilteredNotes, allTreePaths) {
         sortedFilteredNotes.filter { note ->
             val f = note.folder.trim()
-            f.isBlank() || (!allTreePaths.any { it.equals(f, ignoreCase = true) })
+            !com.example.ui.notes.isDailyJournalNote(note) && (f.isBlank() || (!allTreePaths.any { it.equals(f, ignoreCase = true) }))
         }
     }
 
     fun getSortedNotesForFolder(folderPath: String): List<Note> {
-        return notesByFolder[folderPath.trim().ifBlank { "General" }.lowercase()] ?: emptyList()
+        val key = if (folderPath.trim().equals("Daily Journals", ignoreCase = true) || folderPath.trim().equals("Daily Journal", ignoreCase = true)) {
+            "daily journals"
+        } else {
+            folderPath.trim().ifBlank { "General" }.lowercase()
+        }
+        return notesByFolder[key] ?: emptyList()
     }
 
     // Check if all folders are currently expanded

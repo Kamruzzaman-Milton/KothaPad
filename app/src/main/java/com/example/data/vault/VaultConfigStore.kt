@@ -179,6 +179,8 @@ class VaultConfigStore(
             val children = fastLister.listChildrenFast(configDir, treeUri)
             val existing = children.firstOrNull { it.isDirectory && it.displayName.equals(TRASH_DIR_NAME, ignoreCase = true) }
             if (existing != null) {
+                val dirDoc = existing.toDirectoryDocumentFile(context, treeUri)
+                if (dirDoc != null && dirDoc.exists()) return@withContext dirDoc
                 val doc = configDir.findFile(existing.displayName)
                 if (doc != null && doc.exists()) return@withContext doc
             }
@@ -195,6 +197,8 @@ class VaultConfigStore(
             val children = fastLister.listChildrenFast(configDir, treeUri)
             val existing = children.firstOrNull { it.isDirectory && it.displayName.equals(TRASH_DIR_NAME, ignoreCase = true) }
             if (existing != null) {
+                val dirDoc = existing.toDirectoryDocumentFile(context, treeUri)
+                if (dirDoc != null && dirDoc.exists()) return@withContext dirDoc
                 configDir.findFile(existing.displayName)
             } else {
                 null
@@ -213,6 +217,10 @@ class VaultConfigStore(
         val existing = exactMatch ?: caseMatch
 
         if (existing != null) {
+            val dirDoc = existing.toDirectoryDocumentFile(context, treeUri)
+            if (dirDoc != null && dirDoc.exists()) {
+                return dirDoc
+            }
             val existingDoc = vaultRoot.findFile(existing.displayName)
             if (existingDoc != null && existingDoc.exists()) {
                 return existingDoc
@@ -242,7 +250,7 @@ class VaultConfigStore(
         val children = fastLister.listChildrenFast(configDir, treeUri)
         val existing = children.firstOrNull { it.isFile && it.displayName.equals(name, ignoreCase = true) }
         if (existing != null) {
-            val doc = configDir.findFile(existing.displayName) ?: existing.toDocumentFile(context)
+            val doc = existing.toDocumentFile(context, treeUri) ?: configDir.findFile(existing.displayName)
             if (doc != null && doc.exists()) {
                 return doc
             }
@@ -316,11 +324,22 @@ class VaultConfigStore(
                     safeModeFiles[fileName] = false
                     return@withContext json
                 } catch (_: Exception) {
-                    // Corrupted JSON inside an existing file
+                    // Corrupted JSON inside an existing non-empty file
                 }
+            } else {
+                // If the file exists but is blank (0 bytes), it is new/empty, not corrupted!
+                val defaultJson = JSONObject().apply {
+                    put("schemaVersion", 1)
+                    if (fileName == FILE_NOTES_META) {
+                        put("notes", JSONObject())
+                    }
+                }
+                jsonCache[fileName] = defaultJson
+                safeModeFiles[fileName] = false
+                return@withContext defaultJson
             }
 
-            // CRITICAL: File exists on disk, but is empty or corrupted! NEVER OVERWRITE.
+            // CRITICAL: File exists on disk and is non-empty, but corrupted! NEVER OVERWRITE.
             safeModeFiles[fileName] = true
 
             // 1. Preserve corrupt copy with timestamp
