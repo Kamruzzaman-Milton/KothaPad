@@ -24,9 +24,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import com.example.ui.navigation.horizontalSwipeNavigation
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -156,6 +159,7 @@ fun EditorScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    var isTextFieldFocused by remember { mutableStateOf(false) }
 
     // Note Manager state
     val isNoteManagerOpen by viewModel.isNoteManagerOpen.collectAsState()
@@ -275,7 +279,7 @@ fun EditorScreen(
     val builtInKeyboardVisible = userWantsBuiltIn
 
     // Handle switching between In-App Custom Keyboard and System Keyboard
-    LaunchedEffect(userWantsBuiltIn, isReadingMode) {
+    LaunchedEffect(userWantsBuiltIn) {
         if (isReadingMode) {
             keyboardController?.hide()
             val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
@@ -286,24 +290,28 @@ fun EditorScreen(
             return@LaunchedEffect
         }
         if (!userWantsBuiltIn) {
-            // Switching to System Keyboard: request focus and show soft input
-            try { focusRequester.requestFocus() } catch (_: Exception) {}
-            keyboardController?.show()
-            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-            val activity = context as? Activity
-            val view = activity?.currentFocus ?: activity?.window?.decorView
-            if (view != null) {
-                imm?.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
+            // Switching to System Keyboard: request focus and show soft input only if text field is already active
+            if (isTextFieldFocused) {
+                try { focusRequester.requestFocus() } catch (_: Exception) {}
+                keyboardController?.show()
+                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                val activity = context as? Activity
+                val view = activity?.currentFocus ?: activity?.window?.decorView
+                if (view != null) {
+                    imm?.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
+                }
             }
         } else {
-            // Switching to Custom In-App Keyboard: hide system keyboard and retain editor focus
+            // Switching to Custom In-App Keyboard: hide system keyboard and retain editor focus if already active
             keyboardController?.hide()
             val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
             val windowToken = (context as? Activity)?.window?.decorView?.windowToken
             if (windowToken != null) {
                 imm?.hideSoftInputFromWindow(windowToken, 0)
             }
-            try { focusRequester.requestFocus() } catch (_: Exception) {}
+            if (isTextFieldFocused) {
+                try { focusRequester.requestFocus() } catch (_: Exception) {}
+            }
         }
     }
 
@@ -568,6 +576,10 @@ fun EditorScreen(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
                             ) {
+                                val textLen = textFieldValue.text.length
+                                viewModel.updateTextFieldValue(
+                                    textFieldValue.copy(selection = TextRange(textLen))
+                                )
                                 try { focusRequester.requestFocus() } catch (_: Exception) {}
                                 if (!userWantsBuiltIn) {
                                     keyboardController?.show()
@@ -589,44 +601,38 @@ fun EditorScreen(
                     (viewportMaxHeight * 0.65f).coerceAtLeast(200.dp)
                 }
                 val scrollState = rememberScrollState()
+                val isScrollDragged by scrollState.interactionSource.collectIsDraggedAsState()
                 var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
                 var textFieldCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-                var isTextFieldFocused by remember { mutableStateOf(false) }
+                var bottomControlsHeightPx by remember { mutableFloatStateOf(0f) }
 
-                var savedReadingScrollPosition by remember { mutableStateOf<Int?>(null) }
-                var shouldPreserveReadingScroll by remember { mutableStateOf(false) }
+                var lastScrollPosition by remember { mutableIntStateOf(0) }
+                var isModeTransitioning by remember { mutableStateOf(false) }
 
-                // Continuously track the scroll position while the user is reading in Reading Mode
-                LaunchedEffect(isReadingMode, scrollState.value) {
-                    if (isReadingMode) {
-                        savedReadingScrollPosition = scrollState.value
-                        shouldPreserveReadingScroll = true
+                // Continuously track scroll position when not transitioning modes
+                LaunchedEffect(scrollState.value) {
+                    if (!isModeTransitioning) {
+                        lastScrollPosition = scrollState.value
                     }
                 }
 
-                // When switching back from Reading Mode to Normal Editing Mode,
-                // restore and preserve the exact scroll position from Reading Mode.
+                // Preserve exact visible scroll position when switching modes
                 LaunchedEffect(isReadingMode) {
-                    if (!isReadingMode && shouldPreserveReadingScroll && savedReadingScrollPosition != null) {
-                        val target = savedReadingScrollPosition!!
-                        snapshotFlow { scrollState.maxValue }
-                            .filter { it > 0 }
-                            .first()
-                        scrollState.scrollTo(target.coerceIn(0, scrollState.maxValue))
-                    }
+                    isModeTransitioning = true
+                    val target = lastScrollPosition
+                    snapshotFlow { scrollState.maxValue }
+                        .first()
+                    scrollState.scrollTo(target.coerceIn(0, scrollState.maxValue))
+                    kotlinx.coroutines.delay(60)
+                    scrollState.scrollTo(target.coerceIn(0, scrollState.maxValue))
+                    isModeTransitioning = false
                 }
 
-                // Clear scroll preservation only when user explicitly focuses the text field to edit
-                LaunchedEffect(isTextFieldFocused) {
-                    if (isTextFieldFocused) {
-                        shouldPreserveReadingScroll = false
-                    }
-                }
-
-                // Reset scroll preservation on note change
+                // Reset scroll position on note change
                 LaunchedEffect(currentNote?.id) {
-                    shouldPreserveReadingScroll = false
-                    savedReadingScrollPosition = null
+                    lastScrollPosition = 0
+                    isModeTransitioning = false
+                    scrollState.scrollTo(0)
                 }
 
                 val fontFam = remember(fontFamilyOption, customFontPath) {
@@ -640,7 +646,7 @@ fun EditorScreen(
                     else -> TextAlign.Start
                 }
 
-                // Smooth, continuous auto-scroll while typing:
+                // Smooth, continuous auto-scroll to position cursor near vertical midpoint of usable space
                 // Only scrolls when the text field is actively focused by the user!
                 LaunchedEffect(
                     textFieldValue.text,
@@ -649,12 +655,14 @@ fun EditorScreen(
                     viewportMaxHeight,
                     isImeVisible,
                     builtInKeyboardVisible,
-                    isTextFieldFocused
+                    isTextFieldFocused,
+                    bottomControlsHeightPx,
+                    isScrollDragged
                 ) {
                     if (!isTextFieldFocused) return@LaunchedEffect
                     if (isReadingMode) return@LaunchedEffect
-                    if (shouldPreserveReadingScroll) return@LaunchedEffect
-                    if (scrollState.isScrollInProgress) return@LaunchedEffect
+                    if (isModeTransitioning) return@LaunchedEffect
+                    if (isScrollDragged) return@LaunchedEffect
                     val layout = textLayoutResult ?: return@LaunchedEffect
                     val tfCoords = textFieldCoordinates ?: return@LaunchedEffect
                     val vpCoords = viewportCoordinates ?: return@LaunchedEffect
@@ -680,17 +688,18 @@ fun EditorScreen(
                     val viewportHeightPx = vpCoords.size.height.toFloat()
                     if (viewportHeightPx <= 0f) return@LaunchedEffect
 
-                    val targetCenterY = viewportHeightPx / 2f
+                    val usableHeightPx = (viewportHeightPx - bottomControlsHeightPx).coerceAtLeast(100f)
+                    val targetCenterY = usableHeightPx / 2f
                     val diff = currentCursorYOnScreen - targetCenterY
 
-                    // Threshold (approx 12px) prevents micro-jitter during horizontal/in-line typing
-                    if (abs(diff) > 12f) {
+                    // Threshold (approx 16px) prevents micro-jitter during horizontal/in-line typing
+                    if (abs(diff) > 16f) {
                         val targetScroll = (scrollState.value + diff).roundToInt()
                             .coerceIn(0, scrollState.maxValue)
                         if (targetScroll != scrollState.value) {
                             scrollState.animateScrollTo(
                                 value = targetScroll,
-                                animationSpec = tween(durationMillis = 150)
+                                animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
                             )
                         }
                     }
@@ -877,11 +886,36 @@ fun EditorScreen(
                         }
 
 
-                        // Generous bottom space so that typing at the bottom can scroll up to the vertical middle of the viewport
+                        // Blank space at the end of the note is clickable to place cursor at the end and activate editing
                         val bottomSpacerHeight = remember(viewportMaxHeight) {
                             (viewportMaxHeight * 0.65f).coerceAtLeast(200.dp)
                         }
-                        Spacer(modifier = Modifier.height(bottomSpacerHeight + animatedReservedControlsHeight))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(bottomSpacerHeight + animatedReservedControlsHeight)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    val textLen = textFieldValue.text.length
+                                    viewModel.updateTextFieldValue(
+                                        textFieldValue.copy(selection = TextRange(textLen))
+                                    )
+                                    try { focusRequester.requestFocus() } catch (_: Exception) {}
+                                    if (!userWantsBuiltIn) {
+                                        keyboardController?.show()
+                                        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                                        val activity = context as? Activity
+                                        val view = activity?.currentFocus ?: activity?.window?.decorView
+                                        if (view != null) {
+                                            imm?.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
+                                        }
+                                    } else {
+                                        keyboardController?.hide()
+                                    }
+                                }
+                        )
                     }
                 }
 
@@ -959,6 +993,9 @@ fun EditorScreen(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
+                                .onGloballyPositioned { coords ->
+                                    bottomControlsHeightPx = coords.size.height.toFloat()
+                                }
                         )
                     } else {
                         val isRecording = dictationState !is DictationState.Idle
@@ -970,7 +1007,10 @@ fun EditorScreen(
                         Column(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .fillMaxWidth(),
+                                .fillMaxWidth()
+                                .onGloballyPositioned { coords ->
+                                    bottomControlsHeightPx = coords.size.height.toFloat()
+                                },
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             if (showFormatBar) {
