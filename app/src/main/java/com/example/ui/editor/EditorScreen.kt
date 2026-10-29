@@ -22,6 +22,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
 import com.example.ui.navigation.horizontalSwipeNavigation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -561,6 +564,7 @@ fun EditorScreen(
             }
         ) { innerPadding ->
             var viewportCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+            var centerCursorTrigger by remember { mutableIntStateOf(0) }
 
             BoxWithConstraints(
                 modifier = Modifier
@@ -592,6 +596,7 @@ fun EditorScreen(
                                 } else {
                                     keyboardController?.hide()
                                 }
+                                centerCursorTrigger++
                             }
                         } else Modifier
                     )
@@ -601,7 +606,6 @@ fun EditorScreen(
                     (viewportMaxHeight * 0.65f).coerceAtLeast(200.dp)
                 }
                 val scrollState = rememberScrollState()
-                val isScrollDragged by scrollState.interactionSource.collectIsDraggedAsState()
                 var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
                 var textFieldCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
                 var bottomControlsHeightPx by remember { mutableFloatStateOf(0f) }
@@ -646,30 +650,35 @@ fun EditorScreen(
                     else -> TextAlign.Start
                 }
 
-                // Smooth, continuous auto-scroll to position cursor near vertical midpoint of usable space
-                // Only scrolls when the text field is actively focused by the user!
-                LaunchedEffect(
-                    textFieldValue.text,
-                    textFieldValue.selection,
-                    textLayoutResult,
-                    viewportMaxHeight,
-                    isImeVisible,
-                    builtInKeyboardVisible,
-                    isTextFieldFocused,
-                    bottomControlsHeightPx,
-                    isScrollDragged
-                ) {
-                    if (!isTextFieldFocused) return@LaunchedEffect
-                    if (isReadingMode) return@LaunchedEffect
-                    if (isModeTransitioning) return@LaunchedEffect
-                    if (isScrollDragged) return@LaunchedEffect
+                var wasImeVisible by remember { mutableStateOf(false) }
+                var wasBuiltInVisible by remember { mutableStateOf(false) }
+
+                LaunchedEffect(isImeVisible) {
+                    if (isImeVisible && !wasImeVisible && isTextFieldFocused && !isReadingMode && !isModeTransitioning) {
+                        centerCursorTrigger++
+                    }
+                    wasImeVisible = isImeVisible
+                }
+
+                LaunchedEffect(builtInKeyboardVisible) {
+                    if (builtInKeyboardVisible && !wasBuiltInVisible && isTextFieldFocused && !isReadingMode && !isModeTransitioning) {
+                        centerCursorTrigger++
+                    }
+                    wasBuiltInVisible = builtInKeyboardVisible
+                }
+
+                // Center cursor near vertical midpoint of usable space ONLY when intentionally triggered by a tap
+                LaunchedEffect(centerCursorTrigger) {
+                    if (centerCursorTrigger == 0) return@LaunchedEffect
+                    if (isReadingMode || isModeTransitioning) return@LaunchedEffect
                     val layout = textLayoutResult ?: return@LaunchedEffect
                     val tfCoords = textFieldCoordinates ?: return@LaunchedEffect
                     val vpCoords = viewportCoordinates ?: return@LaunchedEffect
                     if (!tfCoords.isAttached || !vpCoords.isAttached) return@LaunchedEffect
 
+                    val curValue = viewModel.textFieldValue.value
                     val textLen = layout.layoutInput.text.length
-                    val cursorOffset = textFieldValue.selection.end.coerceIn(0, textLen)
+                    val cursorOffset = curValue.selection.end.coerceIn(0, textLen)
                     val lineIndex = try {
                         layout.getLineForOffset(cursorOffset)
                     } catch (_: Exception) {
@@ -692,14 +701,13 @@ fun EditorScreen(
                     val targetCenterY = usableHeightPx / 2f
                     val diff = currentCursorYOnScreen - targetCenterY
 
-                    // Threshold (approx 16px) prevents micro-jitter during horizontal/in-line typing
-                    if (abs(diff) > 16f) {
+                    if (abs(diff) > 8f) {
                         val targetScroll = (scrollState.value + diff).roundToInt()
                             .coerceIn(0, scrollState.maxValue)
                         if (targetScroll != scrollState.value) {
                             scrollState.animateScrollTo(
                                 value = targetScroll,
-                                animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+                                animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
                             )
                         }
                     }
@@ -852,6 +860,32 @@ fun EditorScreen(
                                                 isTextFieldFocused = focusState.isFocused
                                             }
                                             .focusRequester(focusRequester)
+                                            .pointerInput(Unit) {
+                                                awaitEachGesture {
+                                                    val down = awaitFirstDown(pass = PointerEventPass.Initial, requireUnconsumed = false)
+                                                    val startPos = down.position
+                                                    val startTime = System.currentTimeMillis()
+                                                    var isTap = true
+                                                    while (true) {
+                                                        val event = awaitPointerEvent(pass = PointerEventPass.Final)
+                                                        val change = event.changes.find { it.id == down.id }
+                                                        if (change == null) {
+                                                            isTap = false
+                                                            break
+                                                        }
+                                                        if ((change.position - startPos).getDistance() > 18f) {
+                                                            isTap = false
+                                                        }
+                                                        if (!change.pressed) {
+                                                            val duration = System.currentTimeMillis() - startTime
+                                                            if (isTap && duration < 500) {
+                                                                centerCursorTrigger++
+                                                            }
+                                                            break
+                                                        }
+                                                    }
+                                                }
+                                            }
                                             .testTag("editor_text_input"),
                                         textStyle = TextStyle(
                                             fontFamily = fontFam,
@@ -914,6 +948,7 @@ fun EditorScreen(
                                     } else {
                                         keyboardController?.hide()
                                     }
+                                    centerCursorTrigger++
                                 }
                         )
                     }
