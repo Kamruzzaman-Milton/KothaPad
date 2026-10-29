@@ -464,6 +464,16 @@ fun EditorScreen(
                             noteTitle = currentNote?.title ?: "Untitled Note",
                             currentLanguageCode = activeLanguage,
                             isKeyboardEditMode = keyboardEditMode,
+                            isDailyJournalMode = isDailyJournalMode,
+                            onDailyJournalBackClick = {
+                                keyboardController?.hide()
+                                focusManager.clearFocus(force = true)
+                                if (!isReadingMode) {
+                                    viewModel.setReadingMode(true)
+                                } else {
+                                    viewModel.returnToDailyJournalManager()
+                                }
+                            },
                             onMenuClick = {
                                 keyboardController?.hide()
                                 focusManager.clearFocus(force = true)

@@ -86,13 +86,17 @@ fun extractNoteJournalDate(note: Note): LocalDate? {
             return LocalDate.parse(match.groupValues[1])
         } catch (_: Exception) {}
     }
-    return try {
-        if (note.createdAt > 0L) {
-            Instant.ofEpochMilli(note.createdAt).atZone(ZoneId.systemDefault()).toLocalDate()
-        } else null
-    } catch (_: Exception) {
-        null
+    val f = note.folder.trim()
+    if (f.equals("Daily Journal", ignoreCase = true) || f.equals("Daily Journals", ignoreCase = true)) {
+        return try {
+            if (note.createdAt > 0L) {
+                Instant.ofEpochMilli(note.createdAt).atZone(ZoneId.systemDefault()).toLocalDate()
+            } else null
+        } catch (_: Exception) {
+            null
+        }
     }
+    return null
 }
 
 private val START_YEAR_MONTH: YearMonth = YearMonth.of(2010, 1)

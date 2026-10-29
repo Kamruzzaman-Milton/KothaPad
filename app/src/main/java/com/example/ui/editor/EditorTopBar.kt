@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
@@ -46,6 +47,8 @@ fun EditorTopBar(
     noteTitle: String,
     currentLanguageCode: String,
     isKeyboardEditMode: Boolean = false,
+    isDailyJournalMode: Boolean = false,
+    onDailyJournalBackClick: (() -> Unit)? = null,
     onMenuClick: () -> Unit,
     onTitleClick: () -> Unit,
     onLanguageClick: () -> Unit,
@@ -73,17 +76,32 @@ fun EditorTopBar(
             titleContentColor = MaterialTheme.colorScheme.onBackground
         ),
         navigationIcon = {
-            IconButton(
-                onClick = {
-                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    onMenuClick()
-                },
-                modifier = Modifier.testTag("drawer_menu_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Menu,
-                    contentDescription = "Open notes drawer"
-                )
+            if (isDailyJournalMode && onDailyJournalBackClick != null) {
+                IconButton(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        onDailyJournalBackClick()
+                    },
+                    modifier = Modifier.testTag("daily_journal_topbar_back_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back to Daily Journal"
+                    )
+                }
+            } else {
+                IconButton(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        onMenuClick()
+                    },
+                    modifier = Modifier.testTag("drawer_menu_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Open notes drawer"
+                    )
+                }
             }
         },
         title = {

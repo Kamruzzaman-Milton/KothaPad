@@ -194,10 +194,20 @@ class VaultNoteRepository(
         const val WORKSPACE_FILE = VaultConfigStore.FILE_WORKSPACE
         const val TEMPLATES_DIR = "Templates"
         const val GENERAL_DIR = "General"
-        const val DAILY_JOURNALS_DIR = "Daily Journals"
+        const val DAILY_JOURNAL_DIR = "Daily Journal"
+        const val DAILY_JOURNALS_DIR = "Daily Journal"
         const val TRASH_PREFIX = ".KOTHAPAD/trash/"
         private const val META_SCHEMA_VERSION = 2
         private const val WORKSPACE_SCHEMA_VERSION = 1
+
+        fun isDailyJournalNote(note: Note): Boolean {
+            val f = note.folder.trim()
+            if (f.equals(DAILY_JOURNAL_DIR, ignoreCase = true) || f.equals("Daily Journals", ignoreCase = true)) {
+                return true
+            }
+            val title = note.title.trim()
+            return Regex("""^\d{4}-\d{2}-\d{2}""").containsMatchIn(title)
+        }
     }
 
     private val localContentCacheDir by lazy {
@@ -399,7 +409,7 @@ class VaultNoteRepository(
         // Ensure critical note content folders exist
         vaultManager.getOrCreateDirRecursive(vaultDoc, TEMPLATES_DIR)
         vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR)
-        vaultManager.getOrCreateDirRecursive(vaultDoc, DAILY_JOURNALS_DIR)
+        getOrCreateDailyJournalDir(vaultDoc)
 
         // Load metadata & workspace via VaultConfigStore before scanning
         // This IMMEDIATELY populates activeNotes and allNotes flows in memory
@@ -448,6 +458,47 @@ class VaultNoteRepository(
         startVaultScan(vaultDoc)
     }
 
+    suspend fun getOrCreateDailyJournalDir(vaultDoc: DocumentFile): DocumentFile? = withContext(Dispatchers.IO) {
+        val treeUri = vaultManager.getVaultTreeUri()
+        var dailyDir = vaultManager.findDirRecursive(vaultDoc, DAILY_JOURNAL_DIR)
+        val legacyDailyDir = vaultManager.findDirRecursive(vaultDoc, "Daily Journals")
+
+        if (legacyDailyDir != null) {
+            if (dailyDir == null) {
+                val renamed = vaultManager.rename(legacyDailyDir, DAILY_JOURNAL_DIR)
+                dailyDir = if (renamed) vaultManager.findDirRecursive(vaultDoc, DAILY_JOURNAL_DIR) else legacyDailyDir
+            } else if (dailyDir.uri != legacyDailyDir.uri) {
+                // Both exist: migrate all files from legacy into dailyDir
+                val legacyChildren = if (treeUri != null) vaultManager.listChildrenFast(legacyDailyDir, treeUri) else emptyList()
+                for (child in legacyChildren) {
+                    if (child.isFile) {
+                        val childDoc = child.toDocumentFile(context, treeUri)
+                        if (childDoc != null) {
+                            val existingInDaily = vaultManager.findChildFast(dailyDir, child.displayName, treeUri)
+                            if (existingInDaily != null) {
+                                val existingDoc = existingInDaily.toDocumentFile(context, treeUri)
+                                if (existingDoc != null && existingDoc.length() == 0L && childDoc.length() > 0L) {
+                                    vaultManager.delete(existingDoc)
+                                    vaultManager.move(childDoc, legacyDailyDir, dailyDir)
+                                } else {
+                                    vaultManager.delete(childDoc)
+                                }
+                            } else {
+                                vaultManager.move(childDoc, legacyDailyDir, dailyDir)
+                            }
+                        }
+                    }
+                }
+                vaultManager.delete(legacyDailyDir)
+            }
+        }
+
+        if (dailyDir == null) {
+            dailyDir = vaultManager.getOrCreateDirRecursive(vaultDoc, DAILY_JOURNAL_DIR)
+        }
+        dailyDir
+    }
+
     suspend fun consolidateStrayRootFiles(vaultDoc: DocumentFile) = withContext(Dispatchers.IO) {
         try {
             val treeUri = vaultManager.getVaultTreeUri() ?: vaultDoc.uri
@@ -456,6 +507,7 @@ class VaultNoteRepository(
             val dailyJournalRegex = Regex("^\\d{4}-\\d{2}-\\d{2}", RegexOption.IGNORE_CASE)
 
             var metadataModified = false
+            val dailyDir = getOrCreateDailyJournalDir(vaultDoc)
 
             // 1. Process stray files in vault root
             for (fileEntry in rootMdFiles) {
@@ -464,12 +516,17 @@ class VaultNoteRepository(
 
                 // Check 1: Daily Journal notes in root
                 if (dailyJournalRegex.containsMatchIn(fileName)) {
-                    val dailyDir = vaultManager.getOrCreateDirRecursive(vaultDoc, DAILY_JOURNALS_DIR)
                     if (dailyDir != null) {
                         val dailyChildren = vaultManager.listChildrenFast(dailyDir, treeUri)
                         val duplicateInDaily = dailyChildren.firstOrNull { it.isFile && it.displayName.equals(fileName, ignoreCase = true) }
                         if (duplicateInDaily != null) {
-                            vaultManager.delete(rootFileDoc)
+                            val dailyDoc = duplicateInDaily.toDocumentFile(context, treeUri)
+                            if (dailyDoc != null && dailyDoc.length() == 0L && rootFileDoc.length() > 0L) {
+                                vaultManager.delete(dailyDoc)
+                                vaultManager.move(rootFileDoc, vaultDoc, dailyDir)
+                            } else {
+                                vaultManager.delete(rootFileDoc)
+                            }
                         } else {
                             vaultManager.move(rootFileDoc, vaultDoc, dailyDir)
                         }
@@ -524,7 +581,6 @@ class VaultNoteRepository(
 
             // 2. Also check General folder for any misplaced Daily Journal files
             val generalDir = vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR)
-            val dailyDir = vaultManager.getOrCreateDirRecursive(vaultDoc, DAILY_JOURNALS_DIR)
             if (generalDir != null && dailyDir != null) {
                 val generalChildren = vaultManager.listChildrenFast(generalDir, treeUri)
                 val generalDailyFiles = generalChildren.filter { it.isFile && dailyJournalRegex.containsMatchIn(it.displayName) }
@@ -534,7 +590,13 @@ class VaultNoteRepository(
                     val duplicateInDaily = dailyChildren.firstOrNull { it.isFile && it.displayName.equals(gFile.displayName, ignoreCase = true) }
                     val gRelPath = "$GENERAL_DIR/${gFile.displayName}"
                     if (duplicateInDaily != null) {
-                        vaultManager.delete(gDoc)
+                        val dailyDoc = duplicateInDaily.toDocumentFile(context, treeUri)
+                        if (dailyDoc != null && dailyDoc.length() == 0L && gDoc.length() > 0L) {
+                            vaultManager.delete(dailyDoc)
+                            vaultManager.move(gDoc, generalDir, dailyDir)
+                        } else {
+                            vaultManager.delete(gDoc)
+                        }
                     } else {
                         vaultManager.move(gDoc, generalDir, dailyDir)
                     }
@@ -545,13 +607,58 @@ class VaultNoteRepository(
                 }
             }
 
-            // 3. Clean up metadataByIdMap: ensure all date-titled notes have Daily Journals path
+            // 3. Purge duplicate numbered files inside Daily Journal folder itself
+            if (dailyDir != null) {
+                val dailyChildren = vaultManager.listChildrenFast(dailyDir, treeUri)
+                val dailyFiles = dailyChildren.filter { it.isFile && it.displayName.endsWith(".md", ignoreCase = true) }
+                val dateGroupRegex = Regex("^(\\d{4}-\\d{2}-\\d{2})(?:[ _](\\d+)|\\s*\\((\\d+)\\))?\\.md$", RegexOption.IGNORE_CASE)
+
+                val groupedByDate = dailyFiles.groupBy { fileEntry ->
+                    val match = dateGroupRegex.find(fileEntry.displayName)
+                    match?.groupValues?.get(1)
+                }
+
+                for ((datePrefix, files) in groupedByDate) {
+                    if (datePrefix == null || files.size <= 1) continue
+                    val canonicalName = "$datePrefix.md"
+                    var canonicalEntry = files.firstOrNull { it.displayName.equals(canonicalName, ignoreCase = true) }
+                    var canonicalDoc = canonicalEntry?.toDocumentFile(context, treeUri)
+
+                    if (canonicalDoc == null) {
+                        val firstFile = files.first()
+                        val firstDoc = firstFile.toDocumentFile(context, treeUri)
+                        if (firstDoc != null) {
+                            vaultManager.rename(firstDoc, canonicalName)
+                            canonicalDoc = firstDoc
+                        }
+                    }
+
+                    for (fileEntry in files) {
+                        if (fileEntry.displayName.equals(canonicalName, ignoreCase = true)) continue
+                        val dupDoc = fileEntry.toDocumentFile(context, treeUri) ?: continue
+                        val dupRelPath = "$DAILY_JOURNAL_DIR/${fileEntry.displayName}"
+                        if (canonicalDoc != null && canonicalDoc.length() == 0L && dupDoc.length() > 0L) {
+                            val dupText = vaultManager.readText(dupDoc)
+                            vaultManager.writeTextAtomic(dailyDir, canonicalName, dupText, "text/markdown")
+                        }
+                        vaultManager.delete(dupDoc)
+                        removeMetadataForPath(dupRelPath)
+                        cache.remove(dupRelPath)
+                        removeIdForPath(dupRelPath)
+                        metadataModified = true
+                    }
+                }
+            }
+
+            // 4. Clean up metadataByIdMap: ensure all date-titled notes have Daily Journal path
             val keys = ArrayList(metadataByIdMap.keys)
             for (id in keys) {
                 val meta = metadataByIdMap[id] ?: continue
                 val base = meta.path.substringAfterLast("/").removeSuffix(".md")
                 if (dailyJournalRegex.containsMatchIn(base)) {
-                    val expectedPath = "$DAILY_JOURNALS_DIR/$base.md"
+                    val dateMatch = Regex("^(\\d{4}-\\d{2}-\\d{2})").find(base)
+                    val datePrefix = dateMatch?.groupValues?.get(1) ?: base
+                    val expectedPath = "$DAILY_JOURNAL_DIR/$datePrefix.md"
                     if (!meta.path.equals(expectedPath, ignoreCase = true)) {
                         val existingDailyMeta = getMetadataForPath(expectedPath)
                         if (existingDailyMeta != null && existingDailyMeta.id != id) {
@@ -1320,11 +1427,95 @@ class VaultNoteRepository(
     }
 
     private suspend fun insertInternal(note: Note, vaultDoc: DocumentFile): Long {
-        val targetFolder = if (note.folder.isBlank()) GENERAL_DIR else note.folder.trim()
-        val targetDir = vaultManager.getOrCreateDirRecursive(vaultDoc, targetFolder) ?: vaultDoc
+        val isDailyJournal = isDailyJournalNote(note) ||
+                note.folder.trim().equals(DAILY_JOURNAL_DIR, ignoreCase = true) ||
+                note.folder.trim().equals(DAILY_JOURNALS_DIR, ignoreCase = true)
+        val targetFolder = if (isDailyJournal) DAILY_JOURNAL_DIR else if (note.folder.isBlank()) GENERAL_DIR else note.folder.trim()
+        val targetDir = if (isDailyJournal) getOrCreateDailyJournalDir(vaultDoc) ?: vaultDoc else vaultManager.getOrCreateDirRecursive(vaultDoc, targetFolder) ?: vaultDoc
 
         val sanitizedTitle = VaultManager.sanitizeFilename(note.title.ifBlank { "Untitled Note" })
-        val finalFileName = vaultManager.resolveDuplicateFileName(targetDir, sanitizedTitle, ".md")
+
+        // Prevent duplicate notes/files for the same daily journal date
+        if (isDailyJournal) {
+            val dateMatch = Regex("""^(\d{4}-\d{2}-\d{2})""").find(sanitizedTitle) ?: Regex("""^(\d{4}-\d{2}-\d{2})""").find(note.title.trim())
+            val datePrefix = dateMatch?.groupValues?.get(1) ?: sanitizedTitle
+            val canonicalFileName = "$datePrefix.md"
+            val canonicalRelPath = "$DAILY_JOURNAL_DIR/$canonicalFileName"
+
+            // 1. Check in-memory cache for existing note on this date
+            val existingEntry = cache[canonicalRelPath]
+                ?: cache.values.firstOrNull {
+                    it.relPath.startsWith(DAILY_JOURNAL_DIR, ignoreCase = true) &&
+                    it.note.title.trim().startsWith(datePrefix) &&
+                    !it.note.isDeleted
+                }
+            if (existingEntry != null) {
+                if (note.content.isNotBlank() && existingEntry.note.content.isBlank()) {
+                    vaultManager.writeTextAtomic(
+                        parentDir = existingEntry.parentDir,
+                        fileName = existingEntry.file.name ?: canonicalFileName,
+                        text = note.content,
+                        mimeType = "text/markdown"
+                    )
+                    noteBodyLruCache.put(existingEntry.relPath, note.content)
+                    saveContentToLocalCache(getMetadataForPath(existingEntry.relPath)?.id ?: "", note.content)
+                    val updatedNote = existingEntry.note.copy(content = note.content, updatedAt = System.currentTimeMillis())
+                    cache[existingEntry.relPath] = existingEntry.copy(note = updatedNote)
+                    recomputeFlows()
+                }
+                return existingEntry.note.id
+            }
+
+            // 2. Check disk in targetDir
+            val treeUri = vaultManager.getVaultTreeUri()
+            val existingChild = if (treeUri != null) {
+                vaultManager.findChildFast(targetDir, canonicalFileName, treeUri)
+            } else {
+                targetDir.findFile(canonicalFileName)
+            }
+            if (existingChild != null) {
+                val existingDoc = if (treeUri != null && existingChild is com.example.data.vault.FastEntry) {
+                    existingChild.toDocumentFile(context, treeUri)
+                } else {
+                    targetDir.findFile(canonicalFileName)
+                }
+                if (existingDoc != null && existingDoc.exists()) {
+                    val id = getOrCreateIdForPath(canonicalRelPath)
+                    val diskText = vaultManager.readText(existingDoc)
+                    val finalText = if (diskText.isBlank() && note.content.isNotBlank()) {
+                        vaultManager.writeTextAtomic(targetDir, canonicalFileName, note.content, "text/markdown")
+                        note.content
+                    } else diskText
+                    noteBodyLruCache.put(canonicalRelPath, finalText)
+                    val existingNote = Note(
+                        id = id,
+                        title = datePrefix,
+                        content = finalText,
+                        folder = DAILY_JOURNAL_DIR,
+                        createdAt = if (note.createdAt > 0L) note.createdAt else existingDoc.lastModified(),
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    cache[canonicalRelPath] = CachedNoteEntry(
+                        note = existingNote,
+                        file = existingDoc,
+                        parentDir = targetDir,
+                        relPath = canonicalRelPath,
+                        lastModified = existingDoc.lastModified()
+                    )
+                    saveWorkspace(lastOpenedRelPath = canonicalRelPath, lastFolder = DAILY_JOURNAL_DIR)
+                    recomputeFlows()
+                    return id
+                }
+            }
+        }
+
+        val finalFileName = if (isDailyJournal) {
+            val dateMatch = Regex("""^(\d{4}-\d{2}-\d{2})""").find(sanitizedTitle) ?: Regex("""^(\d{4}-\d{2}-\d{2})""").find(note.title.trim())
+            val datePrefix = dateMatch?.groupValues?.get(1) ?: sanitizedTitle
+            "$datePrefix.md"
+        } else {
+            vaultManager.resolveDuplicateFileName(targetDir, sanitizedTitle, ".md")
+        }
         val cleanTitle = finalFileName.removeSuffix(".md")
 
         val file = vaultManager.writeTextAtomic(
@@ -1437,6 +1628,23 @@ class VaultNoteRepository(
             }
         }
 
+        val isDailyJournal = isDailyJournalNote(note) ||
+                note.folder.trim().equals(DAILY_JOURNAL_DIR, ignoreCase = true) ||
+                note.folder.trim().equals(DAILY_JOURNALS_DIR, ignoreCase = true)
+
+        if (entry == null && isDailyJournal) {
+            val dateMatch = Regex("""^(\d{4}-\d{2}-\d{2})""").find(note.title.trim())
+            val datePrefix = dateMatch?.groupValues?.get(1)
+            if (datePrefix != null) {
+                entry = cache["$DAILY_JOURNAL_DIR/$datePrefix.md"]
+                    ?: cache.values.firstOrNull {
+                        it.relPath.startsWith(DAILY_JOURNAL_DIR, ignoreCase = true) &&
+                        it.note.title.trim().startsWith(datePrefix) &&
+                        !it.note.isDeleted
+                    }
+            }
+        }
+
         if (entry == null) {
             if (note.isDeleted) {
                 // If the note was already removed or cannot be found on disk, do NOT recreate or insert a duplicate file!
@@ -1450,7 +1658,7 @@ class VaultNoteRepository(
         var currentFile = entry.file
         var currentParent = entry.parentDir
         var currentRelPath = entry.relPath
-        val targetFolder = note.folder.trim().ifBlank { GENERAL_DIR }
+        val targetFolder = if (isDailyJournal) DAILY_JOURNAL_DIR else note.folder.trim().ifBlank { GENERAL_DIR }
 
         // Handle Physical Trashing
         if (note.isDeleted && (!entry.note.isDeleted || !currentRelPath.startsWith(TRASH_PREFIX))) {

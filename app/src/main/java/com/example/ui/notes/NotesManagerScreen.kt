@@ -290,13 +290,18 @@ fun NotesManagerScreen(
         val folders = linkedSetOf<String>()
         // General always first if present
         folders.add("General")
-        folders.add("Daily Journals")
+        folders.add("Daily Journal")
         // Custom folders created by user
-        folders.addAll(customFolders)
+        folders.addAll(customFolders.map { if (it.equals("Daily Journals", ignoreCase = true)) "Daily Journal" else it })
         // Folders from active notes
         activeNotes.forEach { note ->
             val f = note.folder.trim()
-            if (f.isNotBlank()) folders.add(f)
+            if (f.isNotBlank()) {
+                val normalized = if (f.equals("Daily Journals", ignoreCase = true) || f.equals("Daily Journal", ignoreCase = true)) {
+                    "Daily Journal"
+                } else f
+                folders.add(normalized)
+            }
         }
         folders.toList()
     }
@@ -389,7 +394,7 @@ fun NotesManagerScreen(
     val notesByFolder = remember(sortedFilteredNotes) {
         sortedFilteredNotes.groupBy { note ->
             if (com.example.ui.notes.isDailyJournalNote(note)) {
-                "daily journals"
+                "daily journal"
             } else {
                 note.folder.trim().ifBlank { "General" }.lowercase()
             }
@@ -405,7 +410,7 @@ fun NotesManagerScreen(
 
     fun getSortedNotesForFolder(folderPath: String): List<Note> {
         val key = if (folderPath.trim().equals("Daily Journals", ignoreCase = true) || folderPath.trim().equals("Daily Journal", ignoreCase = true)) {
-            "daily journals"
+            "daily journal"
         } else {
             folderPath.trim().ifBlank { "General" }.lowercase()
         }

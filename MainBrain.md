@@ -31,5 +31,8 @@
 ## 6. Vault & Note Management
 - Storage vault backing with SAF fast lister and local database sync.
 - Folders (active, archive, trash with auto-empty countdown, custom folders).
+- Daily Journal Calendar: Tapping existing note date opens in reading mode; tapping empty date auto-creates and opens in editing mode in "Daily Journal" folder without duplicates.
+- Daily Journal Plus Button: Opens today's note in editing mode (creates only if absent, no duplicates).
+- Daily Journal Storage Integrity: Dedicated "Daily Journal" vault folder; automatic migration, duplicate purging, and reconciliation across root/General.
 - Daily journal navigation (next/previous entry by date).
 - Note metrics display (word count, reading time, characters) with configurable order and style.

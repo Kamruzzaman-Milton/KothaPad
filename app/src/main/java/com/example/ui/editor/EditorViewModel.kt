@@ -488,11 +488,17 @@ class EditorViewModel(
 
     private suspend fun cleanupEmptyNoteIfAbandoned(noteToLeave: Note?) {
         if (noteToLeave == null) return
+        // Daily journal notes must always remain saved and associated with their date
+        if (com.example.ui.notes.isDailyJournalNote(noteToLeave) ||
+            _currentDailyJournalDate.value != null ||
+            _noteNavigationContext.value == NoteNavigationContext.DAILY_JOURNAL) {
+            return
+        }
+
         val currentText = _textFieldValue.value.text.trim()
         val isCompletelyEmpty = noteToLeave.content.trim().isEmpty() && currentText.isEmpty()
         val isUntitledOrAuto = isCurrentNoteAutoCreated ||
                 noteToLeave.title.startsWith("Untitled", ignoreCase = true) ||
-                noteToLeave.title.matches(Regex("\\d{4}-\\d{2}-\\d{2}( \\d+)?")) ||
                 noteToLeave.title.matches(Regex("\\d+( \\d+)?"))
 
         if (isCompletelyEmpty && isUntitledOrAuto && !noteToLeave.isDeleted && !noteToLeave.isArchived) {
@@ -513,12 +519,21 @@ class EditorViewModel(
         isAppInForeground = inForeground
         if (!inForeground) {
             val current = _currentNote.value
+            if (current != null && (
+                com.example.ui.notes.isDailyJournalNote(current) ||
+                _currentDailyJournalDate.value != null ||
+                _noteNavigationContext.value == NoteNavigationContext.DAILY_JOURNAL
+            )) {
+                pauseSessionTimerAndPersist()
+                flushAutoSave()
+                return
+            }
+
             val currentText = _textFieldValue.value.text.trim()
             val isCompletelyEmpty = (current?.content?.trim()?.isEmpty() == true) && currentText.isEmpty()
             val isUntitledOrAuto = isCurrentNoteAutoCreated ||
                     (current != null && (
                         current.title.startsWith("Untitled", ignoreCase = true) ||
-                        current.title.matches(Regex("\\d{4}-\\d{2}-\\d{2}( \\d+)?")) ||
                         current.title.matches(Regex("\\d+( \\d+)?"))
                     ))
             if (current != null && isCompletelyEmpty && isUntitledOrAuto && !current.isDeleted && !current.isArchived) {
@@ -2113,7 +2128,7 @@ class EditorViewModel(
 
     fun openDailyJournalNote(note: Note, dateStr: String, startInEditMode: Boolean = false) {
         flushAutoSave()
-        loadNote(note)
+        loadNote(note, preserveReadingMode = false)
         setReadingMode(!startInEditMode)
         _noteNavigationContext.value = NoteNavigationContext.DAILY_JOURNAL
         _currentDailyJournalDate.value = dateStr
@@ -2124,7 +2139,7 @@ class EditorViewModel(
     fun getJournalNotesSortedChronologically(): List<Pair<LocalDate, Note>> {
         return allNotes.value
             .filter {
-                !it.isDeleted && (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journals", ignoreCase = true) || it.folder.trim().equals("Daily Journal", ignoreCase = true))
+                !it.isDeleted && (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true))
             }
             .mapNotNull { note ->
                 val date = com.example.ui.notes.extractNoteJournalDate(note)
@@ -2186,10 +2201,11 @@ class EditorViewModel(
     }
 
     fun findDailyJournalNoteForDate(date: LocalDate): Note? {
+        val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
         return allNotes.value.firstOrNull {
             !it.isDeleted &&
-                    (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journals", ignoreCase = true) || it.folder.trim().equals("Daily Journal", ignoreCase = true)) &&
-                    com.example.ui.notes.extractNoteJournalDate(it) == date
+                    (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
+                    (it.title.trim().startsWith(dateStr) || com.example.ui.notes.extractNoteJournalDate(it) == date)
         }
     }
 
@@ -2226,13 +2242,12 @@ class EditorViewModel(
         }
 
         val timestamp = date.atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        _isReadingMode.value = !startInEditMode
         flushAutoSave()
         viewModelScope.launch(Dispatchers.IO) {
             val currentExisting = noteRepository.allNotes.first().firstOrNull {
                 !it.isDeleted &&
-                        (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journals", ignoreCase = true) || it.folder.trim().equals("Daily Journal", ignoreCase = true)) &&
-                        com.example.ui.notes.extractNoteJournalDate(it) == date
+                        (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
+                        (it.title.trim().startsWith(dateStr) || com.example.ui.notes.extractNoteJournalDate(it) == date)
             }
             if (currentExisting != null) {
                 withContext(Dispatchers.Main) {
@@ -2246,7 +2261,7 @@ class EditorViewModel(
                 title = dateStr,
                 content = "",
                 languageCode = defaultLang,
-                folder = "Daily Journals",
+                folder = "Daily Journal",
                 createdAt = timestamp,
                 updatedAt = timestamp
             )
@@ -2254,13 +2269,7 @@ class EditorViewModel(
             val inserted = noteRepository.getNoteOnce(id)
             withContext(Dispatchers.Main) {
                 if (inserted != null) {
-                    loadNote(inserted)
-                    isCurrentNoteAutoCreated = true
-                    _isReadingMode.value = !startInEditMode
-                    _noteNavigationContext.value = NoteNavigationContext.DAILY_JOURNAL
-                    _currentDailyJournalDate.value = dateStr
-                    isNoteManagerOpen.value = false
-                    navigateTo("EDITOR")
+                    openDailyJournalNote(inserted, dateStr, startInEditMode = startInEditMode)
                 }
             }
         }
