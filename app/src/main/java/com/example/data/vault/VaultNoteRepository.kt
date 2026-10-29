@@ -1393,7 +1393,8 @@ class VaultNoteRepository(
     }
 
     suspend fun getNoteOnce(id: Long): Note? {
-        return allNotes.value.firstOrNull { it.id == id }
+        return cache.values.firstOrNull { it.note.id == id }?.note
+            ?: allNotes.value.firstOrNull { it.id == id }
     }
 
     suspend fun getLatestActiveNote(): Note? {

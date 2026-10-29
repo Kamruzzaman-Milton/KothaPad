@@ -2206,16 +2206,19 @@ class EditorViewModel(
             !it.isDeleted &&
                     (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
                     (it.title.trim().startsWith(dateStr) || com.example.ui.notes.extractNoteJournalDate(it) == date)
+        } ?: vaultNoteRepository.allNotes.value.firstOrNull {
+            !it.isDeleted &&
+                    (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
+                    (it.title.trim().startsWith(dateStr) || com.example.ui.notes.extractNoteJournalDate(it) == date)
         }
     }
 
     fun handleDailyJournalDateTap(date: LocalDate) {
-        val today = LocalDate.now()
         val existing = findDailyJournalNoteForDate(date)
+        val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
         if (existing != null) {
-            val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
             openDailyJournalNote(existing, dateStr, startInEditMode = false)
-        } else if (!date.isAfter(today)) {
+        } else {
             createNewDailyJournalNote(date, startInEditMode = true)
         }
     }
@@ -2232,7 +2235,6 @@ class EditorViewModel(
     }
 
     fun createNewDailyJournalNote(date: LocalDate, startInEditMode: Boolean = true) {
-        if (date.isAfter(LocalDate.now())) return
         val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
         // Guard against duplicate notes for the same date
         val existing = findDailyJournalNoteForDate(date)
@@ -2244,18 +2246,6 @@ class EditorViewModel(
         val timestamp = date.atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         flushAutoSave()
         viewModelScope.launch(Dispatchers.IO) {
-            val currentExisting = noteRepository.allNotes.first().firstOrNull {
-                !it.isDeleted &&
-                        (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
-                        (it.title.trim().startsWith(dateStr) || com.example.ui.notes.extractNoteJournalDate(it) == date)
-            }
-            if (currentExisting != null) {
-                withContext(Dispatchers.Main) {
-                    openDailyJournalNote(currentExisting, dateStr, startInEditMode = startInEditMode)
-                }
-                return@launch
-            }
-
             val defaultLang = defaultLanguage.value
             val newNote = Note(
                 title = dateStr,
@@ -2266,11 +2256,13 @@ class EditorViewModel(
                 updatedAt = timestamp
             )
             val id = noteRepository.insert(newNote)
-            val inserted = noteRepository.getNoteOnce(id)
+            val noteToOpen = if (id > 0L) {
+                noteRepository.getNoteOnce(id) ?: newNote.copy(id = id)
+            } else {
+                newNote
+            }
             withContext(Dispatchers.Main) {
-                if (inserted != null) {
-                    openDailyJournalNote(inserted, dateStr, startInEditMode = startInEditMode)
-                }
+                openDailyJournalNote(noteToOpen, dateStr, startInEditMode = startInEditMode)
             }
         }
     }

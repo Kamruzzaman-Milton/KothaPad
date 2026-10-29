@@ -589,7 +589,7 @@ private fun OptimizedMonthBlock(
                                     isToday = isToday,
                                     isFuture = isFuture,
                                     hasNote = hasNote,
-                                    onClick = if (isFuture) null else { { onDateClick(date) } },
+                                    onClick = { onDateClick(date) },
                                     testTagDate = date.toString()
                                 )
                             }

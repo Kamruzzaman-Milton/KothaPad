@@ -386,15 +386,15 @@ class VaultManager(private val context: Context) {
                 }
             }
 
-            // Create new file
-            val baseName = when {
-                cleanName.endsWith(".json", ignoreCase = true) -> cleanName.removeSuffix(".json")
-                cleanName.endsWith(".md", ignoreCase = true) -> cleanName.removeSuffix(".md")
-                else -> cleanName
-            }
-            val targetFile = parentDir.createFile(mimeType, baseName)
-                ?: parentDir.createFile(mimeType, cleanName)
-                ?: return@withContext null
+            val targetFile = if (cleanName.endsWith(".md", ignoreCase = true)) {
+                parentDir.createFile(mimeType, cleanName)
+                    ?: parentDir.createFile("text/plain", cleanName)
+                    ?: parentDir.createFile(mimeType, cleanName.removeSuffix(".md"))
+            } else {
+                val baseName = if (cleanName.endsWith(".json", ignoreCase = true)) cleanName.removeSuffix(".json") else cleanName
+                parentDir.createFile(mimeType, baseName)
+                    ?: parentDir.createFile(mimeType, cleanName)
+            } ?: return@withContext null
             invalidateDirCache(parentDir)
             val writeOk = writeText(targetFile, text)
             if (writeOk) targetFile else null
