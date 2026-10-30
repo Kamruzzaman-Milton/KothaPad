@@ -40,5 +40,5 @@
 - **High-Performance Architecture:** Single-pass custom calendar layout with zero nested rows and zero two-pass weights; background-prewarmed month cache; O(1) bitmask note presence checks; static day cell styles/shapes; lazy conditional rendering of settings accordion contents; fast substring date parsing; zero-delay gesture callbacks.
 - **Daily Journal Calendar Date Selection:** Tapping any date opens that exact date's note (in reading mode if existing, in editing mode if created new).
 - **Daily Journal Plus Button:** Always targets today's actual date (LocalDate.now()), opening today's note directly in editing mode (creates if absent, focuses editor).
-- **Daily Journal Navigation:** Fast next/previous entry navigation by date order.
+- **Reading Mode Date Navigation:** Left and right floating navigation buttons beside the reading/editing toggle button in reading mode. Left button opens previous available note from an earlier date; right button opens next available note from a later date. Skips empty dates directly to nearest existing note; every navigated note opens strictly in reading mode with scroll reset to top; gracefully handles edge cases when no earlier or later notes exist.
 - **Note Metrics Display:** Word count, reading time, characters with configurable order, style, and toggle.

@@ -57,6 +57,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.core.view.WindowCompat
@@ -212,11 +214,11 @@ fun EditorScreen(
     val noteNavContext by viewModel.noteNavigationContext.collectAsState()
     val isDailyJournalMode = noteNavContext == com.example.ui.editor.EditorViewModel.NoteNavigationContext.DAILY_JOURNAL && currentDailyJournalDate != null
 
-    val hasNextJournalEntry by remember(isDailyJournalMode, currentDailyJournalDate, currentNote?.id, allNotes) {
-        derivedStateOf { if (isDailyJournalMode) viewModel.hasNextJournalEntry() else false }
+    val hasNextJournalEntry by remember(currentDailyJournalDate, currentNote?.id, allNotes) {
+        derivedStateOf { viewModel.hasNextJournalEntry() }
     }
-    val hasPrevJournalEntry by remember(isDailyJournalMode, currentDailyJournalDate, currentNote?.id, allNotes) {
-        derivedStateOf { if (isDailyJournalMode) viewModel.hasPreviousJournalEntry() else false }
+    val hasPrevJournalEntry by remember(currentDailyJournalDate, currentNote?.id, allNotes) {
+        derivedStateOf { viewModel.hasPreviousJournalEntry() }
     }
     // Keyboard Settings & State
     val userWantsBuiltIn by viewModel.userWantsBuiltInKeyboard.collectAsState()
@@ -912,13 +914,53 @@ fun EditorScreen(
                 }
 
                 if (isReadingMode) {
-                    // Exit Reading Mode button: horizontal midpoint, slightly above the bottom edge
-                    Box(
+                    // Floating Navigation Cluster in Reading Mode: Previous Note, Mode Toggle, Next Note
+                    Row(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(bottom = 24.dp)
+                            .padding(bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Left floating button: Quickly open previous available note from earlier date
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surface.copy(
+                                alpha = if (hasPrevJournalEntry) 0.72f else 0.35f
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.onSurface.copy(
+                                    alpha = if (hasPrevJournalEntry) 0.12f else 0.05f
+                                )
+                            ),
+                            shadowElevation = if (hasPrevJournalEntry) 4.dp else 0.dp,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    if (hasPrevJournalEntry) {
+                                        viewModel.navigateToPreviousJournalEntry()
+                                    }
+                                },
+                                enabled = hasPrevJournalEntry,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .testTag("previous_note_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Previous Note",
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(
+                                        alpha = if (hasPrevJournalEntry) 0.8f else 0.25f
+                                    ),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        // Center button: Toggle between reading and editing mode
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
@@ -941,6 +983,43 @@ fun EditorScreen(
                                     imageVector = Icons.AutoMirrored.Filled.MenuBook,
                                     contentDescription = "Exit Reading Mode",
                                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        // Right floating button: Quickly open next available note from later date
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surface.copy(
+                                alpha = if (hasNextJournalEntry) 0.72f else 0.35f
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.onSurface.copy(
+                                    alpha = if (hasNextJournalEntry) 0.12f else 0.05f
+                                )
+                            ),
+                            shadowElevation = if (hasNextJournalEntry) 4.dp else 0.dp,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    if (hasNextJournalEntry) {
+                                        viewModel.navigateToNextJournalEntry()
+                                    }
+                                },
+                                enabled = hasNextJournalEntry,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .testTag("next_note_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = "Next Note",
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(
+                                        alpha = if (hasNextJournalEntry) 0.8f else 0.25f
+                                    ),
                                     modifier = Modifier.size(20.dp)
                                 )
                             }

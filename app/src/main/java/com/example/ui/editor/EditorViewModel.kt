@@ -1354,16 +1354,19 @@ class EditorViewModel(
 
     fun getJournalNotesSortedChronologically(): List<Pair<LocalDate, Note>> {
         return allNotes.value
-            .filter {
-                !it.isDeleted && (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true))
-            }
+            .filter { !it.isDeleted && !it.isArchived }
             .mapNotNull { note ->
                 val date = com.example.ui.notes.extractNoteJournalDate(note)
+                    ?: runCatching {
+                        java.time.Instant.ofEpochMilli(note.createdAt).atZone(ZoneId.systemDefault()).toLocalDate()
+                    }.getOrNull()
                 if (date != null) Pair(date, note) else null
             }
             .groupBy { it.first }
             .mapValues { (_, notesForDate) ->
-                notesForDate.maxByOrNull { it.second.updatedAt }?.second ?: notesForDate.first().second
+                notesForDate.find { com.example.ui.notes.isDailyJournalNote(it.second) }?.second
+                    ?: notesForDate.maxByOrNull { it.second.updatedAt }?.second
+                    ?: notesForDate.first().second
             }
             .map { Pair(it.key, it.value) }
             .sortedBy { it.first }
@@ -1375,7 +1378,12 @@ class EditorViewModel(
             val parsed = runCatching { LocalDate.parse(dateStr) }.getOrNull()
             if (parsed != null) return parsed
         }
-        return _currentNote.value?.let { com.example.ui.notes.extractNoteJournalDate(it) }
+        val note = _currentNote.value ?: return null
+        val fromTitle = com.example.ui.notes.extractNoteJournalDate(note)
+        if (fromTitle != null) return fromTitle
+        return runCatching {
+            java.time.Instant.ofEpochMilli(note.createdAt).atZone(ZoneId.systemDefault()).toLocalDate()
+        }.getOrNull()
     }
 
     fun getNextJournalNote(): Pair<LocalDate, Note>? {
@@ -1395,22 +1403,22 @@ class EditorViewModel(
     fun hasPreviousJournalEntry(): Boolean = getPreviousJournalNote() != null
 
     fun navigateToNextJournalEntry(): Boolean {
-        if (_noteNavigationContext.value != NoteNavigationContext.DAILY_JOURNAL) return false
         val next = getNextJournalNote() ?: return false
         val (nextDate, nextNote) = next
         flushAutoSave()
         loadNote(nextNote, preserveReadingMode = true)
+        _isReadingMode.value = true
         _noteNavigationContext.value = NoteNavigationContext.DAILY_JOURNAL
         _currentDailyJournalDate.value = nextDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
         return true
     }
 
     fun navigateToPreviousJournalEntry(): Boolean {
-        if (_noteNavigationContext.value != NoteNavigationContext.DAILY_JOURNAL) return false
         val prev = getPreviousJournalNote() ?: return false
         val (prevDate, prevNote) = prev
         flushAutoSave()
         loadNote(prevNote, preserveReadingMode = true)
+        _isReadingMode.value = true
         _noteNavigationContext.value = NoteNavigationContext.DAILY_JOURNAL
         _currentDailyJournalDate.value = prevDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
         return true
