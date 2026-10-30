@@ -49,7 +49,6 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.data.model.DictationState
 import com.example.ui.editor.EditorScreen
 import com.example.ui.editor.EditorViewModel
-import com.example.ui.settings.NotesManagerSettingsScreen
 import com.example.ui.settings.SettingsScreen
 import com.example.ui.theme.KothaPadTheme
 
@@ -87,11 +86,11 @@ class MainActivity : ComponentActivity() {
             val customSecondary by viewModel.customSecondaryColor.collectAsState()
             val cornerRadiusDp by viewModel.cornerRadiusDp.collectAsState()
             val currentScreen by viewModel.currentScreen.collectAsState()
-            val isNoteManagerOpen by viewModel.isNoteManagerOpen.collectAsState()
             val showRenameDialog by viewModel.showRenameDialog.collectAsState()
             val showLanguagePicker by viewModel.showLanguagePicker.collectAsState()
             val showStyleSheet by viewModel.showStyleSheet.collectAsState()
             val showTemplatesSheet by viewModel.showTemplatesSheet.collectAsState()
+            val allStamps by viewModel.allStamps.collectAsState()
             val editingKey by viewModel.editingKey.collectAsState()
             val userWantsBuiltIn by viewModel.userWantsBuiltInKeyboard.collectAsState()
             val dictationState by viewModel.dictationState.collectAsState()
@@ -120,7 +119,7 @@ class MainActivity : ComponentActivity() {
 
             // Centralized Back Navigation Hierarchy
             // Priority 1: System keyboard open -> Do NOT intercept, let default behavior dismiss keyboard
-            BackHandler(enabled = !isImeVisible || isReadingMode || isNoteManagerOpen || currentScreen != "EDITOR") {
+            BackHandler(enabled = !isImeVisible || isReadingMode || currentScreen != "EDITOR") {
                 when {
                     // Priority 2: Dialog, bottom sheet, popup, or key customization open -> close it
                     editingKey != null -> {
@@ -142,11 +141,6 @@ class MainActivity : ComponentActivity() {
                         viewModel.completeOnboarding()
                     }
 
-                    // Priority 3: Notes Manager Settings open -> back to source (Note Manager or Settings)
-                    currentScreen == "NOTES_MANAGER_SETTINGS" -> {
-                        viewModel.onBackFromNotesManagerSettings()
-                    }
-
                     currentScreen == "MARKDOWN_SETTINGS" -> {
                         viewModel.navigateTo("SETTINGS")
                     }
@@ -158,20 +152,6 @@ class MainActivity : ComponentActivity() {
                     // Priority 4: Settings screen or any sub-screen open -> return to editor (preserves reading/editing mode)
                     currentScreen != "EDITOR" -> {
                         viewModel.navigateTo("EDITOR")
-                    }
-
-                    // Note editor open from Daily Journal -> return to Daily Journal calendar
-                    viewModel.currentDailyJournalDate.value != null -> {
-                        if (!isReadingMode) {
-                            viewModel.setReadingMode(true)
-                        } else {
-                            viewModel.returnToDailyJournalManager()
-                        }
-                    }
-
-                    // Priority 5: Notes list drawer / manager open -> close drawer
-                    isNoteManagerOpen -> {
-                        viewModel.isNoteManagerOpen.value = false
                     }
 
                     // Priority 6: Recording/dictation active -> do NOT stop or exit, show toast
@@ -393,7 +373,6 @@ class MainActivity : ComponentActivity() {
                                     onMoveNoteMetricItem = { from, to -> viewModel.moveNoteMetricItem(from, to) },
                                     onToggleNoteMetricVisibility = { viewModel.toggleNoteMetricVisibility(it) },
                                     onResetNoteMetricsOrder = { viewModel.resetNoteMetricsOrder() },
-                                    onOpenNotesManagerSettings = { viewModel.openNotesManagerSettings(fromNoteManager = false) },
                                     onOpenMarkdownSettings = { viewModel.navigateTo("MARKDOWN_SETTINGS") },
                                     floatingLayoutSettings = floatingLayoutSettings,
                                     onFloatingUseSideRailChange = { viewModel.setFloatingUseSideRail(it) },
@@ -452,66 +431,15 @@ class MainActivity : ComponentActivity() {
                                             Toast.makeText(this@MainActivity, "Deleted $count notes from internal storage", Toast.LENGTH_SHORT).show()
                                         }
                                     },
+                                    templates = allStamps,
+                                    onSaveTemplate = { viewModel.saveTemplate(it) },
+                                    onDeleteTemplate = { viewModel.deleteTemplate(it) },
+                                    onPinTemplate = { viewModel.togglePinTemplate(it) },
+                                    onReorderTemplates = { viewModel.reorderTemplates(it) },
                                     onExportBackup = { uri, cb -> viewModel.exportBackup(uri, cb) },
                                     onValidateBackup = { uri, cb -> viewModel.validateBackup(uri, cb) },
                                     onRestoreBackup = { backup, cb -> viewModel.restoreBackup(backup, cb) },
                                     onBackClick = { viewModel.navigateTo("EDITOR") }
-                                )
-                            }
-
-                            AnimatedVisibility(
-                                visible = currentScreen == "NOTES_MANAGER_SETTINGS",
-                                enter = slideInHorizontally(tween(280)) { it } + fadeIn(tween(250)),
-                                exit = slideOutHorizontally(tween(250)) { it } + fadeOut(tween(200))
-                            ) {
-                                val newNoteLocationMode by viewModel.newNoteLocationMode.collectAsState()
-                                val fixedNewNoteFolder by viewModel.fixedNewNoteFolder.collectAsState()
-                                val askBeforeCreating by viewModel.askBeforeCreating.collectAsState()
-                                val askChooseTemplateToggle by viewModel.askChooseTemplateToggle.collectAsState()
-                                val askStartRecordingToggle by viewModel.askStartRecordingToggle.collectAsState()
-                                val newNoteNamingRule by viewModel.newNoteNamingRule.collectAsState()
-                                val afterCreatingNote by viewModel.afterCreatingNote.collectAsState()
-                                val customFolders by viewModel.customFolders.collectAsState()
-                                val allNotes by viewModel.allNotes.collectAsState()
-                                val showNoteMetrics by viewModel.showNoteMetricsInList.collectAsState()
-                                val noteMetricsStyle by viewModel.noteMetricsStyle.collectAsState()
-                                val noteMetricsOrder by viewModel.noteMetricsOrder.collectAsState()
-                                val noteMetricsHiddenItems by viewModel.noteMetricsHiddenItems.collectAsState()
-                                val trashAutoEmptyDays by viewModel.trashAutoEmptyDays.collectAsState()
-
-                                val availableFolders = remember(allNotes, customFolders) {
-                                    (allNotes.map { it.folder }.filter { it.isNotBlank() } + customFolders).distinct()
-                                }
-
-                                NotesManagerSettingsScreen(
-                                    newNoteLocationMode = newNoteLocationMode,
-                                    fixedNewNoteFolder = fixedNewNoteFolder,
-                                    askBeforeCreating = askBeforeCreating,
-                                    askChooseTemplateToggle = askChooseTemplateToggle,
-                                    askStartRecordingToggle = askStartRecordingToggle,
-                                    newNoteNamingRule = newNoteNamingRule,
-                                    afterCreatingNote = afterCreatingNote,
-                                    availableFolders = availableFolders,
-                                    onNewNoteLocationModeChange = { viewModel.setNewNoteLocationMode(it) },
-                                    onFixedNewNoteFolderChange = { viewModel.setFixedNewNoteFolder(it) },
-                                    onAskBeforeCreatingChange = { viewModel.setAskBeforeCreating(it) },
-                                    onAskChooseTemplateToggleChange = { viewModel.setAskChooseTemplateToggle(it) },
-                                    onAskStartRecordingToggleChange = { viewModel.setAskStartRecordingToggle(it) },
-                                    onNewNoteNamingRuleChange = { viewModel.setNewNoteNamingRule(it) },
-                                    onAfterCreatingNoteChange = { viewModel.setAfterCreatingNote(it) },
-                                    onResetToDefaults = { viewModel.resetNotesManagerSettingsToDefault() },
-                                    onBackClick = { viewModel.onBackFromNotesManagerSettings() },
-                                    showNoteMetrics = showNoteMetrics,
-                                    noteMetricsStyle = noteMetricsStyle,
-                                    noteMetricsOrder = noteMetricsOrder,
-                                    noteMetricsHiddenItems = noteMetricsHiddenItems,
-                                    onMoveNoteMetricItem = { from, to -> viewModel.moveNoteMetricItem(from, to) },
-                                    onToggleNoteMetricVisibility = { viewModel.toggleNoteMetricVisibility(it) },
-                                    onResetNoteMetricsOrder = { viewModel.resetNoteMetricsOrder() },
-                                    trashAutoEmptyDays = trashAutoEmptyDays,
-                                    onShowNoteMetricsChange = { viewModel.setShowNoteMetricsInList(it) },
-                                    onNoteMetricsStyleChange = { viewModel.setNoteMetricsStyle(it) },
-                                    onUpdateTrashDays = { viewModel.setTrashAutoEmptyDaysPref(it) }
                                 )
                             }
 

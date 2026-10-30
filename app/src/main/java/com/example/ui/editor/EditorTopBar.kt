@@ -14,7 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -95,11 +95,11 @@ fun EditorTopBar(
                         view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                         onMenuClick()
                     },
-                    modifier = Modifier.testTag("drawer_menu_button")
+                    modifier = Modifier.testTag("calendar_button")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Menu,
-                        contentDescription = "Open notes drawer"
+                        imageVector = Icons.Default.CalendarMonth,
+                        contentDescription = "Open Calendar"
                     )
                 }
             }

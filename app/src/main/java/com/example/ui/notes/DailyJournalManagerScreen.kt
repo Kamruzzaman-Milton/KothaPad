@@ -212,7 +212,7 @@ fun DailyJournalManagerScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back to Notes Manager"
+                            contentDescription = "Back to Journal Editor"
                         )
                     }
                 },

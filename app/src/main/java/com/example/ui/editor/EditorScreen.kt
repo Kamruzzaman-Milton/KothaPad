@@ -62,14 +62,9 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.compose.material.icons.outlined.CreateNewFolder
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -140,7 +135,6 @@ import com.example.ui.dialogs.RenameNoteDialog
 import com.example.ui.dialogs.StyleSheetBottomSheet
 import com.example.ui.dialogs.TemplatesBottomSheet
 import com.example.ui.keyboard.InAppKeyboard
-import com.example.ui.notes.NotesManagerScreen
 import com.example.ui.theme.HighlightCoral
 import com.example.ui.theme.HighlightCyan
 import com.example.ui.theme.HighlightGold
@@ -164,20 +158,11 @@ fun EditorScreen(
     val focusManager = LocalFocusManager.current
     var isTextFieldFocused by remember { mutableStateOf(false) }
 
-    // Note Manager state
-    val isNoteManagerOpen by viewModel.isNoteManagerOpen.collectAsState()
     val currentScreen by viewModel.currentScreen.collectAsState()
-    val activeNotes by viewModel.activeNotes.collectAsState()
-    val archivedNotes by viewModel.archivedNotes.collectAsState()
-    val trashedNotes by viewModel.trashedNotes.collectAsState()
-    val trashAutoEmptyDays by viewModel.trashAutoEmptyDays.collectAsState()
-    val defaultFolder by viewModel.defaultNewNoteFolder.collectAsState()
     val showNoteMetrics by viewModel.showNoteMetricsInList.collectAsState()
     val noteMetricsStyle by viewModel.noteMetricsStyle.collectAsState()
     val noteMetricsOrder by viewModel.noteMetricsOrder.collectAsState()
     val noteMetricsHiddenItems by viewModel.noteMetricsHiddenItems.collectAsState()
-    val expandedFolders by viewModel.expandedFolders.collectAsState()
-    val customFolders by viewModel.customFolders.collectAsState()
 
     // State collections
     val currentNote by viewModel.currentNote.collectAsState()
@@ -219,12 +204,6 @@ fun EditorScreen(
     val keepScreenOn by viewModel.keepScreenOnPref.collectAsState()
     val showWordCount by viewModel.showWordCountPref.collectAsState()
     val onboardingCompleted by viewModel.onboardingCompletedPref.collectAsState()
-    val askBeforeCreating by viewModel.askBeforeCreating.collectAsState()
-    val askChooseTemplateToggle by viewModel.askChooseTemplateToggle.collectAsState()
-    val askStartRecordingToggle by viewModel.askStartRecordingToggle.collectAsState()
-    val newNoteNamingRule by viewModel.newNoteNamingRule.collectAsState()
-    val newNoteLocationMode by viewModel.newNoteLocationMode.collectAsState()
-    val noteSortOption by viewModel.noteSortOption.collectAsState()
     val markdownSettings by viewModel.markdownSettings.collectAsState()
     val floatingLayoutSettings by viewModel.floatingLayoutSettings.collectAsState()
 
@@ -248,14 +227,6 @@ fun EditorScreen(
             snackbarHostState.showSnackbar(err)
         }
     }
-
-    // Editor New Note Destination Dialog States
-    var showNewNoteDialogFromEditor by remember { mutableStateOf(false) }
-    var editorNewNoteFolder by remember { mutableStateOf("General") }
-    var editorNewNoteTitle by remember { mutableStateOf("") }
-    var editorShowFolderDropdown by remember { mutableStateOf(false) }
-    var editorNewFolderNameInput by remember { mutableStateOf("") }
-    var editorShowNewFolderField by remember { mutableStateOf(false) }
 
     // Keyboard Settings & State
     val userWantsBuiltIn by viewModel.userWantsBuiltInKeyboard.collectAsState()
@@ -330,22 +301,9 @@ fun EditorScreen(
         }
     }
 
-    // Automatically hide system keyboard when Note Manager opens
-    LaunchedEffect(isNoteManagerOpen) {
-        if (isNoteManagerOpen) {
-            keyboardController?.hide()
-            try { focusManager.clearFocus(force = true) } catch (_: Exception) {}
-        } else {
-            // Restore editor focus when Note Manager closes only if not in reading mode
-            if (!isReadingMode) {
-                try { focusRequester.requestFocus() } catch (_: Exception) {}
-            }
-        }
-    }
-
-    // Request focus on editor when note is opened/loaded initially (never automatically on exiting reading mode or when Note Manager is open)
+    // Request focus on editor when note is opened/loaded initially (never automatically on exiting reading mode)
     LaunchedEffect(currentNote?.id) {
-        if (!isReadingMode && !isNoteManagerOpen) {
+        if (!isReadingMode) {
             try { focusRequester.requestFocus() } catch (_: Exception) {}
         }
     }
@@ -356,11 +314,11 @@ fun EditorScreen(
         focusManager.clearFocus(force = true)
     }
 
-    // Immersive mode: hide navigation bars when in Reading Mode (and Note Manager not open), restore on exit or pause/dispose
-    DisposableEffect(isReadingMode, isNoteManagerOpen) {
+    // Immersive mode: hide navigation bars when in Reading Mode, restore on exit or pause/dispose
+    DisposableEffect(isReadingMode) {
         val activity = context as? Activity
         val window = activity?.window
-        if (window != null && isReadingMode && !isNoteManagerOpen) {
+        if (window != null && isReadingMode) {
             val insetsController = WindowCompat.getInsetsController(window, window.decorView)
             insetsController.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -421,8 +379,8 @@ fun EditorScreen(
     }
 
     val isAnyDialogOpen = showStyleSheet || showLanguagePicker || showRenameDialog ||
-            showTemplatesSheet || (editingKey != null) || showNewNoteDialogFromEditor
-    val isEditorActive = currentScreen == "EDITOR" && !isNoteManagerOpen
+            showTemplatesSheet || (editingKey != null)
+    val isEditorActive = currentScreen == "EDITOR"
 
     Box(
         modifier = modifier.fillMaxSize()
@@ -433,25 +391,17 @@ fun EditorScreen(
                 .fillMaxSize()
                 .horizontalSwipeNavigation(
                     enabled = isEditorActive && !isAnyDialogOpen,
-                    allowSwipeLeft = if (isDailyJournalMode) hasNextJournalEntry else true,
-                    allowSwipeRight = if (isDailyJournalMode) hasPrevJournalEntry else true,
+                    allowSwipeLeft = true,
+                    allowSwipeRight = true,
                     onSwipeLeft = {
                         keyboardController?.hide()
                         focusManager.clearFocus(force = true)
-                        if (isDailyJournalMode) {
-                            viewModel.navigateToNextJournalEntry()
-                        } else {
-                            viewModel.navigateTo("SETTINGS")
-                        }
+                        viewModel.openDailyJournalManager()
                     },
                     onSwipeRight = {
                         keyboardController?.hide()
                         focusManager.clearFocus(force = true)
-                        if (isDailyJournalMode) {
-                            viewModel.navigateToPreviousJournalEntry()
-                        } else {
-                            viewModel.isNoteManagerOpen.value = true
-                        }
+                        viewModel.navigateTo("SETTINGS")
                     },
                     dragResistance = 0.35f
                 )
@@ -477,7 +427,7 @@ fun EditorScreen(
                             onMenuClick = {
                                 keyboardController?.hide()
                                 focusManager.clearFocus(force = true)
-                                viewModel.isNoteManagerOpen.value = true
+                                viewModel.openDailyJournalManager()
                             },
                             onTitleClick = { viewModel.showRenameDialog.value = true },
                             onLanguageClick = { viewModel.showLanguagePicker.value = true },
@@ -492,15 +442,7 @@ fun EditorScreen(
                                 context.startActivity(Intent.createChooser(sendIntent, "Share Note via"))
                             },
                             onNewNoteClick = {
-                                if (newNoteLocationMode == "ASK_POPUP" || askBeforeCreating) {
-                                    editorNewNoteFolder = if (currentNote?.folder?.isNotBlank() == true) currentNote!!.folder else "General"
-                                    editorNewNoteTitle = ""
-                                    editorShowNewFolderField = false
-                                    editorNewFolderNameInput = ""
-                                    showNewNoteDialogFromEditor = true
-                                } else {
-                                    viewModel.createNewNote()
-                                }
+                                viewModel.handleDailyJournalTodayFabClick()
                             },
                             onSettingsClick = { viewModel.navigateTo("SETTINGS") },
                             onToggleKeyboardEditMode = { viewModel.setKeyboardEditMode(!keyboardEditMode) },
@@ -1189,190 +1131,10 @@ fun EditorScreen(
             }
         }
 
-        // FULLSCREEN NOTES MANAGER OVERLAY
-        // Animated slide-in from left; swiping right-to-left closes/minimizes it and shows note viewer
-        AnimatedVisibility(
-            visible = isNoteManagerOpen,
-            enter = slideInHorizontally(animationSpec = tween(280)) { -it } + fadeIn(animationSpec = tween(250)),
-            exit = slideOutHorizontally(animationSpec = tween(250)) { -it } + fadeOut(animationSpec = tween(200))
-        ) {
-            NotesManagerScreen(
-                activeNotes = activeNotes,
-                archivedNotes = archivedNotes,
-                trashedNotes = trashedNotes,
-                templates = allStamps,
-                currentNoteId = currentNote?.id ?: 0L,
-                trashAutoEmptyDays = trashAutoEmptyDays,
-                defaultFolder = defaultFolder,
-                showNoteMetrics = showNoteMetrics,
-                noteMetricsStyle = noteMetricsStyle,
-                noteMetricsOrder = noteMetricsOrder,
-                noteMetricsHiddenItems = noteMetricsHiddenItems,
-                expandedFolders = expandedFolders,
-                customFolders = customFolders,
-                currentSortOption = noteSortOption,
-                onSortOptionChange = { viewModel.setNoteSortOption(it) },
-                onOpenSettings = {
-                    viewModel.openNotesManagerSettings(fromNoteManager = true)
-                },
-                onToggleFolderExpanded = { folder, exp -> viewModel.toggleFolderExpanded(folder, exp) },
-                onSetAllFoldersExpanded = { exp, folders -> viewModel.setAllFoldersExpanded(exp, folders) },
-                onAddCustomFolder = { viewModel.addCustomFolder(it) },
-                onRenameFolder = { oldF, newF -> viewModel.renameFolder(oldF, newF) },
-                onDeleteFolder = { folder, deleteNotes -> viewModel.deleteFolder(folder, deleteNotes) },
-                onDuplicateNote = { viewModel.duplicateNote(it) },
-                onRenameNote = { note, title -> viewModel.renameNote(note, title) },
-                onNoteSelect = { note ->
-                    viewModel.clearDailyJournalNavigation()
-                    viewModel.loadNote(note)
-                    viewModel.isNoteManagerOpen.value = false
-                },
-                onNewNote = { folder, template, title, rec ->
-                    viewModel.createNewNote(folder, template, title, rec)
-                },
-                askBeforeCreating = askBeforeCreating,
-                askChooseTemplateToggle = askChooseTemplateToggle,
-                askStartRecordingToggle = askStartRecordingToggle,
-                newNoteNamingRule = newNoteNamingRule,
-                newNoteLocationMode = newNoteLocationMode,
-                availableFolders = allNotes.map { it.folder }.distinct() + customFolders.toList(),
-                onPinToggle = { viewModel.togglePinCurrentNote(it) },
-                onTrashNote = { viewModel.trashNote(it) },
-                onTrashNotes = { viewModel.trashNotes(it) },
-                onRestoreNote = { viewModel.restoreNote(it) },
-                onPermanentlyDeleteNote = { viewModel.permanentlyDeleteNote(it) },
-                onPermanentlyDeleteNotes = { viewModel.permanentlyDeleteNotes(it) },
-                onEmptyTrash = { viewModel.emptyTrash() },
-                onArchiveToggle = { viewModel.toggleArchiveNote(it) },
-                onArchiveNotes = { notes, archive -> viewModel.archiveNotes(notes, archive) },
-                onMergeNotes = { notes, title -> viewModel.mergeNotes(notes, title) },
-                onMoveNotesToFolder = { notes, folder -> viewModel.moveNotesToFolder(notes, folder) },
-                onAddTagsToNotes = { notes, tags -> viewModel.addTagsToNotes(notes, tags) },
-                onSaveTemplate = { viewModel.saveTemplate(it) },
-                onDeleteTemplate = { viewModel.deleteTemplate(it) },
-                onPinTemplate = { viewModel.togglePinTemplate(it) },
-                onReorderTemplates = { viewModel.reorderTemplates(it) },
-                onUpdateTrashDays = { viewModel.setTrashAutoEmptyDaysPref(it) },
-                onClose = { viewModel.isNoteManagerOpen.value = false },
-                onReloadVault = { viewModel.reloadVaultFromDisk() },
-                onOpenDailyJournalManager = { viewModel.openDailyJournalManager() },
-                isVaultScanning = isVaultScanning,
-                vaultScanProgress = vaultScanProgress
-            )
-        }
+
     }
 
     // Dialogs & Sheets
-    if (showNewNoteDialogFromEditor) {
-        AlertDialog(
-            onDismissRequest = { showNewNoteDialogFromEditor = false },
-            title = { Text("Create New Note") },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedTextField(
-                        value = editorNewNoteTitle,
-                        onValueChange = { editorNewNoteTitle = it },
-                        label = { Text("Note Title (Optional)") },
-                        placeholder = { Text("Enter title or leave blank") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Destination Folder", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                        OutlinedButton(
-                            onClick = { editorShowFolderDropdown = !editorShowFolderDropdown },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(text = editorNewNoteFolder)
-                            Spacer(modifier = Modifier.weight(1f))
-                            Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null)
-                        }
-                        DropdownMenu(
-                            expanded = editorShowFolderDropdown,
-                            onDismissRequest = { editorShowFolderDropdown = false }
-                        ) {
-                            val folders = (listOf("General") + customFolders.toList() + allNotes.map { it.folder }.filter { it.isNotBlank() }).distinct()
-                            folders.forEach { folder ->
-                                DropdownMenuItem(
-                                    text = { Text(folder) },
-                                    onClick = {
-                                        editorNewNoteFolder = folder
-                                        editorShowFolderDropdown = false
-                                    }
-                                )
-                            }
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, contentDescription = null) },
-                                text = { Text("Create new folder...") },
-                                onClick = {
-                                    editorShowNewFolderField = true
-                                    editorShowFolderDropdown = false
-                                }
-                            )
-                        }
-
-                        if (editorShowNewFolderField) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedTextField(
-                                    value = editorNewFolderNameInput,
-                                    onValueChange = { editorNewFolderNameInput = it },
-                                    placeholder = { Text("Folder name") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Button(
-                                    onClick = {
-                                        val trimmed = editorNewFolderNameInput.trim()
-                                        if (trimmed.isNotBlank()) {
-                                            viewModel.addCustomFolder(trimmed)
-                                            editorNewNoteFolder = trimmed
-                                            editorNewFolderNameInput = ""
-                                            editorShowNewFolderField = false
-                                        }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Text("Add")
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val title = if (editorNewNoteTitle.isBlank()) null else editorNewNoteTitle
-                        viewModel.createNewNote(
-                            folder = editorNewNoteFolder,
-                            customTitle = title
-                        )
-                        showNewNoteDialogFromEditor = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text("Create")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewNoteDialogFromEditor = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-
     if (showRenameDialog) {
         RenameNoteDialog(
             initialTitle = currentNote?.title ?: "",

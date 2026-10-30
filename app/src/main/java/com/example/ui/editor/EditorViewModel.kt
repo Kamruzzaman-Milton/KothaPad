@@ -110,8 +110,6 @@ class EditorViewModel(
     val defaultNewNoteFolder: StateFlow<String> = preferencesManager.defaultNewNoteFolder
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "General")
 
-    val isNoteManagerOpen = MutableStateFlow(false)
-
     private val _currentNote = MutableStateFlow<Note?>(null)
     val currentNote: StateFlow<Note?> = _currentNote.asStateFlow()
 
@@ -389,21 +387,14 @@ class EditorViewModel(
                     vaultNoteRepository.syncTemplatesFromVault(allStamps.value) { stamp ->
                         stampRepository.insert(stamp)
                     }
-                    val activeNotesList = vaultNoteRepository.activeNotes.value
-                    var targetNote: Note? = null
-                    if (!ws.lastOpenedNoteRelPath.isNullOrBlank()) {
-                        targetNote = activeNotesList.firstOrNull { note ->
-                            !note.isDeleted && vaultNoteRepository.getRelPathForNote(note).equals(ws.lastOpenedNoteRelPath, ignoreCase = true)
-                        }
-                    }
-                    if (targetNote == null && activeNotesList.isNotEmpty()) {
-                        targetNote = vaultNoteRepository.getLatestActiveNote() ?: activeNotesList.firstOrNull()
-                    }
+                    val today = LocalDate.now()
+                    val dateStr = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                    val existingToday = findDailyJournalNoteForDate(today)
                     withContext(Dispatchers.Main) {
-                        if (targetNote != null) {
-                            loadNote(targetNote)
-                        } else if (activeNotesList.isEmpty() && vaultNoteRepository.allNotes.value.isEmpty()) {
-                            createNewNote()
+                        if (existingToday != null) {
+                            openDailyJournalNote(existingToday, dateStr, startInEditMode = false)
+                        } else {
+                            createNewDailyJournalNote(today, startInEditMode = false)
                         }
                     }
                     checkAndPromptMigration(doc)
@@ -440,16 +431,7 @@ class EditorViewModel(
             }
         }
 
-        // Keep session timing synchronized with note manager & screens
-        viewModelScope.launch {
-            isNoteManagerOpen.collect { isOpen ->
-                if (isOpen) {
-                    cleanupEmptyNoteIfAbandoned(_currentNote.value)
-                }
-                checkAndResumeSessionTimer()
-            }
-        }
-
+        // Keep session timing synchronized with screens
         viewModelScope.launch {
             _currentScreen.collect { screen ->
                 if (screen != "EDITOR") {
@@ -559,7 +541,7 @@ class EditorViewModel(
 
     private fun checkAndResumeSessionTimer() {
         val note = _currentNote.value
-        val isEditorActive = isAppInForeground && _currentScreen.value == "EDITOR" && !isNoteManagerOpen.value
+        val isEditorActive = isAppInForeground && _currentScreen.value == "EDITOR"
         if (isEditorActive && note != null) {
             startSessionTimer()
         } else {
@@ -1582,15 +1564,10 @@ class EditorViewModel(
 
             withContext(Dispatchers.Main) {
                 if (inserted != null) {
-                    if (afterAction == "OPEN_EDITOR") {
-                        loadNote(inserted)
-                        isCurrentNoteAutoCreated = true
-                        isNoteManagerOpen.value = false
-                        if (startRecording) {
-                            startDictation()
-                        }
-                    } else {
-                        isNoteManagerOpen.value = true
+                    loadNote(inserted)
+                    isCurrentNoteAutoCreated = true
+                    if (startRecording) {
+                        startDictation()
                     }
                 }
             }
@@ -1642,44 +1619,11 @@ class EditorViewModel(
         }
     }
 
-    fun trashNotes(notes: List<Note>) {
-        autoSaveJob?.cancel()
-        val deletedIds = notes.map { it.id }.toSet()
-        val isCurrentDeleted = _currentNote.value?.let { deletedIds.contains(it.id) } == true
-        if (isCurrentDeleted) {
-            sessionDurationJob?.cancel()
-            sessionDurationJob = null
-            _currentNote.value = null
-        }
-        viewModelScope.launch(Dispatchers.IO) {
-            val now = System.currentTimeMillis()
-            val updated = notes.map { it.copy(isDeleted = true, deletedAt = now, isPinned = false) }
-            noteRepository.updateAll(updated)
-            if (isCurrentDeleted) {
-                val remaining = noteRepository.getLatestActiveNote()
-                withContext(Dispatchers.Main) {
-                    if (remaining != null) {
-                        loadNote(remaining)
-                    } else {
-                        createNewNote()
-                    }
-                }
-            }
-        }
-    }
-
     // Restore from Trash
     fun restoreNote(note: Note) {
         viewModelScope.launch(Dispatchers.IO) {
             val updated = note.copy(isDeleted = false, deletedAt = null)
             noteRepository.update(updated)
-        }
-    }
-
-    fun restoreNotes(notes: List<Note>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val updated = notes.map { it.copy(isDeleted = false, deletedAt = null) }
-            noteRepository.updateAll(updated)
         }
     }
 
@@ -1694,26 +1638,6 @@ class EditorViewModel(
         }
         viewModelScope.launch(Dispatchers.IO) {
             noteRepository.delete(note)
-            if (isCurrent) {
-                val remaining = noteRepository.getLatestActiveNote()
-                withContext(Dispatchers.Main) {
-                    if (remaining != null) loadNote(remaining) else createNewNote()
-                }
-            }
-        }
-    }
-
-    fun permanentlyDeleteNotes(notes: List<Note>) {
-        autoSaveJob?.cancel()
-        val deletedIds = notes.map { it.id }.toSet()
-        val isCurrent = _currentNote.value?.let { deletedIds.contains(it.id) } == true
-        if (isCurrent) {
-            sessionDurationJob?.cancel()
-            sessionDurationJob = null
-            _currentNote.value = null
-        }
-        viewModelScope.launch(Dispatchers.IO) {
-            noteRepository.deleteAll(notes)
             if (isCurrent) {
                 val remaining = noteRepository.getLatestActiveNote()
                 withContext(Dispatchers.Main) {
@@ -1751,102 +1675,6 @@ class EditorViewModel(
         }
     }
 
-    fun archiveNotes(notes: List<Note>, archive: Boolean) {
-        val noteIds = notes.map { it.id }.toSet()
-        val isCurrentArchived = archive && _currentNote.value?.let { noteIds.contains(it.id) } == true
-        if (isCurrentArchived) {
-            autoSaveJob?.cancel()
-            sessionDurationJob?.cancel()
-            sessionDurationJob = null
-            _currentNote.value = null
-        }
-        viewModelScope.launch(Dispatchers.IO) {
-            val updated = notes.map { it.copy(isArchived = archive) }
-            noteRepository.updateAll(updated)
-            if (isCurrentArchived) {
-                val remaining = noteRepository.getLatestActiveNote()
-                withContext(Dispatchers.Main) {
-                    if (remaining != null) loadNote(remaining) else createNewNote()
-                }
-            }
-        }
-    }
-
-    // Multi-Select: Merge Notes
-    fun mergeNotes(notesToMerge: List<Note>, mergedTitle: String) {
-        if (notesToMerge.isEmpty()) return
-        flushAutoSave()
-        viewModelScope.launch(Dispatchers.IO) {
-            val sorted = notesToMerge.sortedBy { it.createdAt }
-            val combinedBody = buildString {
-                sorted.forEachIndexed { idx, n ->
-                    if (idx > 0) append("\n\n─────────────\n\n")
-                    append("### ${n.title.ifBlank { "Untitled" }}\n")
-                    append(n.content)
-                }
-            }
-            val primaryFolder = sorted.firstOrNull()?.folder ?: "General"
-            val combinedTags = sorted.flatMap { it.tags.split(",") }
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .distinct()
-                .joinToString(",")
-
-            val mergedNote = Note(
-                title = mergedTitle.ifBlank { "Merged Note (${sorted.size} notes)" },
-                content = combinedBody,
-                folder = primaryFolder,
-                tags = combinedTags,
-                languageCode = defaultLanguage.value,
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis()
-            )
-            val newId = noteRepository.insert(mergedNote)
-
-            // Send original merged notes to trash
-            val now = System.currentTimeMillis()
-            val trashed = sorted.map { it.copy(isDeleted = true, deletedAt = now) }
-            noteRepository.updateAll(trashed)
-
-            val inserted = noteRepository.getNoteOnce(newId)
-            withContext(Dispatchers.Main) {
-                if (inserted != null) {
-                    loadNote(inserted)
-                    isNoteManagerOpen.value = false
-                }
-            }
-        }
-    }
-
-    // Multi-Select: Move to Folder
-    fun moveNotesToFolder(notes: List<Note>, targetFolder: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val updated = notes.map { it.copy(folder = targetFolder, updatedAt = System.currentTimeMillis()) }
-            noteRepository.updateAll(updated)
-            if (notes.any { it.id == _currentNote.value?.id }) {
-                _currentNote.value = _currentNote.value?.copy(folder = targetFolder)
-            }
-        }
-    }
-
-    // Multi-Select: Add Tags
-    fun addTagsToNotes(notes: List<Note>, newTags: List<String>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val updated = notes.map { n ->
-                val existing = n.tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                val merged = (existing + newTags).distinct().joinToString(",")
-                n.copy(tags = merged, updatedAt = System.currentTimeMillis())
-            }
-            noteRepository.updateAll(updated)
-            if (notes.any { it.id == _currentNote.value?.id }) {
-                _currentNote.value = _currentNote.value?.let { curr ->
-                    val existing = curr.tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                    curr.copy(tags = (existing + newTags).distinct().joinToString(","))
-                }
-            }
-        }
-    }
-
     fun deleteNote(note: Note, onDeleted: () -> Unit) {
         trashNote(note)
         onDeleted()
@@ -1871,131 +1699,6 @@ class EditorViewModel(
         }
     }
 
-    fun toggleFolderExpanded(folder: String, expanded: Boolean) {
-        viewModelScope.launch {
-            val current = expandedFolders.value.toMutableSet()
-            if (expanded) {
-                current.add(folder)
-            } else {
-                current.remove(folder)
-            }
-            preferencesManager.setExpandedFolders(current)
-            vaultNoteRepository.saveWorkspace(expandedFolders = current)
-        }
-    }
-
-    fun setAllFoldersExpanded(expanded: Boolean, allFolders: Set<String>) {
-        viewModelScope.launch {
-            val newSet = if (expanded) allFolders else emptySet()
-            preferencesManager.setExpandedFolders(newSet)
-            vaultNoteRepository.saveWorkspace(expandedFolders = newSet)
-        }
-    }
-
-    fun addCustomFolder(folder: String) {
-        val trimmed = folder.trim()
-        if (trimmed.isBlank()) return
-        viewModelScope.launch {
-            val current = customFolders.value.toMutableSet()
-            current.add(trimmed)
-            preferencesManager.setCustomFolders(current)
-            toggleFolderExpanded(trimmed, true)
-            vaultNoteRepository.createFolderOnDisk(trimmed)
-        }
-    }
-
-    fun renameFolder(oldFolder: String, newFolder: String) {
-        val trimmed = newFolder.trim()
-        if (trimmed.isBlank() || trimmed.equals(oldFolder, ignoreCase = true)) return
-        viewModelScope.launch(Dispatchers.IO) {
-            vaultNoteRepository.renameFolderOnDisk(oldFolder, trimmed)
-            val all = noteRepository.allNotes.first()
-            val notesToUpdate = all.filter {
-                it.folder.equals(oldFolder, ignoreCase = true) || it.folder.startsWith("$oldFolder/", ignoreCase = true)
-            }
-            val updated = notesToUpdate.map {
-                val newPath = if (it.folder.equals(oldFolder, ignoreCase = true)) {
-                    trimmed
-                } else {
-                    trimmed + it.folder.substring(oldFolder.length)
-                }
-                it.copy(folder = newPath, updatedAt = System.currentTimeMillis())
-            }
-            noteRepository.updateAll(updated)
-
-            val currentCustom = customFolders.value.toMutableSet()
-            val toAdd = mutableSetOf<String>()
-            val toRemove = mutableSetOf<String>()
-            for (f in currentCustom) {
-                if (f.equals(oldFolder, ignoreCase = true)) {
-                    toRemove.add(f)
-                    toAdd.add(trimmed)
-                } else if (f.startsWith("$oldFolder/", ignoreCase = true)) {
-                    toRemove.add(f)
-                    toAdd.add(trimmed + f.substring(oldFolder.length))
-                }
-            }
-            currentCustom.removeAll(toRemove)
-            currentCustom.addAll(toAdd)
-            preferencesManager.setCustomFolders(currentCustom)
-
-            val currentExp = expandedFolders.value.toMutableSet()
-            val expToAdd = mutableSetOf<String>()
-            val expToRemove = mutableSetOf<String>()
-            for (f in currentExp) {
-                if (f.equals(oldFolder, ignoreCase = true)) {
-                    expToRemove.add(f)
-                    expToAdd.add(trimmed)
-                } else if (f.startsWith("$oldFolder/", ignoreCase = true)) {
-                    expToRemove.add(f)
-                    expToAdd.add(trimmed + f.substring(oldFolder.length))
-                }
-            }
-            currentExp.removeAll(expToRemove)
-            currentExp.addAll(expToAdd)
-            preferencesManager.setExpandedFolders(currentExp)
-            vaultNoteRepository.saveWorkspace(expandedFolders = currentExp)
-
-            if (_currentNote.value?.folder.equals(oldFolder, ignoreCase = true)) {
-                _currentNote.value = _currentNote.value?.copy(folder = trimmed)
-            } else if (_currentNote.value?.folder?.startsWith("$oldFolder/", ignoreCase = true) == true) {
-                val curFolder = _currentNote.value!!.folder
-                _currentNote.value = _currentNote.value?.copy(folder = trimmed + curFolder.substring(oldFolder.length))
-            }
-        }
-    }
-
-    fun deleteFolder(folder: String, deleteContainedNotes: Boolean) {
-        viewModelScope.launch(Dispatchers.IO) {
-            vaultNoteRepository.deleteFolderOnDisk(folder, deleteContainedNotes)
-            val all = noteRepository.allNotes.first()
-            val notesInFolder = all.filter {
-                it.folder.equals(folder, ignoreCase = true) || it.folder.startsWith("$folder/", ignoreCase = true)
-            }
-            if (deleteContainedNotes) {
-                val now = System.currentTimeMillis()
-                val trashed = notesInFolder.map { it.copy(isDeleted = true, deletedAt = now, isPinned = false) }
-                noteRepository.updateAll(trashed)
-            } else {
-                val moved = notesInFolder.map { it.copy(folder = "General", updatedAt = System.currentTimeMillis()) }
-                noteRepository.updateAll(moved)
-            }
-            val currentCustom = customFolders.value.toMutableSet()
-            val toRemove = currentCustom.filter {
-                it.equals(folder, ignoreCase = true) || it.startsWith("$folder/", ignoreCase = true)
-            }.toSet()
-            currentCustom.removeAll(toRemove)
-            preferencesManager.setCustomFolders(currentCustom)
-
-            val currentExp = expandedFolders.value.toMutableSet()
-            val expToRemove = currentExp.filter {
-                it.equals(folder, ignoreCase = true) || it.startsWith("$folder/", ignoreCase = true)
-            }.toSet()
-            currentExp.removeAll(expToRemove)
-            preferencesManager.setExpandedFolders(currentExp)
-            vaultNoteRepository.saveWorkspace(expandedFolders = currentExp)
-        }
-    }
 
     fun duplicateNote(note: Note) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -2111,7 +1814,6 @@ class EditorViewModel(
 
     fun onBackFromDailyJournalManager() {
         _currentScreen.value = "EDITOR"
-        isNoteManagerOpen.value = true
     }
 
     fun returnToDailyJournalManager() {
@@ -2132,7 +1834,6 @@ class EditorViewModel(
         setReadingMode(!startInEditMode)
         _noteNavigationContext.value = NoteNavigationContext.DAILY_JOURNAL
         _currentDailyJournalDate.value = dateStr
-        isNoteManagerOpen.value = false
         navigateTo("EDITOR")
     }
 
@@ -2434,22 +2135,7 @@ class EditorViewModel(
     fun setAskStartRecordingToggle(toggle: Boolean) = viewModelScope.launch { preferencesManager.setAskStartRecordingToggle(toggle) }
     fun setNewNoteNamingRule(rule: String) = viewModelScope.launch { preferencesManager.setNewNoteNamingRule(rule) }
     fun setAfterCreatingNote(action: String) = viewModelScope.launch { preferencesManager.setAfterCreatingNote(action) }
-    private var notesManagerSettingsReturnTarget: String = "SETTINGS"
 
-    fun openNotesManagerSettings(fromNoteManager: Boolean = false) {
-        notesManagerSettingsReturnTarget = if (fromNoteManager) "NOTES_MANAGER" else "SETTINGS"
-        isNoteManagerOpen.value = false
-        _currentScreen.value = "NOTES_MANAGER_SETTINGS"
-    }
-
-    fun onBackFromNotesManagerSettings() {
-        if (notesManagerSettingsReturnTarget == "NOTES_MANAGER") {
-            _currentScreen.value = "EDITOR"
-            isNoteManagerOpen.value = true
-        } else {
-            _currentScreen.value = "SETTINGS"
-        }
-    }
 
     fun setNoteMetricsOrder(order: String) = viewModelScope.launch { preferencesManager.setNoteMetricsOrder(order) }
     fun setNoteMetricsHiddenItems(hidden: Set<String>) = viewModelScope.launch { preferencesManager.setNoteMetricsHiddenItems(hidden) }
@@ -2476,23 +2162,6 @@ class EditorViewModel(
     fun resetNoteMetricsOrder() {
         setNoteMetricsOrder(com.example.ui.notes.NoteMetricsConfig.DEFAULT_ORDER_STRING)
         setNoteMetricsHiddenItems(emptySet())
-    }
-
-    fun resetNotesManagerSettingsToDefault() {
-        viewModelScope.launch {
-            preferencesManager.setNewNoteLocationMode("LAST_WORKED_ON")
-            preferencesManager.setFixedNewNoteFolder("General")
-            preferencesManager.setAskBeforeCreating(false)
-            preferencesManager.setAskChooseTemplateToggle(true)
-            preferencesManager.setAskStartRecordingToggle(false)
-            preferencesManager.setNewNoteNamingRule("UNTITLED")
-            preferencesManager.setAfterCreatingNote("OPEN_EDITOR")
-            preferencesManager.setShowNoteMetricsInList(true)
-            preferencesManager.setNoteMetricsStyle("COMPACT")
-            preferencesManager.setNoteMetricsOrder(com.example.ui.notes.NoteMetricsConfig.DEFAULT_ORDER_STRING)
-            preferencesManager.setNoteMetricsHiddenItems(emptySet())
-            preferencesManager.setTrashAutoEmptyDays(7)
-        }
     }
 
     // Backup & Restore Operations

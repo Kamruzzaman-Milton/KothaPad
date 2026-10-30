@@ -29,8 +29,12 @@
 - Floating layout controls and side rail layout with customizable scale, side (left/right), offsets, and text clearance.
 
 ## 6. Vault & Note Management
+- **Journal-First Architecture:** App operates primarily as a dedicated journal; Note Manager screens, dead routes, and redundant batch states are completely removed from the codebase while preserving underlying journal notes, templates, and storage vault integrity.
+- **App Startup Flow:** Cold start immediately opens today's journal entry in reading mode with scroll at top; calendar is accessible one swipe away.
+- **Horizontal Swipe Navigation:** While viewing an entry, swiping left (right-to-left) opens the Daily Journal calendar; swiping right (left-to-right) opens Settings.
+- **Template Management:** Templates are configured and managed in a dedicated section within Settings; insertion remains accessible via editor bottom sheet.
 - Storage vault backing with SAF fast lister and local database sync.
-- Folders (active, archive, trash with auto-empty countdown, custom folders).
+- Folders (active, archive, trash with auto-empty countdown, custom folders preserved in storage).
 - Daily Journal Calendar: Tapping existing note date opens in reading mode; tapping empty date auto-creates and opens in editing mode in "Daily Journal" folder without duplicates.
 - Daily Journal Plus Button: Opens today's note in editing mode (creates only if absent, no duplicates).
 - Daily Journal Storage Integrity: Dedicated "Daily Journal" vault folder; automatic migration, duplicate purging, and reconciliation across root/General.

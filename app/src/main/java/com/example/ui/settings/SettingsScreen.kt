@@ -38,15 +38,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PostAdd
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Tune
+import com.example.data.model.Stamp
+import com.example.ui.dialogs.EditTemplateDialog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -281,7 +291,6 @@ fun SettingsScreen(
     onPipelineAutoCapChange: (Boolean) -> Unit,
     onPipelineCommandsChange: (Boolean) -> Unit,
     onShowWordCountChange: (Boolean) -> Unit,
-    onOpenNotesManagerSettings: () -> Unit = {},
     onOpenMarkdownSettings: () -> Unit = {},
     // Floating Layout Settings
     floatingLayoutSettings: com.example.data.model.FloatingLayoutSettings = com.example.data.model.FloatingLayoutSettings(),
@@ -322,6 +331,12 @@ fun SettingsScreen(
     onReloadVaultFromDisk: () -> Unit = {},
     onRebuildVaultIndex: () -> Unit = {},
     onDeleteOldInternalData: () -> Unit = {},
+    // Templates Callbacks & State
+    templates: List<Stamp> = emptyList(),
+    onSaveTemplate: (Stamp) -> Unit = {},
+    onDeleteTemplate: (Stamp) -> Unit = {},
+    onPinTemplate: (Stamp) -> Unit = {},
+    onReorderTemplates: (List<Stamp>) -> Unit = {},
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -333,6 +348,10 @@ fun SettingsScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var importJsonText by remember { mutableStateOf("") }
     var importError by remember { mutableStateOf(false) }
+
+    // Templates state
+    var editingTemplate by remember { mutableStateOf<Stamp?>(null) }
+    var isCreatingTemplate by remember { mutableStateOf(false) }
 
     // Backup & Restore states
     var isExporting by remember { mutableStateOf(false) }
@@ -431,7 +450,7 @@ fun SettingsScreen(
         micButtonSize, micButtonShape, micButtonColor, micButtonPosition, micButtonOffsetY,
         statusChipStyle, uiDensity, cornerRadiusDp, dictationAnimationStyle, hapticsLevel,
         pipelineSpacing, pipelineAutoCap, pipelineCommands, needsDndPermission,
-        floatingLayoutSettings, markdownSettings, vaultState
+        floatingLayoutSettings, markdownSettings, vaultState, templates
     ) {
         listOf(
             // Vault Section
@@ -517,23 +536,193 @@ fun SettingsScreen(
                 }
             ),
 
-            // 0. Notes Manager Settings Entry Section
+            // Templates & Quick Text Section
             SettingHeadlineSection(
-                id = "notes_manager_settings_entry",
-                title = "Notes Manager",
-                subtitle = "Where new notes are created, popup dialog & naming rules",
-                icon = Icons.Outlined.Folder,
+                id = "templates_section",
+                title = "Templates & Quick Text",
+                subtitle = "Create, edit, pin, and organize reusable templates",
+                icon = Icons.Outlined.PostAdd,
                 items = listOf(
-                    SettingItem.ButtonRow(
-                        id = "open_notes_manager_settings",
-                        title = "Notes Manager Settings",
-                        subtitle = "Dedicated page for note creation location, templates & naming",
-                        buttons = listOf(
-                            SettingButtonOption(
-                                label = "Open Notes Manager Settings",
-                                onClick = onOpenNotesManagerSettings
-                            )
-                        )
+                    SettingItem.CustomContent(
+                        id = "templates_content",
+                        content = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Saved Templates (${templates.size})",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Button(
+                                        onClick = {
+                                            editingTemplate = Stamp(
+                                                id = 0,
+                                                label = "",
+                                                templateText = "",
+                                                isPinned = false
+                                            )
+                                            isCreatingTemplate = true
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Add Template", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+
+                                if (templates.isEmpty()) {
+                                    Text(
+                                        text = "No templates saved yet. Tap 'Add Template' to create reusable templates for your notes and journal entries.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                } else {
+                                    templates.forEachIndexed { index, tmpl ->
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.surface,
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                            text = tmpl.label.ifBlank { "Untitled Template" },
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            maxLines = 1,
+                                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                        )
+                                                        if (tmpl.isPinned) {
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Icon(
+                                                                imageVector = Icons.Default.PushPin,
+                                                                contentDescription = "Pinned",
+                                                                tint = MaterialTheme.colorScheme.primary,
+                                                                modifier = Modifier.size(14.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                    if (tmpl.templateText.isNotBlank()) {
+                                                        Text(
+                                                            text = tmpl.templateText.trim(),
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            maxLines = 2,
+                                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                }
+
+                                                // Reorder Up
+                                                IconButton(
+                                                    onClick = {
+                                                        if (index > 0) {
+                                                            val mutable = templates.toMutableList()
+                                                            val item = mutable.removeAt(index)
+                                                            mutable.add(index - 1, item)
+                                                            onReorderTemplates(mutable)
+                                                        }
+                                                    },
+                                                    enabled = index > 0,
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.ArrowUpward,
+                                                        contentDescription = "Move Up",
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+
+                                                // Reorder Down
+                                                IconButton(
+                                                    onClick = {
+                                                        if (index < templates.size - 1) {
+                                                            val mutable = templates.toMutableList()
+                                                            val item = mutable.removeAt(index)
+                                                            mutable.add(index + 1, item)
+                                                            onReorderTemplates(mutable)
+                                                        }
+                                                    },
+                                                    enabled = index < templates.size - 1,
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.ArrowDownward,
+                                                        contentDescription = "Move Down",
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+
+                                                // Pin toggle
+                                                IconButton(
+                                                    onClick = { onPinTemplate(tmpl) },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (tmpl.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                                                        contentDescription = if (tmpl.isPinned) "Unpin" else "Pin",
+                                                        tint = if (tmpl.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+
+                                                // Edit
+                                                IconButton(
+                                                    onClick = {
+                                                        editingTemplate = tmpl
+                                                        isCreatingTemplate = false
+                                                    },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Edit,
+                                                        contentDescription = "Edit Template",
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+
+                                                // Delete
+                                                IconButton(
+                                                    onClick = { onDeleteTemplate(tmpl) },
+                                                    modifier = Modifier.size(32.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "Delete Template",
+                                                        tint = MaterialTheme.colorScheme.error,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     )
                 )
             ),
@@ -1457,22 +1646,15 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(items = sections, key = { it.id }) { section ->
-                if (section.id == "notes_manager_settings_entry") {
-                    NavigationSettingCard(
-                        section = section,
-                        onClick = onOpenNotesManagerSettings
-                    )
-                } else {
-                    val isExpanded = expandedSectionId == section.id
-                    HeadlineCard(
-                        section = section,
-                        isExpanded = isExpanded,
-                        onToggle = {
-                            // Tapping expands in place; tapping again collapses it; only one open at a time
-                            expandedSectionId = if (isExpanded) null else section.id
-                        }
-                    )
-                }
+                val isExpanded = expandedSectionId == section.id
+                HeadlineCard(
+                    section = section,
+                    isExpanded = isExpanded,
+                    onToggle = {
+                        // Tapping expands in place; tapping again collapses it; only one open at a time
+                        expandedSectionId = if (isExpanded) null else section.id
+                    }
+                )
             }
 
             item {
@@ -1953,74 +2135,23 @@ fun SettingsScreen(
             }
         )
     }
+
+    // Edit Template Dialog
+    editingTemplate?.let { template ->
+        EditTemplateDialog(
+            template = template,
+            isNew = isCreatingTemplate,
+            onSave = { updated ->
+                onSaveTemplate(updated)
+                editingTemplate = null
+            },
+            onDismiss = { editingTemplate = null }
+        )
+    }
 }
 
 // ==========================================
 // Direct Navigation Setting Card
-// ==========================================
-
-@Composable
-fun NavigationSettingCard(
-    section: SettingHeadlineSection,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("headline_${section.id}"),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (section.icon != null) {
-                Icon(
-                    imageVector = section.icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-            }
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = section.title,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                )
-                if (!section.subtitle.isNullOrBlank()) {
-                    Text(
-                        text = section.subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "Open",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-    }
-}
-
 // ==========================================
 // Collapsible Headline Card with Rotating Chevron
 // ==========================================
