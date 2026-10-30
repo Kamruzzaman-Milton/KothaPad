@@ -558,6 +558,108 @@ class VaultNoteRepository(
         dailyDir
     }
 
+    suspend fun findDailyJournalNote(dateStr: String): Note? = withContext(Dispatchers.IO) {
+        val canonicalRel = "$DAILY_JOURNAL_DIR/$dateStr.md"
+        // 1. Direct cache check by canonical path
+        val cached = cache[canonicalRel]
+        if (cached != null && !cached.note.isDeleted) {
+            return@withContext cached.note
+        }
+        // 2. Check all cached entries for title & Daily Journal folder match
+        val matchedInCache = cache.values.firstOrNull {
+            !it.note.isDeleted &&
+            (it.relPath.startsWith(DAILY_JOURNAL_DIR, ignoreCase = true) || it.note.folder.equals(DAILY_JOURNAL_DIR, ignoreCase = true)) &&
+            it.note.title.trim() == dateStr
+        }
+        if (matchedInCache != null) {
+            return@withContext matchedInCache.note
+        }
+        // 3. Check disk directly in Daily Journal folder
+        val vaultDoc = currentVaultDoc ?: return@withContext null
+        val dailyDir = getOrCreateDailyJournalDir(vaultDoc) ?: return@withContext null
+        val treeUri = vaultManager.getVaultTreeUri()
+        val fileName = "$dateStr.md"
+        val existingChild = if (treeUri != null) {
+            vaultManager.findChildFast(dailyDir, fileName, treeUri)
+        } else {
+            dailyDir.findFile(fileName)
+        }
+        if (existingChild != null) {
+            val childDoc = if (treeUri != null && existingChild is FastEntry) {
+                existingChild.toDocumentFile(context, treeUri)
+            } else {
+                dailyDir.findFile(fileName)
+            }
+            if (childDoc != null && childDoc.exists() && childDoc.isFile) {
+                val id = getOrCreateIdForPath(canonicalRel)
+                val content = vaultManager.readText(childDoc)
+                noteBodyLruCache.put(canonicalRel, content)
+                val createdTs = childDoc.lastModified().takeIf { it > 0 } ?: System.currentTimeMillis()
+                val note = Note(
+                    id = id,
+                    title = dateStr,
+                    content = content,
+                    folder = DAILY_JOURNAL_DIR,
+                    createdAt = createdTs,
+                    updatedAt = createdTs
+                )
+                cache[canonicalRel] = CachedNoteEntry(
+                    note = note,
+                    file = childDoc,
+                    parentDir = dailyDir,
+                    relPath = canonicalRel,
+                    lastModified = childDoc.lastModified()
+                )
+                recomputeFlows()
+                return@withContext note
+            }
+        }
+        null
+    }
+
+    suspend fun getOrCreateDailyJournalNote(date: java.time.LocalDate): Note = withContext(Dispatchers.IO) {
+        val dateStr = date.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        mutex.withLock {
+            val existing = findDailyJournalNote(dateStr)
+            if (existing != null) {
+                return@withContext existing
+            }
+            val vaultDoc = currentVaultDoc
+            val timestamp = date.atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val newNote = Note(
+                title = dateStr,
+                content = "",
+                languageCode = preferencesManager.defaultLanguage.first(),
+                folder = DAILY_JOURNAL_DIR,
+                createdAt = timestamp,
+                updatedAt = timestamp
+            )
+            if (vaultDoc != null) {
+                val id = insertInternal(newNote, vaultDoc)
+                val created = cache.values.firstOrNull { it.note.id == id }?.note
+                    ?: cache["$DAILY_JOURNAL_DIR/$dateStr.md"]?.note
+                    ?: newNote.copy(id = id)
+                return@withContext created
+            } else {
+                return@withContext newNote
+            }
+        }
+    }
+
+    fun isNotePresentInVault(note: Note?): Boolean {
+        if (note == null) return false
+        if (cache.values.any { it.note.id == note.id && !it.note.isDeleted }) return true
+        val relPath = idToPathMap[note.id] ?: getRelPathForNote(note)
+        if (cache.containsKey(relPath) && cache[relPath]?.note?.isDeleted == false) return true
+        if (isDailyBase(note.title) || note.folder.trim().equals(DAILY_JOURNAL_DIR, ignoreCase = true)) {
+            val dateMatch = Regex("""^(\d{4}-\d{2}-\d{2})""").find(note.title.trim())
+            val dateStr = dateMatch?.groupValues?.get(1) ?: note.title.trim()
+            val canonicalRel = "$DAILY_JOURNAL_DIR/$dateStr.md"
+            if (cache.containsKey(canonicalRel) && cache[canonicalRel]?.note?.isDeleted == false) return true
+        }
+        return false
+    }
+
     suspend fun consolidateStrayRootFiles(vaultDoc: DocumentFile) = withContext(Dispatchers.IO) {
         try {
             val treeUri = vaultManager.getVaultTreeUri() ?: vaultDoc.uri
@@ -1710,12 +1812,28 @@ class VaultNoteRepository(
             val dateMatch = Regex("""^(\d{4}-\d{2}-\d{2})""").find(note.title.trim())
             val datePrefix = dateMatch?.groupValues?.get(1)
             if (datePrefix != null) {
-                entry = cache["$DAILY_JOURNAL_DIR/$datePrefix.md"]
+                val canonicalRel = "$DAILY_JOURNAL_DIR/$datePrefix.md"
+                entry = cache[canonicalRel]
                     ?: cache.values.firstOrNull {
                         it.relPath.startsWith(DAILY_JOURNAL_DIR, ignoreCase = true) &&
                         it.note.title.trim().startsWith(datePrefix) &&
                         !it.note.isDeleted
                     }
+                if (entry == null) {
+                    val dailyDir = getOrCreateDailyJournalDir(vaultDoc)
+                    val diskFile = dailyDir?.findFile("$datePrefix.md")
+                    if (diskFile != null && diskFile.exists() && diskFile.isFile) {
+                        val id = getOrCreateIdForPath(canonicalRel)
+                        entry = CachedNoteEntry(
+                            note = note.copy(id = id, title = datePrefix, folder = DAILY_JOURNAL_DIR),
+                            file = diskFile,
+                            parentDir = dailyDir,
+                            relPath = canonicalRel,
+                            lastModified = diskFile.lastModified()
+                        )
+                        cache[canonicalRel] = entry
+                    }
+                }
             }
         }
 
@@ -1724,8 +1842,15 @@ class VaultNoteRepository(
                 // If the note was already removed or cannot be found on disk, do NOT recreate or insert a duplicate file!
                 return
             }
-            // If completely missing, treat as insert
-            insertInternal(note, vaultDoc)
+            // If completely missing, ensure Daily Journal note is inserted into DAILY_JOURNAL_DIR
+            val noteToInsert = if (isDailyJournal) {
+                val dateMatch = Regex("""^(\d{4}-\d{2}-\d{2})""").find(note.title.trim())
+                val cleanTitle = dateMatch?.groupValues?.get(1) ?: note.title.trim()
+                note.copy(title = cleanTitle, folder = DAILY_JOURNAL_DIR)
+            } else {
+                note
+            }
+            insertInternal(noteToInsert, vaultDoc)
             return
         }
 

@@ -83,23 +83,12 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Parses date from note title (YYYY-MM-DD...), falling back to createdAt date for notes in Daily Journal folder.
+ * Parses date strictly from note title (YYYY-MM-DD).
  */
 fun extractNoteJournalDate(note: Note): LocalDate? {
     val title = note.title.trim()
     if (title.length >= 10 && title[4] == '-' && title[7] == '-') {
-        val parsed = runCatching { LocalDate.parse(title.substring(0, 10)) }.getOrNull()
-        if (parsed != null) return parsed
-    }
-    val f = note.folder.trim()
-    if (f.equals("Daily Journal", ignoreCase = true) || f.equals("Daily Journals", ignoreCase = true)) {
-        return try {
-            if (note.createdAt > 0L) {
-                Instant.ofEpochMilli(note.createdAt).atZone(ZoneId.systemDefault()).toLocalDate()
-            } else null
-        } catch (_: Exception) {
-            null
-        }
+        return runCatching { LocalDate.parse(title.substring(0, 10)) }.getOrNull()
     }
     return null
 }

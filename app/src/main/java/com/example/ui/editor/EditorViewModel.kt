@@ -396,13 +396,9 @@ class EditorViewModel(
                     }
                     val today = LocalDate.now()
                     val dateStr = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
-                    val existingToday = findDailyJournalNoteForDate(today)
+                    val noteToLoad = vaultNoteRepository.getOrCreateDailyJournalNote(today)
                     withContext(Dispatchers.Main) {
-                        if (existingToday != null) {
-                            openDailyJournalNote(existingToday, dateStr, startInEditMode = false)
-                        } else {
-                            createNewDailyJournalNote(today, startInEditMode = false)
-                        }
+                        openDailyJournalNote(noteToLoad, dateStr, startInEditMode = false)
                     }
                     checkAndPromptMigration(doc)
                 }
@@ -456,6 +452,10 @@ class EditorViewModel(
                     val currentRel = vaultNoteRepository.getRelPathForNote(current)
                     val exists = notes.any { it.id == current.id || vaultNoteRepository.getRelPathForNote(it).equals(currentRel, ignoreCase = true) }
                     if (!exists) {
+                        // Guard: never revert if note is a daily journal note or still in vault
+                        if (_currentDailyJournalDate.value != null || com.example.ui.notes.isDailyJournalNote(current) || vaultNoteRepository.isNotePresentInVault(current)) {
+                            return@collect
+                        }
                         val activeNotesList = vaultNoteRepository.activeNotes.value
                         val next = vaultNoteRepository.getLatestActiveNote() ?: activeNotesList.firstOrNull()
                         withContext(Dispatchers.Main) {
@@ -1911,17 +1911,21 @@ class EditorViewModel(
         return true
     }
 
-    fun findDailyJournalNoteForDate(date: LocalDate): Note? {
+    suspend fun findDailyJournalNoteForDate(date: LocalDate): Note? {
         val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
-        // 1. Strict title match first (exact date prefix: "YYYY-MM-DD")
+        // 0. Canonical lookup in vault cache/disk
+        val vaultCanonical = vaultNoteRepository.findDailyJournalNote(dateStr)
+        if (vaultCanonical != null) return vaultCanonical
+
+        // 1. Strict title match first (exact date: "YYYY-MM-DD" or starts with "YYYY-MM-DD")
         val strictMatch = allNotes.value.firstOrNull {
             !it.isDeleted &&
                     (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
-                    it.title.trim().startsWith(dateStr)
+                    (it.title.trim() == dateStr || it.title.trim().startsWith(dateStr))
         } ?: vaultNoteRepository.allNotes.value.firstOrNull {
             !it.isDeleted &&
                     (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
-                    it.title.trim().startsWith(dateStr)
+                    (it.title.trim() == dateStr || it.title.trim().startsWith(dateStr))
         }
         if (strictMatch != null) return strictMatch
 
@@ -1938,53 +1942,60 @@ class EditorViewModel(
     }
 
     fun handleDailyJournalDateTap(date: LocalDate) {
-        val existing = findDailyJournalNoteForDate(date)
         val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
-        if (existing != null) {
-            openDailyJournalNote(existing, dateStr, startInEditMode = false)
-        } else {
-            createNewDailyJournalNote(date, startInEditMode = true)
+        flushAutoSave()
+        _noteNavigationContext.value = NoteNavigationContext.DAILY_JOURNAL
+        _currentDailyJournalDate.value = dateStr
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = vaultNoteRepository.findDailyJournalNote(dateStr)
+                ?: findDailyJournalNoteForDate(date)
+            if (existing != null) {
+                withContext(Dispatchers.Main) {
+                    openDailyJournalNote(existing, dateStr, startInEditMode = false)
+                }
+            } else {
+                val created = vaultNoteRepository.getOrCreateDailyJournalNote(date)
+                withContext(Dispatchers.Main) {
+                    openDailyJournalNote(created, dateStr, startInEditMode = true)
+                }
+            }
         }
     }
 
     fun handleDailyJournalTodayFabClick() {
         val today = LocalDate.now()
         val dateStr = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
-        val existing = findDailyJournalNoteForDate(today)
-        if (existing != null) {
-            openDailyJournalNote(existing, dateStr, startInEditMode = true)
-        } else {
-            createNewDailyJournalNote(today, startInEditMode = true)
+        flushAutoSave()
+        _noteNavigationContext.value = NoteNavigationContext.DAILY_JOURNAL
+        _currentDailyJournalDate.value = dateStr
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = vaultNoteRepository.findDailyJournalNote(dateStr)
+                ?: findDailyJournalNoteForDate(today)
+            if (existing != null) {
+                withContext(Dispatchers.Main) {
+                    openDailyJournalNote(existing, dateStr, startInEditMode = true)
+                }
+            } else {
+                val created = vaultNoteRepository.getOrCreateDailyJournalNote(today)
+                withContext(Dispatchers.Main) {
+                    openDailyJournalNote(created, dateStr, startInEditMode = true)
+                }
+            }
         }
     }
 
     fun createNewDailyJournalNote(date: LocalDate, startInEditMode: Boolean = true) {
         val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
-        // Guard against duplicate notes for the same date
-        val existing = findDailyJournalNoteForDate(date)
-        if (existing != null) {
-            openDailyJournalNote(existing, dateStr, startInEditMode = startInEditMode)
-            return
-        }
-
-        val timestamp = date.atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         flushAutoSave()
+        _noteNavigationContext.value = NoteNavigationContext.DAILY_JOURNAL
+        _currentDailyJournalDate.value = dateStr
+
         viewModelScope.launch(Dispatchers.IO) {
-            val defaultLang = defaultLanguage.value
-            val newNote = Note(
-                title = dateStr,
-                content = "",
-                languageCode = defaultLang,
-                folder = "Daily Journal",
-                createdAt = timestamp,
-                updatedAt = timestamp
-            )
-            val id = noteRepository.insert(newNote)
-            val noteToOpen = if (id > 0L) {
-                noteRepository.getNoteOnce(id) ?: newNote.copy(id = id)
-            } else {
-                newNote
-            }
+            val existing = vaultNoteRepository.findDailyJournalNote(dateStr)
+                ?: findDailyJournalNoteForDate(date)
+            val noteToOpen = existing ?: vaultNoteRepository.getOrCreateDailyJournalNote(date)
             withContext(Dispatchers.Main) {
                 openDailyJournalNote(noteToOpen, dateStr, startInEditMode = startInEditMode)
             }
