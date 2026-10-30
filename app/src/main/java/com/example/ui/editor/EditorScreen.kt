@@ -170,6 +170,7 @@ fun EditorScreen(
     val allStamps by viewModel.allStamps.collectAsState()
     val textFieldValue by viewModel.textFieldValue.collectAsState()
     val isReadingMode by viewModel.isReadingMode.collectAsState()
+    val editorFocusTrigger by viewModel.editorFocusTrigger.collectAsState()
     val canUndo by viewModel.canUndo.collectAsState()
     val canRedo by viewModel.canRedo.collectAsState()
     val dictationState by viewModel.dictationState.collectAsState()
@@ -308,10 +309,25 @@ fun EditorScreen(
         }
     }
 
-    // When entering or exiting reading mode, ensure focus is explicitly cleared and soft keyboard is hidden
+    // Trigger explicit focus and keyboard when requested (e.g. Plus button or calendar empty date tap)
+    LaunchedEffect(editorFocusTrigger) {
+        if (editorFocusTrigger > 0L && !isReadingMode) {
+            kotlinx.coroutines.delay(60)
+            try {
+                focusRequester.requestFocus()
+                if (!userWantsBuiltIn) {
+                    keyboardController?.show()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    // When entering reading mode, ensure focus is explicitly cleared and soft keyboard is hidden
     LaunchedEffect(isReadingMode) {
-        keyboardController?.hide()
-        focusManager.clearFocus(force = true)
+        if (isReadingMode) {
+            keyboardController?.hide()
+            focusManager.clearFocus(force = true)
+        }
     }
 
     // Immersive mode: hide navigation bars when in Reading Mode, restore on exit or pause/dispose

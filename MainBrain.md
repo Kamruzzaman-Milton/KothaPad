@@ -35,10 +35,10 @@
 - **Feature & Tips Guides in "About Notepad":** "Notepad Features" and "Notepad Tips" are not seeded as journal notes and have no date association; comprehensive summarized guides are displayed directly inside the "About Notepad" section in System Settings.
 - **App Startup Flow:** Cold start immediately opens today's journal entry in reading mode with scroll at top; calendar is accessible one swipe away.
 - **Horizontal Swipe Navigation:** In note editor: swiping left-to-right (swipe right) opens the Daily Journal Calendar; swiping right-to-left (swipe left) opens Settings. In Calendar: swiping right-to-left (swipe left) closes Calendar and returns to note editor. In Settings: swiping left-to-right (swipe right) closes Settings and returns to note editor. All transitions animate instantly with zero input lag.
-- **High-Performance Architecture:** On-demand concurrent caching for calendar months instead of 200+ upfront allocations; lazy conditional rendering of settings accordion contents (composing controls only when expanded); fast substring date parsing without regex overhead; zero-delay gesture callbacks with immediate translation reset.
+- **High-Performance Architecture:** Single-pass custom calendar layout with zero nested rows and zero two-pass weights; background-prewarmed month cache; O(1) bitmask note presence checks; static day cell styles/shapes; lazy conditional rendering of settings accordion contents; fast substring date parsing; zero-delay gesture callbacks.
 - Storage vault backing with SAF fast lister and local database sync.
 - Daily Journal Calendar: Tapping existing note date opens in reading mode; tapping empty date auto-creates and opens in editing mode in "Daily Journal" folder without duplicates.
-- Daily Journal Plus Button: Opens today's note in editing mode (creates only if absent, no duplicates).
+- Daily Journal Plus Button: Always targets current date; opens today's note directly in editing mode (creates only if absent, no duplicates; focuses editor with keyboard active).
 - Daily Journal Storage Integrity: Dedicated "Daily Journal" vault folder; automatic migration, duplicate purging, and reconciliation across root/General.
 - Daily journal navigation (next/previous entry by date).
 - Note metrics display (word count, reading time, characters) with configurable order and style.

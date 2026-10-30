@@ -129,6 +129,13 @@ class EditorViewModel(
     private val _isReadingMode = MutableStateFlow(false)
     val isReadingMode: StateFlow<Boolean> = _isReadingMode.asStateFlow()
 
+    private val _editorFocusTrigger = MutableStateFlow(0L)
+    val editorFocusTrigger: StateFlow<Long> = _editorFocusTrigger.asStateFlow()
+
+    fun triggerEditorFocus() {
+        _editorFocusTrigger.value = System.currentTimeMillis()
+    }
+
     fun setReadingMode(enabled: Boolean) {
         if (enabled && dictationState.value !is DictationState.Idle) {
             return
@@ -1834,6 +1841,9 @@ class EditorViewModel(
         setReadingMode(!startInEditMode)
         _noteNavigationContext.value = NoteNavigationContext.DAILY_JOURNAL
         _currentDailyJournalDate.value = dateStr
+        if (startInEditMode) {
+            triggerEditorFocus()
+        }
         navigateTo("EDITOR")
     }
 
@@ -1903,14 +1913,27 @@ class EditorViewModel(
 
     fun findDailyJournalNoteForDate(date: LocalDate): Note? {
         val dateStr = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
-        return allNotes.value.firstOrNull {
+        // 1. Strict title match first (exact date prefix: "YYYY-MM-DD")
+        val strictMatch = allNotes.value.firstOrNull {
             !it.isDeleted &&
                     (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
-                    (it.title.trim().startsWith(dateStr) || com.example.ui.notes.extractNoteJournalDate(it) == date)
+                    it.title.trim().startsWith(dateStr)
         } ?: vaultNoteRepository.allNotes.value.firstOrNull {
             !it.isDeleted &&
                     (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
-                    (it.title.trim().startsWith(dateStr) || com.example.ui.notes.extractNoteJournalDate(it) == date)
+                    it.title.trim().startsWith(dateStr)
+        }
+        if (strictMatch != null) return strictMatch
+
+        // 2. Extracted date match
+        return allNotes.value.firstOrNull {
+            !it.isDeleted &&
+                    (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
+                    com.example.ui.notes.extractNoteJournalDate(it) == date
+        } ?: vaultNoteRepository.allNotes.value.firstOrNull {
+            !it.isDeleted &&
+                    (com.example.ui.notes.isDailyJournalNote(it) || it.folder.trim().equals("Daily Journal", ignoreCase = true) || it.folder.trim().equals("Daily Journals", ignoreCase = true)) &&
+                    com.example.ui.notes.extractNoteJournalDate(it) == date
         }
     }
 
