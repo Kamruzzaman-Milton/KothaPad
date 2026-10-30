@@ -359,20 +359,20 @@ Welcome to the definitive feature guide for **KothaPad**—the ultra-fast, local
 
 ---
 
-## 📂 7. Vault Architecture & Notes Management
+## 📂 7. Local Storage & Notes Management
 
-- **Folder Hierarchy:** Organize notes into General, Templates, Trash, or user-created custom folders.
+- **Folder Hierarchy:** Organize notes into General, Daily Journal, Templates, Trash, or user-created custom folders.
 - **Multi-Metric Note Tracker:** Live tracking of word count, character count, and estimated reading time with customizable visibility and ordering.
 - **Deep Search:** Instant full-text search across titles, contents, tags, and folders.
 - **Auto-Empty Trash:** Configurable automatic trash cleanup (e.g. 7 days retention) with one-tap undo recovery.
-- **Full Vault Import & Export:** Export your entire notes database, templates, and settings to standard JSON or folder backups for complete data sovereignty.
+- **Full Backup & Restore:** Export your entire notes database, templates, spoken commands, and settings to standard archives for complete data sovereignty.
 
 ---
 
 ## 🔒 8. Zero-Tracking, 100% Local-First Privacy
 
 - **Zero Accounts & Zero Cloud Dependency:** No login, no telemetry, no third-party tracking, and no external servers.
-- **Your Notes Remain on Your Device:** All data is safely stored in local SQLite / Room storage and can be backed up to your local storage vault.
+- **Your Notes Remain on Your Device:** All data is safely stored in local SQLite / Room storage and can be backed up to your device storage.
 """.trimIndent()
     }
 }

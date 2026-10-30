@@ -28,14 +28,99 @@ class PreferencesManager(private val context: Context) {
 
     private val syncPrefs = context.getSharedPreferences("kothapad_sync_prefs", Context.MODE_PRIVATE)
 
-    var settingsRepository: com.example.data.vault.SettingsRepository? = null
+    data class AppSettings(
+        val dictationMode: String = "",
+        val timedMinutes: Int = 0,
+        val pauseToleranceSeconds: Int = 0,
+        val idleAutoStopMinutes: Int = 0,
+        val muteBeepMethod: String = "",
+        val insertionMode: String = "",
+        val offlinePreferred: Boolean = false,
+        val keepScreenOn: Boolean = false,
+        val defaultLanguage: String = "",
+        val favoriteLanguages: Set<String> = emptySet(),
+        val appTheme: String = "",
+        val editorFontSize: Float = 0f,
+        val editorLineSpacing: Float = 0f,
+        val editorFontFamily: String = "",
+        val pipelineSpacing: Boolean = false,
+        val pipelineAutoCap: Boolean = false,
+        val pipelineCommands: Boolean = false,
+        val lastOpenedNoteId: Long = 0L,
+        val keyboardType: String = "",
+        val showWordCount: Boolean = false,
+        val keyboardLayoutJson: String? = null,
+        val keyboardKeyHeightDp: Int = 0,
+        val keyboardFontSizeSp: Int = 0,
+        val keyboardHaptic: Boolean = false,
+        val keyboardHoldBehavior: String = "",
+        val keyboardEditMode: Boolean = false,
+        val trashAutoEmptyDays: Int = 0,
+        val defaultNewNoteFolder: String = "",
+        val customPrimaryColor: Int = 0,
+        val customBackgroundColor: Int = 0,
+        val customSurfaceColor: Int = 0,
+        val customTextColor: Int = 0,
+        val customSecondaryColor: Int = 0,
+        val customFontName: String = "",
+        val customFontPath: String? = null,
+        val editorLetterSpacing: Float = 0f,
+        val editorParagraphSpacing: Int = 0,
+        val editorTextAlignment: String = "",
+        val editorMarginDp: Int = 0,
+        val editorMaxWidthDp: Int = 0,
+        val toolbarItemOrder: String = "",
+        val toolbarHiddenItems: Set<String> = emptySet(),
+        val micButtonSize: String = "",
+        val micButtonShape: String = "",
+        val micButtonColor: String = "",
+        val micButtonPosition: String = "",
+        val micButtonOffsetY: Int = 0,
+        val statusChipStyle: String = "",
+        val uiDensity: String = "",
+        val cornerRadiusDp: Int = 0,
+        val dictationAnimationStyle: String = "",
+        val hapticsLevel: String = "",
+        val showNoteMetricsInList: Boolean = false,
+        val noteMetricsStyle: String = "",
+        val noteMetricsOrder: String = "",
+        val noteMetricsHiddenItems: Set<String> = emptySet(),
+        val keyboardLayoutVersion: Int = 0,
+        val expandedFolders: Set<String> = emptySet(),
+        val customFolders: Set<String> = emptySet(),
+        val newNoteLocationMode: String = "",
+        val fixedNewNoteFolder: String = "",
+        val askBeforeCreating: Boolean = false,
+        val askChooseTemplateToggle: Boolean = false,
+        val askStartRecordingToggle: Boolean = false,
+        val newNoteNamingRule: String = "",
+        val afterCreatingNote: String = "",
+        val lastActiveFolder: String = "",
+        val floatingUseSideRail: Boolean = false,
+        val railSide: String = "",
+        val railScale: Float = 0f,
+        val railBottomOffsetDp: Int = 0,
+        val railSpacingDp: Int = 0,
+        val railKeepTextClear: Boolean = false,
+        val railButtonOrder: List<String> = emptyList(),
+        val toggleScale: Float = 0f,
+        val toggleBottomOffsetDp: Int = 0,
+        val toggleGapDp: Int = 0,
+        val formatBarScale: Float = 0f,
+        val formatBarBottomOffsetDp: Int = 0,
+        val formatBarWidthPercent: Int = 0,
+        val formatBarAlignment: String = "",
+        val formatBarVisibleDuringDictation: Boolean = false,
+        val formatBarVisibleWithoutCursor: Boolean = false,
+        val waveformScale: Float = 0f,
+        val waveformShow: Boolean = false,
+        val readingModeEnabled: Boolean = false
+    )
 
-    fun attachSettingsRepository(repo: com.example.data.vault.SettingsRepository) {
-        this.settingsRepository = repo
-    }
+    private val dummySettings = AppSettings()
 
-    private inline fun notifyRepo(crossinline transform: (com.example.data.vault.AppSettings) -> com.example.data.vault.AppSettings) {
-        settingsRepository?.updateSettings { transform(it) }
+    private inline fun notifyRepo(crossinline transform: (AppSettings) -> AppSettings) {
+        // Vault syncing removed; preferences persist directly to DataStore and SharedPreferences
     }
 
     enum class PrefType {

@@ -154,7 +154,6 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
     }
 
     suspend fun updateSettings(transform: (MarkdownSettings) -> MarkdownSettings) {
-        var updatedSettings: MarkdownSettings? = null
         preferencesManager.dataStore.edit { prefs ->
             val order = prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ORDER]?.let { str ->
                 val list = str.split(",").map { it.trim() }.filter { it.isNotBlank() }
@@ -215,7 +214,6 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
                 tappableCheckboxes = prefs[MarkdownSettings.KEY_MD_TAPPABLE_CHECKBOXES] ?: true
             )
             val updated = transform(current)
-            updatedSettings = updated
             prefs[MarkdownSettings.KEY_MD_ENABLED] = updated.markdownEnabled
             prefs[MarkdownSettings.KEY_MD_HEADINGS] = updated.headings
             prefs[MarkdownSettings.KEY_MD_BOLD_ITALIC] = updated.boldItalic
@@ -239,35 +237,6 @@ class MarkdownSettingsRepository(private val preferencesManager: PreferencesMana
             prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_BUTTONS] = updated.formatBarButtons.joinToString(",")
             prefs[MarkdownSettings.KEY_MD_FORMAT_BAR_ORDER] = updated.formatBarOrder.joinToString(",")
             prefs[MarkdownSettings.KEY_MD_TAPPABLE_CHECKBOXES] = updated.tappableCheckboxes
-        }
-        updatedSettings?.let { updated ->
-            preferencesManager.settingsRepository?.updateSettings {
-                it.copy(
-                    mdEnabled = updated.markdownEnabled,
-                    mdHeadings = updated.headings,
-                    mdBoldItalic = updated.boldItalic,
-                    mdStrikethrough = updated.strikethrough,
-                    mdHighlight = updated.highlight,
-                    mdInlineCode = updated.inlineCode,
-                    mdCodeBlocks = updated.codeBlocks,
-                    mdBlockquotes = updated.blockquotes,
-                    mdLists = updated.lists,
-                    mdTaskLists = updated.taskLists,
-                    mdLinks = updated.links,
-                    mdTables = updated.tables,
-                    mdHorizontalRule = updated.horizontalRule,
-                    mdReadingFontScale = updated.readingFontScale,
-                    mdLiveStyling = updated.liveStylingEnabled,
-                    mdDimSyntax = updated.dimSyntaxSymbols,
-                    mdHeadingScale = updated.headingSizeScale,
-                    mdCodeMonospace = updated.codeFontMonospace,
-                    mdAutoContinueLists = updated.autoContinueLists,
-                    mdFormatBarEnabled = updated.formatBarEnabled,
-                    mdFormatBarButtons = updated.formatBarButtons,
-                    mdFormatBarOrder = updated.formatBarOrder,
-                    mdTappableCheckboxes = updated.tappableCheckboxes
-                )
-            }
         }
     }
 

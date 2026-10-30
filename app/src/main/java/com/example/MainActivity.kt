@@ -66,9 +66,7 @@ class MainActivity : ComponentActivity() {
                     stampRepository = app.stampRepository,
                     spokenCommandRepository = app.spokenCommandRepository,
                     preferencesManager = app.preferencesManager,
-                    speechSupervisor = app.speechSupervisor,
-                    vaultManager = app.vaultManager,
-                    settingsRepository = app.settingsRepository
+                    speechSupervisor = app.speechSupervisor
                 ) as T
             }
         }
@@ -97,18 +95,7 @@ class MainActivity : ComponentActivity() {
             val dictationState by viewModel.dictationState.collectAsState()
             val onboardingCompleted by viewModel.onboardingCompletedPref.collectAsState()
             val isReadingMode by viewModel.isReadingMode.collectAsState()
-            val vaultState by viewModel.vaultState.collectAsState()
-            val vaultNotesCount by viewModel.vaultNotesCount.collectAsState()
             val showFinishSetupDialog by viewModel.showFinishSetupDialog.collectAsState()
-            val showMigrationPromptDialog by viewModel.showMigrationPromptDialog.collectAsState()
-            val showVaultConflictPromptDialog by viewModel.showVaultConflictPromptDialog.collectAsState()
-            val isMigrating by viewModel.isMigrating.collectAsState()
-            val migrationProgress by viewModel.migrationProgress.collectAsState()
-            val migrationError by viewModel.migrationError.collectAsState()
-            val showExternalConflictDialog by viewModel.showExternalConflictDialog.collectAsState()
-            val pendingExternalChange by viewModel.pendingExternalChange.collectAsState()
-            val safeModeWarning by viewModel.safeModeWarning.collectAsState()
-            var acknowledgedSafeWarning by remember { mutableStateOf<String?>(null) }
 
             val density = LocalDensity.current
             val imeInsets = WindowInsets.ime
@@ -188,42 +175,10 @@ class MainActivity : ComponentActivity() {
                 customSecondary = androidx.compose.ui.graphics.Color(customSecondary),
                 cornerRadiusDp = cornerRadiusDp
             ) {
-                if (vaultState.currentVault == null || !vaultState.isAccessible) {
-                    com.example.ui.vault.WelcomeScreen(
-                        vaultState = vaultState,
-                        onOpenVaultUri = { uri ->
-                            viewModel.openVault(uri) { success, msg ->
-                                if (!success && msg != null) {
-                                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        },
-                        onCreateNewVaultInParent = { parentUri, name ->
-                            viewModel.createNewVault(parentUri, name) { success, msg ->
-                                if (!success && msg != null) {
-                                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        },
-                        onSwitchToRecentVault = { recent ->
-                            viewModel.switchVault(recent) { success, msg ->
-                                if (!success && msg != null) {
-                                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        },
-                        onRemoveRecentVault = { uriStr ->
-                            viewModel.removeRecentVault(uriStr)
-                        },
-                        onDismissInaccessibleDialog = {
-                            viewModel.onDismissInaccessibleVaultDialog()
-                        }
-                    )
-                } else {
-                    Surface(modifier = Modifier.fillMaxSize()) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            // Main Editor Screen is kept alive underneath to preserve note and edit state
-                            EditorScreen(viewModel = viewModel)
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        // Main Editor Screen is kept alive underneath to preserve note and edit state
+                        EditorScreen(viewModel = viewModel)
 
                             AnimatedVisibility(
                                 visible = currentScreen == "SETTINGS",
@@ -399,40 +354,7 @@ class MainActivity : ComponentActivity() {
                                     onWaveformScaleChange = { viewModel.setWaveformScale(it) },
                                     onWaveformShowChange = { viewModel.setWaveformShow(it) },
                                     onResetFloatingLayout = { viewModel.resetFloatingLayoutToDefaults() },
-                                    vaultState = vaultState,
-                                    vaultNotesCount = vaultNotesCount,
-                                    onSwitchVault = { viewModel.switchVault(it) },
-                                    onOpenVaultUri = { uri ->
-                                        viewModel.openVault(uri) { success, msg ->
-                                            if (!success && msg != null) {
-                                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                                            }
-                                        }
-                                    },
-                                    onCreateNewVault = { parentUri, name ->
-                                        viewModel.createNewVault(parentUri, name) { success, msg ->
-                                            if (!success && msg != null) {
-                                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
-                                            }
-                                        }
-                                    },
-                                    onRemoveRecentVault = { viewModel.removeRecentVault(it) },
-                                    onCloseVault = { viewModel.closeCurrentVault() },
-                                    onReloadVaultFromDisk = {
-                                        viewModel.reloadVaultFromDisk {
-                                            Toast.makeText(this@MainActivity, "Vault reloaded from disk", Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    onRebuildVaultIndex = {
-                                        viewModel.rebuildVaultIndex {
-                                            Toast.makeText(this@MainActivity, "Vault index rebuilt", Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
-                                    onDeleteOldInternalData = {
-                                        viewModel.deleteOldInternalData { count ->
-                                            Toast.makeText(this@MainActivity, "Deleted $count notes from internal storage", Toast.LENGTH_SHORT).show()
-                                        }
-                                    },
+
                                     templates = allStamps,
                                     onSaveTemplate = { viewModel.saveTemplate(it) },
                                     onDeleteTemplate = { viewModel.deleteTemplate(it) },
@@ -482,7 +404,6 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
                             }
-                        }
 
                         if (showFinishSetupDialog) {
                             com.example.ui.dialogs.FinishSetupDialog(
@@ -490,147 +411,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        // 1. First-time migration prompt dialog
-                        if (showMigrationPromptDialog) {
-                            AlertDialog(
-                                onDismissRequest = { viewModel.skipMigration() },
-                                title = { Text("Import Existing Notes") },
-                                text = {
-                                    Text(
-                                        "Import existing notes, templates, and settings into this vault?\n\nYour existing notes will be copied into the vault layout and verified. Old data will remain safely preserved in internal storage until you delete it in Settings.",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                },
-                                confirmButton = {
-                                    Button(onClick = { viewModel.proceedWithMigration(replaceExisting = false) }) {
-                                        Text("Import")
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { viewModel.skipMigration() }) {
-                                        Text("Not Now")
-                                    }
-                                }
-                            )
-                        }
-
-                        // 2. Vault conflict prompt dialog (Vault already has data)
-                        if (showVaultConflictPromptDialog) {
-                            AlertDialog(
-                                onDismissRequest = { viewModel.skipMigration() },
-                                title = { Text("Vault Already Contains Data") },
-                                text = {
-                                    Text(
-                                        "This vault already contains notes or KothaPad data.\n\nWould you like to use the existing vault data, or replace it with your current app data?",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                },
-                                confirmButton = {
-                                    Button(onClick = { viewModel.useExistingVaultData() }) {
-                                        Text("Use Vault Data")
-                                    }
-                                },
-                                dismissButton = {
-                                    Row {
-                                        TextButton(onClick = { viewModel.skipMigration() }) {
-                                            Text("Cancel")
-                                        }
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Button(
-                                            onClick = { viewModel.proceedWithMigration(replaceExisting = true) },
-                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                                        ) {
-                                            Text("Replace with App Data")
-                                        }
-                                    }
-                                }
-                            )
-                        }
-
-                        // 3. Migration in-progress dialog
-                        if (isMigrating) {
-                            AlertDialog(
-                                onDismissRequest = { /* Non-dismissible while migrating */ },
-                                title = { Text("Importing to Vault...") },
-                                text = {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        CircularProgressIndicator()
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Text(
-                                            text = migrationProgress ?: "Copying notes, templates, and settings...",
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                    }
-                                },
-                                confirmButton = {}
-                            )
-                        }
-
-                        // 4. Migration error dialog
-                        if (migrationError != null) {
-                            AlertDialog(
-                                onDismissRequest = { viewModel.clearMigrationError() },
-                                title = { Text("Migration Error") },
-                                text = {
-                                    Text(
-                                        migrationError ?: "Failed to import existing data. The vault was restored to its previous state.",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                },
-                                confirmButton = {
-                                    Button(onClick = { viewModel.clearMigrationError() }) {
-                                        Text("OK")
-                                    }
-                                }
-                            )
-                        }
-
-                        // 5. External conflict dialog (Disk vs Memory)
-                        if (showExternalConflictDialog) {
-                            val changeNoteTitle = pendingExternalChange?.note?.title ?: "Note"
-                            AlertDialog(
-                                onDismissRequest = { /* Must choose an option */ },
-                                title = { Text("File Changed Externally") },
-                                text = {
-                                    Text(
-                                        "\"$changeNoteTitle\" has been modified on disk by another app (e.g. Obsidian), but you have unsaved edits in KothaPad.\n\nWould you like to keep your in-memory edits or load the disk version?",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                },
-                                confirmButton = {
-                                    Button(onClick = { viewModel.resolveExternalConflict(keepMine = true) }) {
-                                        Text("Keep Mine")
-                                    }
-                                },
-                                dismissButton = {
-                                    OutlinedButton(onClick = { viewModel.resolveExternalConflict(keepMine = false) }) {
-                                        Text("Load Disk Version")
-                                    }
-                                }
-                            )
-                        }
-
-                        // 6. Safe mode / corrupt metadata warning dialog
-                        if (safeModeWarning != null && safeModeWarning != acknowledgedSafeWarning) {
-                            AlertDialog(
-                                onDismissRequest = { acknowledgedSafeWarning = safeModeWarning },
-                                title = { Text("Vault Safe Mode Notice") },
-                                text = {
-                                    Text(
-                                        safeModeWarning ?: "",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                },
-                                confirmButton = {
-                                    Button(onClick = { acknowledgedSafeWarning = safeModeWarning }) {
-                                        Text("Dismiss")
-                                    }
-                                }
-                            )
-                        }
                     }
                 }
             }

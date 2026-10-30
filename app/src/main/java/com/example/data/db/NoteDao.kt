@@ -35,6 +35,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes ORDER BY isPinned DESC, updatedAt DESC LIMIT 1")
     suspend fun getLatestNote(): Note?
 
+    @Query("SELECT * FROM notes WHERE isDeleted = 0 AND (title = :dateStr OR title LIKE :dateStr || '%') LIMIT 1")
+    suspend fun getDailyJournalNote(dateStr: String): Note?
+
     @Query("SELECT * FROM notes WHERE isDeleted = 0 AND (title LIKE '%' || :query || '%' OR content LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%' OR folder LIKE '%' || :query || '%') ORDER BY isPinned DESC, updatedAt DESC")
     fun searchNotes(query: String): Flow<List<Note>>
 

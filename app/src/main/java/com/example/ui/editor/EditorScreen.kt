@@ -218,17 +218,6 @@ fun EditorScreen(
     val hasPrevJournalEntry by remember(isDailyJournalMode, currentDailyJournalDate, currentNote?.id, allNotes) {
         derivedStateOf { if (isDailyJournalMode) viewModel.hasPreviousJournalEntry() else false }
     }
-
-    val isVaultScanning by viewModel.isVaultScanning.collectAsState()
-    val vaultScanProgress by viewModel.vaultScanProgress.collectAsState()
-    val vaultSaveError by viewModel.vaultSaveError.collectAsState()
-
-    LaunchedEffect(vaultSaveError) {
-        vaultSaveError?.let { err ->
-            snackbarHostState.showSnackbar(err)
-        }
-    }
-
     // Keyboard Settings & State
     val userWantsBuiltIn by viewModel.userWantsBuiltInKeyboard.collectAsState()
     val keyboardLayout by viewModel.keyboardLayout.collectAsState()

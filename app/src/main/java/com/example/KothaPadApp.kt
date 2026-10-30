@@ -16,29 +16,8 @@ class KothaPadApp : Application() {
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val database by lazy { AppDatabase.getInstance(this, applicationScope) }
-    val vaultManager by lazy { com.example.data.vault.VaultManager(this) }
     val preferencesManager by lazy { PreferencesManager(this) }
-    val vaultConfigStore by lazy { com.example.data.vault.VaultConfigStore.getInstance(this, applicationScope) }
-    val settingsRepository by lazy {
-        com.example.data.vault.SettingsRepository(this, vaultManager, applicationScope, vaultConfigStore)
-    }
-    val vaultNoteRepository by lazy {
-        com.example.data.vault.VaultNoteRepository(this, vaultManager, preferencesManager, applicationScope, vaultConfigStore)
-    }
-    val vaultMigrationManager by lazy {
-        com.example.data.vault.VaultMigrationManager(
-            context = this,
-            vaultManager = vaultManager,
-            noteDao = database.noteDao(),
-            stampDao = database.stampDao(),
-            spokenCommandDao = database.spokenCommandDao(),
-            preferencesManager = preferencesManager,
-            settingsRepository = settingsRepository,
-            vaultConfigStore = vaultConfigStore
-        )
-    }
-
-    val noteRepository by lazy { NoteRepository(database.noteDao(), vaultNoteRepository) }
+    val noteRepository by lazy { NoteRepository(database.noteDao()) }
     val stampRepository by lazy { StampRepository(database.stampDao()) }
     val spokenCommandRepository by lazy { SpokenCommandRepository(database.spokenCommandDao()) }
     val markdownSettingsRepository by lazy { com.example.markdown.MarkdownSettingsRepository(preferencesManager) }
@@ -49,7 +28,6 @@ class KothaPadApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        preferencesManager.attachSettingsRepository(settingsRepository)
         speechSupervisor.restoreCrashSafetyMute()
     }
 }

@@ -28,18 +28,17 @@
 - Dual keyboard support: built-in custom in-app keyboard (Bengali/English layouts, key editor) and system IME.
 - Floating layout controls and side rail layout with customizable scale, side (left/right), offsets, and text clearance.
 
-## 6. Vault & Note Management
-- **Journal-First Architecture:** App operates primarily as a dedicated journal; Note Manager screens, dead routes, and redundant batch states are completely removed from the codebase while preserving underlying journal notes, templates, and storage vault integrity.
-- **Strict Obsidian-Compatible 3-Folder Vault:** Canonical top-level folders: `Daily Journal` (all date-organized journal entries), `Templates` (markdown templates), and `Trash` (soft-deleted notes stored as markdown files). All configurations (`.kothapad/settings.json`), workspace state, and metadata remain self-contained in the vault folder for seamless, indistinguishable multi-device synchronization.
-- **Templates & Trash Management in Settings:** Trashed notes viewing, single-note restoration back to `Daily Journal`, permanent deletion, and empty trash are integrated under the "Templates & Trash" section in System Settings.
-- **Feature & Tips Guides in "About Notepad":** "Notepad Features" and "Notepad Tips" are not seeded as journal notes and have no date association; comprehensive summarized guides are displayed directly inside the "About Notepad" section in System Settings.
-- **App Startup Flow:** Cold start immediately opens today's journal entry in reading mode with scroll at top; calendar is accessible one swipe away.
+## 6. Storage, Notes & Backup Management
+- **Direct Internal Storage (No Vault):** App uses native SQLite Room database and Jetpack DataStore directly from launch with zero external vault selection, no SAF tree permission requirements, and no WelcomeScreen.
+- **Journal-First Architecture:** App operates primarily as a dedicated daily journal. Cold start immediately opens today's journal entry in reading mode with scroll at top; calendar is accessible one swipe away.
+- **App Startup Flow:** Cold start immediately creates/opens today's note (LocalDate.now()) in reading mode with scroll at top.
+- **Templates & Trash Management in Settings:** Trashed notes viewing, single-note restoration, permanent deletion, and empty trash are managed directly in Room under "Templates & Trash" in Settings.
+- **Feature & Tips Guides in "About Notepad":** "Notepad Features" and "Notepad Tips" are not seeded as journal notes; comprehensive summarized guides are displayed directly inside the "About Notepad" section in Settings.
+- **Robust Export/Import System:** Comprehensive, flexible backup format (manifest, notes, templates, preferences, and custom commands). Fully backward-compatible with legacy JSON exports and previous Obsidian-style vault ZIP archives. Restores exact state, settings, and notes without data loss.
+- **No Note Session Timers:** Individual note session timers and background timer jobs are completely removed to maintain simplicity and prevent crashes.
 - **Horizontal Swipe Navigation:** In note editor: swiping left-to-right (swipe right) opens the Daily Journal Calendar; swiping right-to-left (swipe left) opens Settings. In Calendar: swiping right-to-left (swipe left) closes Calendar and returns to note editor. In Settings: swiping left-to-right (swipe right) closes Settings and returns to note editor. All transitions animate instantly with zero input lag.
 - **High-Performance Architecture:** Single-pass custom calendar layout with zero nested rows and zero two-pass weights; background-prewarmed month cache; O(1) bitmask note presence checks; static day cell styles/shapes; lazy conditional rendering of settings accordion contents; fast substring date parsing; zero-delay gesture callbacks.
-- Storage vault backing with SAF fast lister and local database sync.
-- Daily Journal Calendar Date Selection: Tapping any date strictly determines which note opens or creates (never falls back to last opened note). If note exists for that exact date, opens in reading mode; if absent, creates note strictly in "Daily Journal/YYYY-MM-DD.md" and opens immediately in editing mode.
-- Daily Journal Plus Button: Always targets today's actual date (LocalDate.now()) regardless of selected date or previously opened note; opens today's note directly in editing mode (creates inside "Daily Journal" if absent, zero duplicates; immediately focuses editor).
-- Daily Journal Storage & Canonical Path Integrity: All date-based notes are strictly persisted to canonical path "Daily Journal/YYYY-MM-DD.md"; opening, editing, and autosaving update the original file in "Daily Journal" and never create duplicate copies outside "Daily Journal" (root/General); date lookup checks canonical vault cache and disk before creation.
-- **Vault Resiliency & Data Safety (Items 1-6):** Supervisor scope with uncaught exception handler and generation tracking for scans and stats worker; placeholder note materialization before reads/deletions/renames to prevent vault-wipe risks; selective disk writes (`writeContent` flag) so metadata mutations never overwrite note text; strict exact-date regex (`^\d{4}-\d{2}-\d{2}$`) for daily journal recognition and deduplication; non-destructive duplicate reconciliation without silent data loss; legacy tips moved to Trash; folder deletion preserves contained notes in Trash and verifies empty before deletion.
-- Daily journal navigation (next/previous entry by date).
-- Note metrics display (word count, reading time, characters) with configurable order and style.
+- **Daily Journal Calendar Date Selection:** Tapping any date opens that exact date's note (in reading mode if existing, in editing mode if created new).
+- **Daily Journal Plus Button:** Always targets today's actual date (LocalDate.now()), opening today's note directly in editing mode (creates if absent, focuses editor).
+- **Daily Journal Navigation:** Fast next/previous entry navigation by date order.
+- **Note Metrics Display:** Word count, reading time, characters with configurable order, style, and toggle.
