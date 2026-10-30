@@ -114,7 +114,8 @@ class PreferencesManager(private val context: Context) {
         val formatBarVisibleWithoutCursor: Boolean = false,
         val waveformScale: Float = 0f,
         val waveformShow: Boolean = false,
-        val readingModeEnabled: Boolean = false
+        val readingModeEnabled: Boolean = false,
+        val readingNavBottomOffsetDp: Int = 48
     )
 
     private val dummySettings = AppSettings()
@@ -248,6 +249,7 @@ class PreferencesManager(private val context: Context) {
         val KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR = booleanPreferencesKey("format_bar_visible_without_cursor")
         val KEY_WAVEFORM_SCALE = floatPreferencesKey("waveform_scale")
         val KEY_WAVEFORM_SHOW = booleanPreferencesKey("waveform_show")
+        val KEY_READING_NAV_BOTTOM_OFFSET_DP = intPreferencesKey("reading_nav_bottom_offset_dp")
 
         val KNOWN_PREF_TYPES: Map<String, PrefType> = mapOf(
             KEY_DICTATION_MODE.name to PrefType.STRING,
@@ -362,7 +364,8 @@ class PreferencesManager(private val context: Context) {
             KEY_FORMAT_BAR_VISIBLE_DURING_DICTATION.name to PrefType.BOOLEAN,
             KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR.name to PrefType.BOOLEAN,
             KEY_WAVEFORM_SCALE.name to PrefType.FLOAT,
-            KEY_WAVEFORM_SHOW.name to PrefType.BOOLEAN
+            KEY_WAVEFORM_SHOW.name to PrefType.BOOLEAN,
+            KEY_READING_NAV_BOTTOM_OFFSET_DP.name to PrefType.INT
         )
 
         val KNOWN_SYNC_PREF_TYPES: Map<String, PrefType> = mapOf(
@@ -949,7 +952,8 @@ class PreferencesManager(private val context: Context) {
             formatBarVisibleDuringDictation = prefs[KEY_FORMAT_BAR_VISIBLE_DURING_DICTATION] ?: true,
             formatBarVisibleWithoutCursor = prefs[KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR] ?: true,
             waveformScale = prefs[KEY_WAVEFORM_SCALE] ?: 1.0f,
-            showWaveform = prefs[KEY_WAVEFORM_SHOW] ?: true
+            showWaveform = prefs[KEY_WAVEFORM_SHOW] ?: true,
+            readingNavBottomOffsetDp = prefs[KEY_READING_NAV_BOTTOM_OFFSET_DP] ?: 48
         )
     }
 
@@ -1025,6 +1029,10 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { it[KEY_WAVEFORM_SHOW] = show }
         notifyRepo { it.copy(waveformShow = show) }
     }
+    suspend fun setReadingNavBottomOffsetDp(offsetDp: Int) {
+        context.dataStore.edit { it[KEY_READING_NAV_BOTTOM_OFFSET_DP] = offsetDp }
+        notifyRepo { it.copy(readingNavBottomOffsetDp = offsetDp) }
+    }
 
     suspend fun resetFloatingLayoutToDefaults() {
         val defaults = com.example.data.model.FloatingLayoutSettings()
@@ -1047,6 +1055,7 @@ class PreferencesManager(private val context: Context) {
             prefs[KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR] = defaults.formatBarVisibleWithoutCursor
             prefs[KEY_WAVEFORM_SCALE] = defaults.waveformScale
             prefs[KEY_WAVEFORM_SHOW] = defaults.showWaveform
+            prefs[KEY_READING_NAV_BOTTOM_OFFSET_DP] = defaults.readingNavBottomOffsetDp
         }
         notifyRepo {
             it.copy(
@@ -1067,7 +1076,8 @@ class PreferencesManager(private val context: Context) {
                 formatBarVisibleDuringDictation = defaults.formatBarVisibleDuringDictation,
                 formatBarVisibleWithoutCursor = defaults.formatBarVisibleWithoutCursor,
                 waveformScale = defaults.waveformScale,
-                waveformShow = defaults.showWaveform
+                waveformShow = defaults.showWaveform,
+                readingNavBottomOffsetDp = defaults.readingNavBottomOffsetDp
             )
         }
     }

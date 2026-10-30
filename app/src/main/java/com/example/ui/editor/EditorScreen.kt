@@ -409,8 +409,7 @@ fun EditorScreen(
                         keyboardController?.hide()
                         focusManager.clearFocus(force = true)
                         viewModel.openDailyJournalManager()
-                    },
-                    dragResistance = 0.5f
+                    }
                 )
                 .imePadding()
                 .testTag("editor_screen"),
@@ -919,7 +918,7 @@ fun EditorScreen(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(bottom = 24.dp),
+                            .padding(bottom = floatingLayoutSettings.readingNavBottomOffsetDp.dp),
                         horizontalArrangement = Arrangement.spacedBy(24.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {

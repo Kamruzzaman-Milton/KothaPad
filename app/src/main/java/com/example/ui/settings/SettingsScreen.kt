@@ -320,6 +320,7 @@ fun SettingsScreen(
     onUpdateMarkdownSettings: ((com.example.markdown.MarkdownSettings) -> com.example.markdown.MarkdownSettings) -> Unit = {},
     onWaveformScaleChange: (Float) -> Unit = {},
     onWaveformShowChange: (Boolean) -> Unit = {},
+    onReadingNavBottomOffsetChange: (Int) -> Unit = {},
     onResetFloatingLayout: () -> Unit = {},
     // Backup & Restore Callbacks
     onExportBackup: (Uri, (Result<BackupSummary>) -> Unit) -> Unit = { _, _ -> },
@@ -1068,6 +1069,16 @@ fun SettingsScreen(
                         subtitle = "Live audio wave animation while recording",
                         checked = floatingLayoutSettings.showWaveform,
                         onCheckedChange = onWaveformShowChange
+                    ),
+                    SettingItem.Slider(
+                        id = "reading_nav_bottom_offset",
+                        title = "Reading Nav Buttons: Bottom Offset",
+                        subtitle = "Adjust vertical position of Previous, Toggle, and Next buttons",
+                        value = floatingLayoutSettings.readingNavBottomOffsetDp.toFloat(),
+                        valueRange = 0f..200f,
+                        steps = 40,
+                        displayValue = "${floatingLayoutSettings.readingNavBottomOffsetDp} dp",
+                        onValueChange = { onReadingNavBottomOffsetChange(it.toInt()) }
                     ),
                     SettingItem.ButtonRow(
                         id = "reset_floating_layout_row",

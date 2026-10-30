@@ -346,13 +346,34 @@ class EditorViewModel(
             }
         }
 
-        // Cold start launches directly into today's daily journal entry in reading mode
+        // Cold start launches directly into the last note previously read/edited in reading mode
         viewModelScope.launch {
             checkMicrophonePermission()
             _isReadingMode.value = true
-            val today = LocalDate.now()
-            val dateStr = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
-            val noteToLoad = getOrCreateDailyJournalNote(today)
+            val lastNoteId = preferencesManager.getLastOpenedNoteIdSync()
+            var noteToLoad: Note? = null
+            if (lastNoteId > 0L) {
+                val found = noteRepository.getNoteOnce(lastNoteId)
+                if (found != null && !found.isDeleted && !found.isArchived) {
+                    noteToLoad = found
+                }
+            }
+            if (noteToLoad == null) {
+                noteToLoad = noteRepository.getLatestActiveNote() ?: noteRepository.getLatestNote()
+            }
+            if (noteToLoad == null) {
+                val today = LocalDate.now()
+                noteToLoad = getOrCreateDailyJournalNote(today)
+            }
+
+            val dateStr = com.example.ui.notes.extractNoteJournalDate(noteToLoad)
+                ?.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                ?: noteToLoad.title.takeIf { it.length >= 10 && it[4] == '-' && it[7] == '-' }?.substring(0, 10)
+                ?: runCatching {
+                    java.time.Instant.ofEpochMilli(noteToLoad.createdAt).atZone(ZoneId.systemDefault()).toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE)
+                }.getOrNull()
+                ?: LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+
             withContext(Dispatchers.Main) {
                 openDailyJournalNote(noteToLoad, dateStr, startInEditMode = false)
             }
@@ -1639,6 +1660,7 @@ class EditorViewModel(
     }
     fun setWaveformScale(scale: Float) = viewModelScope.launch { preferencesManager.setWaveformScale(scale) }
     fun setWaveformShow(show: Boolean) = viewModelScope.launch { preferencesManager.setWaveformShow(show) }
+    fun setReadingNavBottomOffsetDp(offset: Int) = viewModelScope.launch { preferencesManager.setReadingNavBottomOffsetDp(offset) }
     fun resetFloatingLayoutToDefaults() = viewModelScope.launch { preferencesManager.resetFloatingLayoutToDefaults() }
 
     // Notes Manager Settings Flows & Methods

@@ -43,141 +43,91 @@ fun Modifier.horizontalSwipeNavigation(
     allowSwipeRight: Boolean = false,  // dx > 0 (drag towards right)
     onSwipeLeft: () -> Unit = {},
     onSwipeRight: () -> Unit = {},
-    dragResistance: Float = 1.0f,      // 1.0f for 1:1 panel tracking, <1.0f for elastic resistance
+    dragResistance: Float = 1.0f,
     maxDragOffsetPx: Float = Float.MAX_VALUE
 ): Modifier = composed {
     if (!enabled || (!allowSwipeLeft && !allowSwipeRight)) {
         return@composed Modifier
     }
 
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val config = LocalConfiguration.current
-    val screenWidthPx = with(density) { config.screenWidthDp.dp.toPx() }
-    val thresholdPx = with(density) { 42.dp.toPx() }
-    val velocityThresholdPx = with(density) { 450.dp.toPx() }
+    val thresholdPx = with(density) { 28.dp.toPx() }
+    val velocityThresholdPx = with(density) { 320.dp.toPx() }
 
-    val animOffset = remember { Animatable(0f) }
+    this.pointerInput(enabled, allowSwipeLeft, allowSwipeRight) {
+        val touchSlop = viewConfiguration.touchSlop
 
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        animOffset.snapTo(0f)
-    }
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val velocityTracker = VelocityTracker()
+            velocityTracker.addPosition(down.uptimeMillis, down.position)
 
-    this
-        .graphicsLayer {
-            translationX = animOffset.value
-        }
-        .pointerInput(enabled, allowSwipeLeft, allowSwipeRight, screenWidthPx) {
-            val touchSlop = viewConfiguration.touchSlop
+            var totalDx = 0f
+            var totalDy = 0f
+            var directionLocked = false
+            var isHorizontal = false
+            var triggered = false
+            val pointerId = down.id
 
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Main)
-                val velocityTracker = VelocityTracker()
-                velocityTracker.addPosition(down.uptimeMillis, down.position)
+            while (true) {
+                val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
 
-                var totalDx = 0f
-                var totalDy = 0f
-                var directionLocked = false
-                var isHorizontal = false
-                val pointerId = down.id
-
-                while (true) {
-                    val event = awaitPointerEvent(pass = PointerEventPass.Main)
-                    val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-
-                    if (!change.pressed) {
-                        // Pointer released (finger lifted)
-                        if (directionLocked && isHorizontal) {
-                            val velocity = velocityTracker.calculateVelocity().x
-                            val currentVal = animOffset.value
-                            val effectiveDx = totalDx
-
-                            val shouldTriggerRight = allowSwipeRight && (
-                                currentVal >= thresholdPx ||
-                                effectiveDx >= thresholdPx ||
-                                velocity >= velocityThresholdPx
-                            )
-
-                            val shouldTriggerLeft = allowSwipeLeft && (
-                                currentVal <= -thresholdPx ||
-                                effectiveDx <= -thresholdPx ||
-                                velocity <= -velocityThresholdPx
-                            )
-
-                            if (shouldTriggerRight) {
-                                onSwipeRight()
-                                scope.launch {
-                                    animOffset.snapTo(0f)
-                                }
-                            } else if (shouldTriggerLeft) {
-                                onSwipeLeft()
-                                scope.launch {
-                                    animOffset.snapTo(0f)
-                                }
-                            } else {
-                                // Threshold not reached: snap back smoothly
-                                scope.launch {
-                                    animOffset.animateTo(
-                                        0f,
-                                        spring(
-                                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                                            stiffness = Spring.StiffnessMediumLow
-                                        )
-                                    )
-                                }
-                            }
+                if (!change.pressed) {
+                    // Finger lifted: if not triggered yet, check if velocity or distance met threshold
+                    if (!triggered && directionLocked && isHorizontal) {
+                        val velocityX = velocityTracker.calculateVelocity().x
+                        if (allowSwipeRight && (totalDx >= thresholdPx || velocityX >= velocityThresholdPx)) {
+                            change.consume()
+                            onSwipeRight()
+                        } else if (allowSwipeLeft && (totalDx <= -thresholdPx || velocityX <= -velocityThresholdPx)) {
+                            change.consume()
+                            onSwipeLeft()
                         }
-                        break
                     }
+                    break
+                }
 
-                    // If a child (button, slider, text selection) consumed the event before direction lock, abort
-                    if (!directionLocked && change.isConsumed) {
-                        break
-                    }
+                velocityTracker.addPosition(change.uptimeMillis, change.position)
+                val delta = change.position - change.previousPosition
+                totalDx += delta.x
+                totalDy += delta.y
 
-                    velocityTracker.addPosition(change.uptimeMillis, change.position)
-                    val delta = change.position - change.previousPosition
-                    totalDx += delta.x
-                    totalDy += delta.y
+                val absX = abs(totalDx)
+                val absY = abs(totalDy)
 
-                    if (!directionLocked) {
-                        val absX = abs(totalDx)
-                        val absY = abs(totalDy)
-
-                        if (absX > touchSlop || absY > touchSlop) {
-                            directionLocked = true
-                            // Require horizontal movement to clearly dominate vertical movement
-                            if (absX > absY * 1.6f) {
-                                val isRight = totalDx > 0
-                                val isLeft = totalDx < 0
-                                if ((isRight && allowSwipeRight) || (isLeft && allowSwipeLeft)) {
-                                    isHorizontal = true
-                                    change.consume()
-                                } else {
-                                    // Moving in disallowed direction for active screen
-                                    isHorizontal = false
-                                    break
-                                }
+                if (!directionLocked) {
+                    if (absX > touchSlop || absY > touchSlop) {
+                        directionLocked = true
+                        // Natural thumb sweep check: horizontal dominates vertical
+                        if (absX > absY * 1.15f) {
+                            val isRight = totalDx > 0f
+                            val isLeft = totalDx < 0f
+                            if ((isRight && allowSwipeRight) || (isLeft && allowSwipeLeft)) {
+                                isHorizontal = true
+                                change.consume()
                             } else {
-                                // Vertical scroll dominates, let children scroll smoothly
-                                isHorizontal = false
                                 break
                             }
+                        } else {
+                            // Vertical scroll dominates
+                            break
                         }
-                    } else if (isHorizontal) {
-                        change.consume()
-                        val incrementalDelta = delta.x * dragResistance
-                        val raw = animOffset.value + incrementalDelta
-                        val clamped = when {
-                            !allowSwipeLeft -> raw.coerceIn(0f, maxDragOffsetPx)
-                            !allowSwipeRight -> raw.coerceIn(-maxDragOffsetPx, 0f)
-                            else -> raw.coerceIn(-maxDragOffsetPx, maxDragOffsetPx)
-                        }
-                        scope.launch {
-                            animOffset.snapTo(clamped)
-                        }
+                    }
+                } else if (isHorizontal && !triggered) {
+                    change.consume()
+                    // Immediately trigger as soon as swipe threshold or flick is reached during motion
+                    if (allowSwipeRight && totalDx >= thresholdPx) {
+                        triggered = true
+                        onSwipeRight()
+                        break
+                    } else if (allowSwipeLeft && totalDx <= -thresholdPx) {
+                        triggered = true
+                        onSwipeLeft()
+                        break
                     }
                 }
             }
         }
+    }
 }

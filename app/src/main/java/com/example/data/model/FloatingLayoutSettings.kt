@@ -24,7 +24,8 @@ data class FloatingLayoutSettings(
     val formatBarVisibleDuringDictation: Boolean = true,
     val formatBarVisibleWithoutCursor: Boolean = true,
     val waveformScale: Float = 1.0f, // 0.5x - 1.5x
-    val showWaveform: Boolean = true
+    val showWaveform: Boolean = true,
+    val readingNavBottomOffsetDp: Int = 48 // 0 - 200 dp (default 48dp, elevated above previous 24dp)
 ) {
     companion object {
         const val BUTTON_MIC = "MIC"

@@ -353,6 +353,7 @@ class MainActivity : ComponentActivity() {
                                     onUpdateMarkdownSettings = { viewModel.updateMarkdownSettings(it) },
                                     onWaveformScaleChange = { viewModel.setWaveformScale(it) },
                                     onWaveformShowChange = { viewModel.setWaveformShow(it) },
+                                    onReadingNavBottomOffsetChange = { viewModel.setReadingNavBottomOffsetDp(it) },
                                     onResetFloatingLayout = { viewModel.resetFloatingLayoutToDefaults() },
 
                                     templates = allStamps,
@@ -391,8 +392,10 @@ class MainActivity : ComponentActivity() {
                                 exit = slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(140))
                             ) {
                                 val allNotes by viewModel.allNotes.collectAsState()
+                                val currentJournalDate = viewModel.getCurrentJournalDate()
                                 com.example.ui.notes.DailyJournalManagerScreen(
                                     allNotes = allNotes,
+                                    selectedDate = currentJournalDate,
                                     onDateClick = { date ->
                                         viewModel.handleDailyJournalDateTap(date)
                                     },

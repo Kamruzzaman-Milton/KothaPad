@@ -1,6 +1,12 @@
 package com.example.ui.notes
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -11,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -20,9 +27,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -193,6 +202,7 @@ fun DailyJournalManagerScreen(
     onDateClick: (LocalDate) -> Unit,
     onTodayPlusClick: () -> Unit,
     onBackClick: () -> Unit,
+    selectedDate: LocalDate? = null,
     modifier: Modifier = Modifier
 ) {
     // Fast O(1) bitmask map: YearMonth -> 32-bit Int (bit 'day' is 1 if that day has a note)
@@ -219,6 +229,15 @@ fun DailyJournalManagerScreen(
         (ChronoUnit.MONTHS.between(START_YEAR_MONTH, currentMonth) + 1).toInt()
     }
 
+    val targetMonthIndex = remember(selectedDate, totalMonths) {
+        if (selectedDate != null) {
+            val targetYm = YearMonth.of(selectedDate.year, selectedDate.monthValue)
+            ChronoUnit.MONTHS.between(START_YEAR_MONTH, targetYm).toInt().coerceIn(0, totalMonths - 1)
+        } else {
+            (totalMonths - 1).coerceAtLeast(0)
+        }
+    }
+
     // Pre-warm month cache in background coroutine so scrolling backward is instantly smooth
     LaunchedEffect(totalMonths) {
         withContext(Dispatchers.Default) {
@@ -228,7 +247,11 @@ fun DailyJournalManagerScreen(
         }
     }
 
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (totalMonths - 1).coerceAtLeast(0))
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = targetMonthIndex)
+    LaunchedEffect(targetMonthIndex) {
+        listState.scrollToItem(targetMonthIndex)
+    }
+
     val coroutineScope = rememberCoroutineScope()
     val weekDays = remember { listOf("Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri") }
 
@@ -239,6 +262,18 @@ fun DailyJournalManagerScreen(
             listState.firstVisibleItemIndex < (totalMonths - 1)
         }
     }
+
+    // Subtle attractive blinking pulse for currently opened note's date
+    val infiniteTransition = rememberInfiniteTransition(label = "active_note_date_pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(750, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_alpha"
+    )
 
     // Theme colors cached for day cell drawing
     val primaryColor = MaterialTheme.colorScheme.primary
@@ -300,12 +335,9 @@ fun DailyJournalManagerScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 12.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = bottomInset + 120.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                item {
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
-
                 items(
                     count = totalMonths,
                     key = { it }
@@ -315,12 +347,17 @@ fun DailyJournalManagerScreen(
                     val isCurrentMonth = (ym == currentMonth)
                     val isFutureMonth = ym.isAfter(currentMonth)
                     val mask = notesMaskMap[ym] ?: 0
+                    val selectedDay = if (selectedDate != null && selectedDate.year == ym.year && selectedDate.monthValue == ym.monthValue) {
+                        selectedDate.dayOfMonth
+                    } else null
 
                     OptimizedMonthBlock(
                         data = monthData,
                         isCurrentMonth = isCurrentMonth,
                         isFutureMonth = isFutureMonth,
                         todayDay = todayDay,
+                        selectedDay = selectedDay,
+                        pulseAlpha = pulseAlpha,
                         notesMask = mask,
                         primaryColor = primaryColor,
                         onPrimaryColor = onPrimaryColor,
@@ -330,12 +367,6 @@ fun DailyJournalManagerScreen(
                         weekDays = weekDays,
                         onDateClick = onDateClick
                     )
-                }
-
-                // Generous bottom spacing: last row of calendar dates will always be
-                // scrolled completely above the floating action buttons and system nav bar.
-                item {
-                    Spacer(modifier = Modifier.height(bottomInset + 104.dp))
                 }
             }
 
@@ -592,6 +623,8 @@ private fun OptimizedMonthBlock(
     isCurrentMonth: Boolean,
     isFutureMonth: Boolean,
     todayDay: Int,
+    selectedDay: Int?,
+    pulseAlpha: Float,
     notesMask: Int,
     primaryColor: Color,
     onPrimaryColor: Color,
@@ -637,6 +670,8 @@ private fun OptimizedMonthBlock(
                 isCurrentMonth = isCurrentMonth,
                 isFutureMonth = isFutureMonth,
                 todayDay = todayDay,
+                selectedDay = selectedDay,
+                pulseAlpha = pulseAlpha,
                 notesMask = notesMask,
                 primaryColor = primaryColor,
                 onPrimaryColor = onPrimaryColor,
@@ -687,6 +722,8 @@ private fun CalendarMonthGrid(
     isCurrentMonth: Boolean,
     isFutureMonth: Boolean,
     todayDay: Int,
+    selectedDay: Int?,
+    pulseAlpha: Float,
     notesMask: Int,
     primaryColor: Color,
     onPrimaryColor: Color,
@@ -699,12 +736,15 @@ private fun CalendarMonthGrid(
         content = {
             for (day in 1..data.daysInMonth) {
                 val isToday = isCurrentMonth && (day == todayDay)
+                val isSelected = (day == selectedDay)
                 val isFuture = isFutureMonth || (isCurrentMonth && day > todayDay)
                 val hasNote = (notesMask and (1 shl day)) != 0
 
                 CalendarDayCell(
                     dayNumber = day,
                     isToday = isToday,
+                    isSelected = isSelected,
+                    pulseAlpha = pulseAlpha,
                     isFuture = isFuture,
                     hasNote = hasNote,
                     primaryColor = primaryColor,
@@ -743,6 +783,8 @@ private fun CalendarMonthGrid(
 private fun CalendarDayCell(
     dayNumber: Int,
     isToday: Boolean,
+    isSelected: Boolean,
+    pulseAlpha: Float,
     isFuture: Boolean,
     hasNote: Boolean,
     primaryColor: Color,
@@ -760,6 +802,7 @@ private fun CalendarDayCell(
     }
 
     val borderModifier = when {
+        isSelected -> Modifier.border(2.dp, Color(0xFF00E5FF).copy(alpha = pulseAlpha), DayCellShape)
         isToday && !hasNote -> Modifier.border(1.5.dp, primaryColor.copy(alpha = 0.75f), DayCellShape)
         isToday && hasNote -> Modifier.border(1.5.dp, onPrimaryColor, DayCellShape)
         else -> Modifier
@@ -776,10 +819,25 @@ private fun CalendarDayCell(
             .testTag("calendar_day_$testTagDate"),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = dayNumber.toString(),
-            style = if (hasNote || isToday) DayBoldStyle else DayNormalStyle,
-            color = contentColor
-        )
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = dayNumber.toString(),
+                style = if (hasNote || isToday || isSelected) DayBoldStyle else DayNormalStyle,
+                color = contentColor
+            )
+            if (isSelected) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Box(
+                    modifier = Modifier
+                        .size(4.5.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF00E5FF).copy(alpha = pulseAlpha))
+                )
+            }
+        }
     }
 }
