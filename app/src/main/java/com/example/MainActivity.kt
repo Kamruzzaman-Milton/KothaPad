@@ -10,6 +10,7 @@ import androidx.activity.compose.BackHandler
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -226,8 +227,8 @@ class MainActivity : ComponentActivity() {
 
                             AnimatedVisibility(
                                 visible = currentScreen == "SETTINGS",
-                                enter = slideInHorizontally(tween(280)) { it } + fadeIn(tween(250)),
-                                exit = slideOutHorizontally(tween(250)) { it } + fadeOut(tween(200))
+                                enter = slideInHorizontally(tween(200, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(160)),
+                                exit = slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(140))
                             ) {
                                 val dictationMode by viewModel.dictationModePref.collectAsState()
                                 val timedMinutes by viewModel.timedMinutesPref.collectAsState()
@@ -450,8 +451,8 @@ class MainActivity : ComponentActivity() {
 
                             AnimatedVisibility(
                                 visible = currentScreen == "MARKDOWN_SETTINGS",
-                                enter = slideInHorizontally(tween(280)) { it } + fadeIn(tween(250)),
-                                exit = slideOutHorizontally(tween(250)) { it } + fadeOut(tween(200))
+                                enter = slideInHorizontally(tween(200, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(160)),
+                                exit = slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(140))
                             ) {
                                 val markdownSettings by viewModel.markdownSettings.collectAsState()
                                 com.example.markdown.MarkdownSettingsScreen(
@@ -464,8 +465,8 @@ class MainActivity : ComponentActivity() {
 
                             AnimatedVisibility(
                                 visible = currentScreen == "DAILY_JOURNAL_MANAGER",
-                                enter = slideInHorizontally(tween(280)) { it } + fadeIn(tween(250)),
-                                exit = slideOutHorizontally(tween(250)) { it } + fadeOut(tween(200))
+                                enter = slideInHorizontally(tween(200, easing = FastOutSlowInEasing)) { -it } + fadeIn(tween(160)),
+                                exit = slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(140))
                             ) {
                                 val allNotes by viewModel.allNotes.collectAsState()
                                 com.example.ui.notes.DailyJournalManagerScreen(

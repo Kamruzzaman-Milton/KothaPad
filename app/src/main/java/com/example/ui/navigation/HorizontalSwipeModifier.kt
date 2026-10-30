@@ -54,8 +54,8 @@ fun Modifier.horizontalSwipeNavigation(
     val density = LocalDensity.current
     val config = LocalConfiguration.current
     val screenWidthPx = with(density) { config.screenWidthDp.dp.toPx() }
-    val thresholdPx = with(density) { 56.dp.toPx() }
-    val velocityThresholdPx = with(density) { 600.dp.toPx() }
+    val thresholdPx = with(density) { 42.dp.toPx() }
+    val velocityThresholdPx = with(density) { 450.dp.toPx() }
 
     val animOffset = remember { Animatable(0f) }
 
@@ -105,22 +105,14 @@ fun Modifier.horizontalSwipeNavigation(
                             )
 
                             if (shouldTriggerRight) {
+                                onSwipeRight()
                                 scope.launch {
-                                    if (dragResistance >= 0.8f) {
-                                        animOffset.animateTo(screenWidthPx, tween(180))
-                                    } else {
-                                        animOffset.animateTo(0f, tween(150))
-                                    }
-                                    onSwipeRight()
+                                    animOffset.snapTo(0f)
                                 }
                             } else if (shouldTriggerLeft) {
+                                onSwipeLeft()
                                 scope.launch {
-                                    if (dragResistance >= 0.8f) {
-                                        animOffset.animateTo(-screenWidthPx, tween(180))
-                                    } else {
-                                        animOffset.animateTo(0f, tween(150))
-                                    }
-                                    onSwipeLeft()
+                                    animOffset.snapTo(0f)
                                 }
                             } else {
                                 // Threshold not reached: snap back smoothly

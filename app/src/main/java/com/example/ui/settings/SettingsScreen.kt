@@ -1809,12 +1809,12 @@ fun SettingsScreen(
         ) {
             items(items = sections, key = { it.id }) { section ->
                 val isExpanded = expandedSectionId == section.id
+                val sectionId = section.id
                 HeadlineCard(
                     section = section,
                     isExpanded = isExpanded,
                     onToggle = {
-                        // Tapping expands in place; tapping again collapses it; only one open at a time
-                        expandedSectionId = if (isExpanded) null else section.id
+                        expandedSectionId = if (expandedSectionId == sectionId) null else sectionId
                     }
                 )
             }
@@ -2444,26 +2444,28 @@ fun HeadlineCard(
             // In-place animated expansion of controls
             AnimatedVisibility(
                 visible = isExpanded,
-                enter = expandVertically(animationSpec = tween(250)) + fadeIn(animationSpec = tween(200)),
-                exit = shrinkVertically(animationSpec = tween(200)) + fadeOut(animationSpec = tween(150))
+                enter = expandVertically(animationSpec = tween(180)) + fadeIn(animationSpec = tween(150)),
+                exit = shrinkVertically(animationSpec = tween(150)) + fadeOut(animationSpec = tween(100))
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
-                ) {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
-                        modifier = Modifier.padding(bottom = 14.dp)
-                    )
+                if (isExpanded) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                    ) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                            modifier = Modifier.padding(bottom = 14.dp)
+                        )
 
-                    section.items.forEachIndexed { index, item ->
-                        if (index > 0) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                            Spacer(modifier = Modifier.height(10.dp))
+                        section.items.forEachIndexed { index, item ->
+                            if (index > 0) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
+                                Spacer(modifier = Modifier.height(10.dp))
+                            }
+                            SettingItemControl(item = item)
                         }
-                        SettingItemControl(item = item)
                     }
                 }
             }

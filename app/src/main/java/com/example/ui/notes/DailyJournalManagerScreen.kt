@@ -43,6 +43,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.example.ui.navigation.horizontalSwipeNavigation
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -80,11 +81,9 @@ import java.util.Locale
  */
 fun extractNoteJournalDate(note: Note): LocalDate? {
     val title = note.title.trim()
-    val match = Regex("""^(\d{4}-\d{2}-\d{2})""").find(title)
-    if (match != null) {
-        try {
-            return LocalDate.parse(match.groupValues[1])
-        } catch (_: Exception) {}
+    if (title.length >= 10 && title[4] == '-' && title[7] == '-') {
+        val parsed = runCatching { LocalDate.parse(title.substring(0, 10)) }.getOrNull()
+        if (parsed != null) return parsed
     }
     val f = note.folder.trim()
     if (f.equals("Daily Journal", ignoreCase = true) || f.equals("Daily Journals", ignoreCase = true)) {
@@ -108,31 +107,36 @@ data class MonthCalendarData(
     val weeks: List<List<LocalDate?>>
 )
 
-private fun precomputeMonthData(ym: YearMonth): MonthCalendarData {
-    val title = ym.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
-    val firstDay = ym.atDay(1)
-    val startOffset = (firstDay.dayOfWeek.value + 1) % 7 // Saturday is 0
-    val totalDays = ym.lengthOfMonth()
+private val monthCache = java.util.concurrent.ConcurrentHashMap<YearMonth, MonthCalendarData>()
+private val monthTitleFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())
 
-    val cells = ArrayList<LocalDate?>(startOffset + totalDays + 7)
-    for (i in 0 until startOffset) {
-        cells.add(null)
-    }
-    for (day in 1..totalDays) {
-        cells.add(ym.atDay(day))
-    }
-    val remainder = cells.size % 7
-    if (remainder != 0) {
-        for (i in 0 until (7 - remainder)) {
+fun getCachedMonthData(ym: YearMonth): MonthCalendarData {
+    return monthCache.getOrPut(ym) {
+        val title = ym.format(monthTitleFormatter)
+        val firstDay = ym.atDay(1)
+        val startOffset = (firstDay.dayOfWeek.value + 1) % 7 // Saturday is 0
+        val totalDays = ym.lengthOfMonth()
+
+        val cells = ArrayList<LocalDate?>(startOffset + totalDays + 7)
+        for (i in 0 until startOffset) {
             cells.add(null)
         }
-    }
+        for (day in 1..totalDays) {
+            cells.add(ym.atDay(day))
+        }
+        val remainder = cells.size % 7
+        if (remainder != 0) {
+            for (i in 0 until (7 - remainder)) {
+                cells.add(null)
+            }
+        }
 
-    return MonthCalendarData(
-        yearMonth = ym,
-        title = title,
-        weeks = cells.chunked(7)
-    )
+        MonthCalendarData(
+            yearMonth = ym,
+            title = title,
+            weeks = cells.chunked(7)
+        )
+    }
 }
 
 fun isDailyJournalNote(note: Note): Boolean {
@@ -141,7 +145,7 @@ fun isDailyJournalNote(note: Note): Boolean {
         return true
     }
     val title = note.title.trim()
-    return Regex("""^\d{4}-\d{2}-\d{2}""").containsMatchIn(title)
+    return title.length >= 10 && title[4] == '-' && title[7] == '-'
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -154,45 +158,45 @@ fun DailyJournalManagerScreen(
     modifier: Modifier = Modifier
 ) {
     // Only notes in "Daily Journals" folder or with journal date titles that are not trashed
-    val journalNotes = remember(allNotes) {
-        allNotes.filter {
-            !it.isDeleted && isDailyJournalNote(it)
+    val datesWithNotes = remember(allNotes) {
+        val set = HashSet<LocalDate>()
+        for (note in allNotes) {
+            if (!note.isDeleted && isDailyJournalNote(note)) {
+                val d = extractNoteJournalDate(note)
+                if (d != null) set.add(d)
+            }
         }
-    }
-
-    // High performance O(1) date lookup for notes
-    val datesWithNotes = remember(journalNotes) {
-        journalNotes.mapNotNull { extractNoteJournalDate(it) }.toSet()
+        set
     }
 
     val today = remember { LocalDate.now() }
     val currentMonth = remember { YearMonth.now() }
 
-    // Calendar fixed start at Jan 2010 and dynamically ends at current month
-    val monthDataList = remember(currentMonth) {
-        val totalMonths = ChronoUnit.MONTHS.between(START_YEAR_MONTH, currentMonth)
-        (0L..totalMonths).map { offset ->
-            precomputeMonthData(START_YEAR_MONTH.plusMonths(offset))
-        }
+    val totalMonths = remember(currentMonth) {
+        (ChronoUnit.MONTHS.between(START_YEAR_MONTH, currentMonth) + 1).toInt()
     }
 
-    // Initial scroll position: immediately display the current month (last item)
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = monthDataList.lastIndex)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = (totalMonths - 1).coerceAtLeast(0))
     val coroutineScope = rememberCoroutineScope()
     val weekDays = remember { listOf("Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri") }
 
     var showMonthYearDialog by remember { mutableStateOf(false) }
 
-    // Derived state to determine if user has scrolled away from the current month
-    val isAwayFromCurrentMonth by remember(monthDataList) {
+    val isAwayFromCurrentMonth by remember(totalMonths) {
         derivedStateOf {
-            listState.firstVisibleItemIndex < monthDataList.lastIndex
+            listState.firstVisibleItemIndex < (totalMonths - 1)
         }
     }
 
     Scaffold(
         modifier = modifier
             .fillMaxSize()
+            .horizontalSwipeNavigation(
+                enabled = !showMonthYearDialog,
+                allowSwipeLeft = true,  // right-to-left: closes Calendar and returns to note editor
+                allowSwipeRight = false,
+                onSwipeLeft = onBackClick
+            )
             .testTag("daily_journal_manager_screen"),
         topBar = {
             TopAppBar(
@@ -244,9 +248,11 @@ fun DailyJournalManagerScreen(
                 }
 
                 items(
-                    items = monthDataList,
-                    key = { it.yearMonth.toString() }
-                ) { monthData ->
+                    count = totalMonths,
+                    key = { index -> START_YEAR_MONTH.plusMonths(index.toLong()).toString() }
+                ) { index ->
+                    val ym = remember(index) { START_YEAR_MONTH.plusMonths(index.toLong()) }
+                    val monthData = remember(ym) { getCachedMonthData(ym) }
                     OptimizedMonthBlock(
                         data = monthData,
                         today = today,
@@ -303,7 +309,7 @@ fun DailyJournalManagerScreen(
                         FloatingActionButton(
                             onClick = {
                                 coroutineScope.launch {
-                                    listState.scrollToItem(monthDataList.lastIndex)
+                                    listState.scrollToItem(totalMonths - 1)
                                 }
                             },
                             containerColor = MaterialTheme.colorScheme.tertiaryContainer,
@@ -336,8 +342,8 @@ fun DailyJournalManagerScreen(
 
     if (showMonthYearDialog) {
         val currentVisibleMonth = remember {
-            val visibleIndex = listState.firstVisibleItemIndex.coerceIn(0, monthDataList.lastIndex)
-            monthDataList[visibleIndex].yearMonth
+            val visibleIndex = listState.firstVisibleItemIndex.coerceIn(0, totalMonths - 1)
+            START_YEAR_MONTH.plusMonths(visibleIndex.toLong())
         }
 
         MonthYearPickerDialog(
@@ -348,7 +354,7 @@ fun DailyJournalManagerScreen(
             onSelect = { selectedYm ->
                 showMonthYearDialog = false
                 val targetIndex = ChronoUnit.MONTHS.between(START_YEAR_MONTH, selectedYm).toInt()
-                    .coerceIn(0, monthDataList.lastIndex)
+                    .coerceIn(0, totalMonths - 1)
                 coroutineScope.launch {
                     listState.scrollToItem(targetIndex)
                 }

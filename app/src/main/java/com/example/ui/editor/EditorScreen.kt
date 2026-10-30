@@ -391,19 +391,19 @@ fun EditorScreen(
                 .fillMaxSize()
                 .horizontalSwipeNavigation(
                     enabled = isEditorActive && !isAnyDialogOpen,
-                    allowSwipeLeft = true,
-                    allowSwipeRight = true,
+                    allowSwipeLeft = true,  // right-to-left: opens Settings
+                    allowSwipeRight = true, // left-to-right: opens Calendar
                     onSwipeLeft = {
-                        keyboardController?.hide()
-                        focusManager.clearFocus(force = true)
-                        viewModel.openDailyJournalManager()
-                    },
-                    onSwipeRight = {
                         keyboardController?.hide()
                         focusManager.clearFocus(force = true)
                         viewModel.navigateTo("SETTINGS")
                     },
-                    dragResistance = 0.35f
+                    onSwipeRight = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus(force = true)
+                        viewModel.openDailyJournalManager()
+                    },
+                    dragResistance = 0.5f
                 )
                 .imePadding()
                 .testTag("editor_screen"),
