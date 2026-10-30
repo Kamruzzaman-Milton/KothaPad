@@ -646,7 +646,7 @@ class EditorViewModel(
                     viewModelScope.launch(Dispatchers.IO) {
                         val c = _currentNote.value
                         if (c != null && !c.isDeleted && !c.isArchived && c.id == updated.id) {
-                            noteRepository.update(updated)
+                            noteRepository.update(updated, writeContent = false)
                         }
                     }
                 }
@@ -660,7 +660,7 @@ class EditorViewModel(
         val note = _currentNote.value ?: return
         if (note.isDeleted || note.isArchived) return
         viewModelScope.launch(Dispatchers.IO) {
-            noteRepository.update(note)
+            noteRepository.update(note, writeContent = false)
             vaultNoteRepository.saveMetadata()
             vaultNoteRepository.vaultConfigStore.flush()
         }
@@ -1585,7 +1585,7 @@ class EditorViewModel(
         val note = _currentNote.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
             val updated = note.copy(title = newTitle, updatedAt = System.currentTimeMillis())
-            noteRepository.update(updated)
+            noteRepository.update(updated, writeContent = false)
             _currentNote.value = updated
         }
     }
@@ -1593,7 +1593,7 @@ class EditorViewModel(
     fun togglePinCurrentNote(note: Note) {
         viewModelScope.launch(Dispatchers.IO) {
             val updated = note.copy(isPinned = !note.isPinned)
-            noteRepository.update(updated)
+            noteRepository.update(updated, writeContent = false)
             if (_currentNote.value?.id == note.id) {
                 _currentNote.value = updated
             }
@@ -1612,7 +1612,7 @@ class EditorViewModel(
         }
         viewModelScope.launch(Dispatchers.IO) {
             val updated = note.copy(isDeleted = true, deletedAt = System.currentTimeMillis(), isPinned = false)
-            noteRepository.update(updated)
+            noteRepository.update(updated, writeContent = false)
             if (isCurrentNote) {
                 val remaining = noteRepository.getLatestActiveNote()
                 withContext(Dispatchers.Main) {
@@ -1630,7 +1630,7 @@ class EditorViewModel(
     fun restoreNote(note: Note) {
         viewModelScope.launch(Dispatchers.IO) {
             val updated = note.copy(isDeleted = false, deletedAt = null)
-            noteRepository.update(updated)
+            noteRepository.update(updated, writeContent = false)
         }
     }
 
@@ -1672,7 +1672,7 @@ class EditorViewModel(
         }
         viewModelScope.launch(Dispatchers.IO) {
             val updated = note.copy(isArchived = willArchive)
-            noteRepository.update(updated)
+            noteRepository.update(updated, writeContent = false)
             if (willArchive && isCurrent) {
                 val remaining = noteRepository.getLatestActiveNote()
                 withContext(Dispatchers.Main) {
@@ -1730,7 +1730,7 @@ class EditorViewModel(
         val trimmed = newTitle.trim()
         viewModelScope.launch(Dispatchers.IO) {
             val updated = note.copy(title = trimmed, updatedAt = System.currentTimeMillis())
-            noteRepository.update(updated)
+            noteRepository.update(updated, writeContent = false)
             if (_currentNote.value?.id == note.id) {
                 _currentNote.value = updated
             }
@@ -1796,7 +1796,7 @@ class EditorViewModel(
         val note = _currentNote.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
             val updated = note.copy(highlightColor = tintKey)
-            noteRepository.update(updated)
+            noteRepository.update(updated, writeContent = false)
             _currentNote.value = updated
         }
     }

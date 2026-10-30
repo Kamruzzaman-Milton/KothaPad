@@ -42,12 +42,12 @@ class NoteRepository(
     suspend fun insertAll(notes: List<Note>): List<Long> =
         vaultNoteRepository?.insertAll(notes) ?: noteDao.insertAll(notes)
 
-    suspend fun update(note: Note) {
-        vaultNoteRepository?.update(note) ?: noteDao.update(note)
+    suspend fun update(note: Note, writeContent: Boolean = true) {
+        vaultNoteRepository?.update(note, writeContent) ?: noteDao.update(note)
     }
 
-    suspend fun updateAll(notes: List<Note>) {
-        vaultNoteRepository?.updateAll(notes) ?: noteDao.updateAll(notes)
+    suspend fun updateAll(notes: List<Note>, writeContent: Boolean = true) {
+        vaultNoteRepository?.updateAll(notes, writeContent) ?: noteDao.updateAll(notes)
     }
 
     suspend fun delete(note: Note) {

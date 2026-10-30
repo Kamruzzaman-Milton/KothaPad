@@ -40,5 +40,6 @@
 - Daily Journal Calendar: Tapping existing note date opens in reading mode; tapping empty date auto-creates and opens in editing mode in "Daily Journal" folder without duplicates.
 - Daily Journal Plus Button: Always targets current date; opens today's note directly in editing mode (creates only if absent, no duplicates; focuses editor with keyboard active).
 - Daily Journal Storage Integrity: Dedicated "Daily Journal" vault folder; automatic migration, duplicate purging, and reconciliation across root/General.
+- **Vault Resiliency & Data Safety (Items 1-6):** Supervisor scope with uncaught exception handler and generation tracking for scans and stats worker; placeholder note materialization before reads/deletions/renames to prevent vault-wipe risks; selective disk writes (`writeContent` flag) so metadata mutations never overwrite note text; strict exact-date regex (`^\d{4}-\d{2}-\d{2}$`) for daily journal recognition and deduplication; non-destructive duplicate reconciliation without silent data loss; legacy tips moved to Trash; folder deletion preserves contained notes in Trash and verifies empty before deletion.
 - Daily journal navigation (next/previous entry by date).
 - Note metrics display (word count, reading time, characters) with configurable order and style.

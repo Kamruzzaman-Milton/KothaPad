@@ -6,10 +6,14 @@ import androidx.documentfile.provider.DocumentFile
 import com.example.data.model.Note
 import com.example.data.model.Stamp
 import com.example.data.preferences.PreferencesManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -115,7 +119,8 @@ data class CachedNoteEntry(
     val file: DocumentFile,
     val parentDir: DocumentFile,
     val relPath: String,
-    val lastModified: Long
+    val lastModified: Long,
+    val isPlaceholder: Boolean = false
 )
 
 data class ExternalNoteChange(
@@ -128,7 +133,10 @@ class VaultNoteRepository(
     private val context: Context,
     private val vaultManager: VaultManager,
     private val preferencesManager: PreferencesManager,
-    private val repositoryScope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    private val repositoryScope: CoroutineScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, t -> android.util.Log.e("VaultRepo", "Uncaught", t) }
+    ),
     val vaultConfigStore: VaultConfigStore = VaultConfigStore.getInstance(context, repositoryScope)
 ) {
 
@@ -183,6 +191,7 @@ class VaultNoteRepository(
     // Current Vault Reference
     private var currentVaultDoc: DocumentFile? = null
     private var scanJob: Job? = null
+    private val scanGeneration = AtomicLong(0L)
     private var currentlyEditingNoteId: Long? = null
 
     // Workspace Cache
@@ -201,13 +210,63 @@ class VaultNoteRepository(
         private const val META_SCHEMA_VERSION = 2
         private const val WORKSPACE_SCHEMA_VERSION = 1
 
+        private val DAILY_BASE_REGEX = Regex("""^\d{4}-\d{2}-\d{2}$""")
+        fun isDailyBase(base: String): Boolean = DAILY_BASE_REGEX.matches(base.trim())
+
         fun isDailyJournalNote(note: Note): Boolean {
             val f = note.folder.trim()
             if (f.equals(DAILY_JOURNAL_DIR, ignoreCase = true) || f.equals("Daily Journals", ignoreCase = true)) {
                 return true
             }
-            val title = note.title.trim()
-            return Regex("""^\d{4}-\d{2}-\d{2}""").containsMatchIn(title)
+            return isDailyBase(note.title)
+        }
+    }
+
+    private fun safeFileBase(title: String, fallback: String): String {
+        val s = VaultManager.sanitizeFilename(title.trim()).trim().trimStart('.')
+        return s.ifBlank { fallback }
+    }
+
+    private suspend fun materializeEntry(entry: CachedNoteEntry): CachedNoteEntry? {
+        if (!entry.isPlaceholder) return entry
+        val vaultDoc = currentVaultDoc ?: return null
+        val file = vaultManager.findFileRecursive(vaultDoc, entry.relPath) ?: return null
+        if (file.isDirectory || file.uri == vaultDoc.uri) return null
+        val parentPath = entry.relPath.substringBeforeLast("/", "")
+        val parent = if (parentPath.isEmpty()) vaultDoc
+                     else vaultManager.getOrCreateDirRecursive(vaultDoc, parentPath) ?: return null
+        val real = entry.copy(file = file, parentDir = parent, isPlaceholder = false)
+        cache[entry.relPath] = real
+        return real
+    }
+
+    private fun isLegacyTipsFile(name: String): Boolean {
+        val n = name.trim().lowercase()
+        return n == "kothapad features.md" || n == "kothapad tips.md" ||
+               n == "notepad features.md" || n == "notepad tips.md"
+    }
+
+    /**
+     * Reconcile [src] into [dst] (same file name, different folders).
+     * Returns true only if [src] is gone AND no content was lost.
+     */
+    private suspend fun reconcileDuplicate(
+        src: DocumentFile, dstDir: DocumentFile, dst: DocumentFile,
+        fileName: String, keepBothIfDifferent: Boolean
+    ): Boolean {
+        val srcText = vaultManager.readText(src)
+        val dstText = vaultManager.readText(dst)
+        return when {
+            srcText == dstText || srcText.isBlank() -> vaultManager.delete(src)
+            dstText.isBlank() ->
+                vaultManager.writeTextAtomic(dstDir, fileName, srcText, "text/markdown") != null &&
+                    vaultManager.delete(src)
+            keepBothIfDifferent -> {
+                val unique = vaultManager.resolveDuplicateFileName(dstDir, fileName.removeSuffix(".md"), ".md")
+                vaultManager.writeTextAtomic(dstDir, unique, srcText, "text/markdown") != null &&
+                    vaultManager.delete(src)
+            }
+            else -> false   // differing non-empty content: leave both untouched
         }
     }
 
@@ -252,13 +311,13 @@ class VaultNoteRepository(
             noteBodyLruCache.put(relPath, localCached)
             return@withContext localCached
         }
-        val file = entry?.file
-        val text = if (file != null && file.exists()) {
+        val file = entry?.takeIf { !it.isPlaceholder }?.file
+        val text: String = if (file != null && file.exists() && file.isFile) {
             vaultManager.readText(file)
         } else {
             val vaultDoc = currentVaultDoc ?: return@withContext ""
-            val f = vaultManager.findFileRecursive(vaultDoc, relPath)
-            if (f != null) vaultManager.readText(f) else ""
+            val f = vaultManager.findFileRecursive(vaultDoc, relPath) ?: return@withContext ""
+            vaultManager.readText(f)
         }
         noteBodyLruCache.put(relPath, text)
         if (meta != null && text.isNotEmpty()) {
@@ -426,14 +485,22 @@ class VaultNoteRepository(
 
     fun startVaultScan(vaultDoc: DocumentFile) {
         scanJob?.cancel()
+        val gen = scanGeneration.incrementAndGet()
         scanJob = repositoryScope.launch {
             _isScanning.value = true
             _scanProgress.value = "Indexing notes..."
             try {
                 scanVaultRecursive(vaultDoc)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("VaultRepo", "Scan failed", e)
+                _lastSaveError.value = "Vault scan failed: ${e.message}"
             } finally {
-                _isScanning.value = false
-                _scanProgress.value = null
+                if (scanGeneration.get() == gen) {
+                    _isScanning.value = false
+                    _scanProgress.value = null
+                }
             }
         }
     }
@@ -468,29 +535,20 @@ class VaultNoteRepository(
             if (dailyDir == null) {
                 val renamed = vaultManager.rename(legacyDailyDir, DAILY_JOURNAL_DIR)
                 dailyDir = if (renamed) vaultManager.findDirRecursive(vaultDoc, DAILY_JOURNAL_DIR) else legacyDailyDir
-            } else if (dailyDir.uri != legacyDailyDir.uri) {
-                // Both exist: migrate all files from legacy into dailyDir
-                val legacyChildren = if (treeUri != null) vaultManager.listChildrenFast(legacyDailyDir, treeUri) else emptyList()
-                for (child in legacyChildren) {
-                    if (child.isFile) {
-                        val childDoc = child.toDocumentFile(context, treeUri)
-                        if (childDoc != null) {
-                            val existingInDaily = vaultManager.findChildFast(dailyDir, child.displayName, treeUri)
-                            if (existingInDaily != null) {
-                                val existingDoc = existingInDaily.toDocumentFile(context, treeUri)
-                                if (existingDoc != null && existingDoc.length() == 0L && childDoc.length() > 0L) {
-                                    vaultManager.delete(existingDoc)
-                                    vaultManager.move(childDoc, legacyDailyDir, dailyDir)
-                                } else {
-                                    vaultManager.delete(childDoc)
-                                }
-                            } else {
-                                vaultManager.move(childDoc, legacyDailyDir, dailyDir)
-                            }
-                        }
+            } else if (dailyDir.uri != legacyDailyDir.uri && treeUri != null) {
+                for (child in vaultManager.listChildrenFast(legacyDailyDir, treeUri)) {
+                    val childDoc = child.toDocumentFile(context, treeUri) ?: continue
+                    val existing = vaultManager.findChildFast(dailyDir, child.displayName, treeUri)
+                        ?.toDocumentFile(context, treeUri)
+                    if (child.isFile && existing != null) {
+                        reconcileDuplicate(childDoc, dailyDir, existing, child.displayName, keepBothIfDifferent = true)
+                    } else {
+                        vaultManager.move(childDoc, legacyDailyDir, dailyDir)   // files without a clash, and subfolders
                     }
                 }
-                vaultManager.delete(legacyDailyDir)
+                if (vaultManager.listChildrenFast(legacyDailyDir, treeUri).isEmpty()) {
+                    vaultManager.delete(legacyDailyDir)
+                }
             }
         }
 
@@ -505,7 +563,7 @@ class VaultNoteRepository(
             val treeUri = vaultManager.getVaultTreeUri() ?: vaultDoc.uri
             val rootChildren = vaultManager.listChildrenFast(vaultDoc)
             val rootMdFiles = rootChildren.filter { it.isFile && it.displayName.endsWith(".md", ignoreCase = true) }
-            val dailyJournalRegex = Regex("^\\d{4}-\\d{2}-\\d{2}", RegexOption.IGNORE_CASE)
+            val dailyJournalRegex = Regex("^\\d{4}-\\d{2}-\\d{2}\\.md$", RegexOption.IGNORE_CASE)
 
             var metadataModified = false
             val dailyDir = getOrCreateDailyJournalDir(vaultDoc)
@@ -516,59 +574,48 @@ class VaultNoteRepository(
                 val rootFileDoc = fileEntry.toDocumentFile(context, treeUri) ?: continue
 
                 // Check 1: Daily Journal notes in root
-                if (dailyJournalRegex.containsMatchIn(fileName)) {
+                if (dailyJournalRegex.matches(fileName)) {
                     if (dailyDir != null) {
                         val dailyChildren = vaultManager.listChildrenFast(dailyDir, treeUri)
                         val duplicateInDaily = dailyChildren.firstOrNull { it.isFile && it.displayName.equals(fileName, ignoreCase = true) }
                         if (duplicateInDaily != null) {
                             val dailyDoc = duplicateInDaily.toDocumentFile(context, treeUri)
-                            if (dailyDoc != null && dailyDoc.length() == 0L && rootFileDoc.length() > 0L) {
-                                vaultManager.delete(dailyDoc)
-                                vaultManager.move(rootFileDoc, vaultDoc, dailyDir)
-                            } else {
-                                vaultManager.delete(rootFileDoc)
+                            if (dailyDoc != null) {
+                                val handled = reconcileDuplicate(rootFileDoc, dailyDir, dailyDoc, fileName, keepBothIfDifferent = true)
+                                if (handled) {
+                                    removeMetadataForPath(fileName); cache.remove(fileName); removeIdForPath(fileName); metadataModified = true
+                                }
                             }
                         } else {
-                            vaultManager.move(rootFileDoc, vaultDoc, dailyDir)
+                            if (vaultManager.move(rootFileDoc, vaultDoc, dailyDir) != null) {
+                                removeMetadataForPath(fileName); cache.remove(fileName); removeIdForPath(fileName); metadataModified = true
+                            }
                         }
-                        removeMetadataForPath(fileName)
-                        cache.remove(fileName)
-                        removeIdForPath(fileName)
+                    }
+                    continue
+                }
+
+                // Check 2: Purge any legacy tips or features notes from root (move to Trash)
+                if (isLegacyTipsFile(fileName)) {
+                    val trash = vaultManager.getOrCreateDirRecursive(vaultDoc, TRASH_DIR)
+                    val ok = if (trash != null) vaultManager.move(rootFileDoc, vaultDoc, trash) != null else false
+                    if (ok) {
+                        removeMetadataForPath(fileName); cache.remove(fileName); removeIdForPath(fileName)
                         metadataModified = true
                     }
                     continue
                 }
 
-                // Check 2: Purge any legacy tips or features notes from root (now displayed in Settings -> About Notepad)
-                if (fileName.contains("KothaPad features", ignoreCase = true) ||
-                    fileName.contains("KothaPad Tips", ignoreCase = true) ||
-                    fileName.contains("Notepad Features", ignoreCase = true) ||
-                    fileName.contains("Notepad Tips", ignoreCase = true)) {
-                    vaultManager.delete(rootFileDoc)
-                    removeMetadataForPath(fileName)
-                    cache.remove(fileName)
-                    removeIdForPath(fileName)
-                    metadataModified = true
-                    continue
-                }
-
                 // Check 3: Check against metadata: if metadata says this note belongs to a folder
                 val meta = getMetadataForPath(fileName)
-                    ?: metadataByIdMap.values.firstOrNull { it.path.endsWith("/$fileName", ignoreCase = true) }
+                    ?: metadataByIdMap.values.firstOrNull {
+                        it.path.endsWith("/$fileName", ignoreCase = true) &&
+                            vaultManager.findFileRecursive(vaultDoc, it.path) == null   // its real file is missing
+                    }
                 if (meta != null && meta.path.contains("/")) {
-                    val destFolder = meta.path.substringBeforeLast("/")
-                    val targetDir = vaultManager.getOrCreateDirRecursive(vaultDoc, destFolder)
-                    if (targetDir != null) {
-                        val folderChildren = vaultManager.listChildrenFast(targetDir, treeUri)
-                        val duplicateInFolder = folderChildren.firstOrNull { it.isFile && it.displayName.equals(fileName, ignoreCase = true) }
-                        if (duplicateInFolder != null) {
-                            vaultManager.delete(rootFileDoc)
-                        } else {
-                            vaultManager.move(rootFileDoc, vaultDoc, targetDir)
-                        }
-                        removeMetadataForPath(fileName)
-                        cache.remove(fileName)
-                        removeIdForPath(fileName)
+                    val targetDir = vaultManager.getOrCreateDirRecursive(vaultDoc, meta.path.substringBeforeLast("/"))
+                    if (targetDir != null && vaultManager.move(rootFileDoc, vaultDoc, targetDir) != null) {
+                        removeMetadataForPath(fileName); cache.remove(fileName); removeIdForPath(fileName)
                         metadataModified = true
                     }
                 }
@@ -579,36 +626,36 @@ class VaultNoteRepository(
             if (generalDir != null) {
                 val generalChildren = vaultManager.listChildrenFast(generalDir, treeUri)
                 for (gFile in generalChildren) {
+                    if (gFile.isDirectory) continue
                     val gName = gFile.displayName
                     val gRelPath = "$GENERAL_DIR/$gName"
                     val gDoc = gFile.toDocumentFile(context, treeUri) ?: continue
-                    if (gName.contains("KothaPad features", ignoreCase = true) ||
-                        gName.contains("KothaPad Tips", ignoreCase = true) ||
-                        gName.contains("Notepad Features", ignoreCase = true) ||
-                        gName.contains("Notepad Tips", ignoreCase = true)) {
-                        vaultManager.delete(gDoc)
-                        removeMetadataForPath(gRelPath)
-                        cache.remove(gRelPath)
-                        removeIdForPath(gRelPath)
-                        metadataModified = true
-                    } else if (dailyJournalRegex.containsMatchIn(gName) && dailyDir != null) {
+                    if (isLegacyTipsFile(gName)) {
+                        val trash = vaultManager.getOrCreateDirRecursive(vaultDoc, TRASH_DIR)
+                        val ok = if (trash != null) vaultManager.move(gDoc, generalDir, trash) != null else false
+                        if (ok) {
+                            removeMetadataForPath(gRelPath)
+                            cache.remove(gRelPath)
+                            removeIdForPath(gRelPath)
+                            metadataModified = true
+                        }
+                        continue
+                    } else if (dailyJournalRegex.matches(gName) && dailyDir != null) {
                         val dailyChildren = vaultManager.listChildrenFast(dailyDir, treeUri)
                         val duplicateInDaily = dailyChildren.firstOrNull { it.isFile && it.displayName.equals(gName, ignoreCase = true) }
                         if (duplicateInDaily != null) {
                             val dailyDoc = duplicateInDaily.toDocumentFile(context, treeUri)
-                            if (dailyDoc != null && dailyDoc.length() == 0L && gDoc.length() > 0L) {
-                                vaultManager.delete(dailyDoc)
-                                vaultManager.move(gDoc, generalDir, dailyDir)
-                            } else {
-                                vaultManager.delete(gDoc)
+                            if (dailyDoc != null) {
+                                val handled = reconcileDuplicate(gDoc, dailyDir, dailyDoc, gName, keepBothIfDifferent = true)
+                                if (handled) {
+                                    removeMetadataForPath(gRelPath); cache.remove(gRelPath); removeIdForPath(gRelPath); metadataModified = true
+                                }
                             }
                         } else {
-                            vaultManager.move(gDoc, generalDir, dailyDir)
+                            if (vaultManager.move(gDoc, generalDir, dailyDir) != null) {
+                                removeMetadataForPath(gRelPath); cache.remove(gRelPath); removeIdForPath(gRelPath); metadataModified = true
+                            }
                         }
-                        removeMetadataForPath(gRelPath)
-                        cache.remove(gRelPath)
-                        removeIdForPath(gRelPath)
-                        metadataModified = true
                     }
                 }
                 // If General folder is now empty, delete it to keep vault clean with only 3 default folders
@@ -658,31 +705,31 @@ class VaultNoteRepository(
                 for ((datePrefix, files) in groupedByDate) {
                     if (datePrefix == null || files.size <= 1) continue
                     val canonicalName = "$datePrefix.md"
-                    var canonicalEntry = files.firstOrNull { it.displayName.equals(canonicalName, ignoreCase = true) }
-                    var canonicalDoc = canonicalEntry?.toDocumentFile(context, treeUri)
+                    var canonicalDoc = files.firstOrNull { it.displayName.equals(canonicalName, ignoreCase = true) }
+                        ?.toDocumentFile(context, treeUri)
+                    var skipName: String? = null
 
                     if (canonicalDoc == null) {
-                        val firstFile = files.first()
-                        val firstDoc = firstFile.toDocumentFile(context, treeUri)
-                        if (firstDoc != null) {
-                            vaultManager.rename(firstDoc, canonicalName)
-                            canonicalDoc = firstDoc
+                        val first = files.first()
+                        val firstDoc = first.toDocumentFile(context, treeUri)
+                        if (firstDoc != null && vaultManager.rename(firstDoc, canonicalName)) {
+                            skipName = first.displayName           // this entry is now stale; do not touch it
+                            canonicalDoc = vaultManager.findChildFast(dailyDir, canonicalName, treeUri)
+                                ?.toDocumentFile(context, treeUri)
                         }
                     }
+                    if (canonicalDoc == null) continue
 
                     for (fileEntry in files) {
                         if (fileEntry.displayName.equals(canonicalName, ignoreCase = true)) continue
+                        if (fileEntry.displayName == skipName) continue
                         val dupDoc = fileEntry.toDocumentFile(context, treeUri) ?: continue
-                        val dupRelPath = "$DAILY_JOURNAL_DIR/${fileEntry.displayName}"
-                        if (canonicalDoc != null && canonicalDoc.length() == 0L && dupDoc.length() > 0L) {
-                            val dupText = vaultManager.readText(dupDoc)
-                            vaultManager.writeTextAtomic(dailyDir, canonicalName, dupText, "text/markdown")
+                        val handled = reconcileDuplicate(dupDoc, dailyDir, canonicalDoc, canonicalName, keepBothIfDifferent = false)
+                        if (handled) {
+                            val dupRelPath = "$DAILY_JOURNAL_DIR/${fileEntry.displayName}"
+                            removeMetadataForPath(dupRelPath); cache.remove(dupRelPath); removeIdForPath(dupRelPath)
+                            metadataModified = true
                         }
-                        vaultManager.delete(dupDoc)
-                        removeMetadataForPath(dupRelPath)
-                        cache.remove(dupRelPath)
-                        removeIdForPath(dupRelPath)
-                        metadataModified = true
                     }
                 }
             }
@@ -692,7 +739,7 @@ class VaultNoteRepository(
             for (id in keys) {
                 val meta = metadataByIdMap[id] ?: continue
                 val base = meta.path.substringAfterLast("/").removeSuffix(".md")
-                if (dailyJournalRegex.containsMatchIn(base)) {
+                if (isDailyBase(base)) {
                     val dateMatch = Regex("^(\\d{4}-\\d{2}-\\d{2})").find(base)
                     val datePrefix = dateMatch?.groupValues?.get(1) ?: base
                     val expectedPath = "$DAILY_JOURNAL_DIR/$datePrefix.md"
@@ -762,8 +809,8 @@ class VaultNoteRepository(
                     }
 
                     val baseTitle = name.removeSuffix(".md")
-                    val isDailyJournal = Regex("^\\d{4}-\\d{2}-\\d{2}").containsMatchIn(baseTitle)
-                    val folderName = if (isDailyJournal) DAILY_JOURNALS_DIR else if (currentRelPath.isEmpty()) GENERAL_DIR else currentRelPath
+                    val isExactDaily = isDailyBase(baseTitle)
+                    val folderName = if (currentRelPath.isEmpty()) (if (isExactDaily) DAILY_JOURNALS_DIR else GENERAL_DIR) else currentRelPath
                     val lastMod = child.lastModified
                     val fileSize = child.size
 
@@ -941,7 +988,7 @@ class VaultNoteRepository(
                 val origRel = meta?.originalRelPath ?: tName
                 val baseTitle = meta?.originalRelPath?.substringAfterLast("/")?.removeSuffix(".md")
                     ?: tName.removeSuffix(".md").replace(Regex("_\\d{10,}$"), "")
-                val isDaily = Regex("^\\d{4}-\\d{2}-\\d{2}").containsMatchIn(baseTitle)
+                val isDaily = isDailyBase(baseTitle)
                 val origFolder = if (isDaily) DAILY_JOURNAL_DIR else if (origRel.contains("/")) origRel.substringBeforeLast("/") else DAILY_JOURNAL_DIR
 
                 val trashIsUnchanged = (meta != null && Math.abs(meta.modifiedAt - tFile.lastModified) < 2000L && meta.fileSize == tFile.size)
@@ -1069,78 +1116,84 @@ class VaultNoteRepository(
     fun startDeferredStatsWorker() {
         statsWorkerJob?.cancel()
         statsWorkerJob = repositoryScope.launch(Dispatchers.IO) {
-            val stalePaths = metadataByIdMap.values
-                .filter { it.statsStale && !it.isOrphaned }
-                .map { it.path }
-                .toMutableList()
+            try {
+                val stalePaths = metadataByIdMap.values
+                    .filter { it.statsStale && !it.isOrphaned }
+                    .map { it.path }
+                    .toMutableList()
 
-            if (stalePaths.isEmpty()) return@launch
+                if (stalePaths.isEmpty()) return@launch
 
-            // Prioritize currently open note first
-            val openId = currentlyOpenNoteId
-            val openPath = if (openId != null) idToPathMap[openId] else null
-            if (openPath != null && stalePaths.remove(openPath)) {
-                stalePaths.add(0, openPath)
-            }
+                // Prioritize currently open note first
+                val openId = currentlyOpenNoteId
+                val openPath = if (openId != null) idToPathMap[openId] else null
+                if (openPath != null && stalePaths.remove(openPath)) {
+                    stalePaths.add(0, openPath)
+                }
 
-            var metadataChanged = false
-            var batchCount = 0
+                var metadataChanged = false
+                var batchCount = 0
 
-            for (relPath in stalePaths) {
-                if (!isActive) break
+                for (relPath in stalePaths) {
+                    if (!isActive) break
 
-                val meta = getMetadataForPath(relPath) ?: continue
-                if (!meta.statsStale) continue
+                    val meta = getMetadataForPath(relPath) ?: continue
+                    if (!meta.statsStale) continue
 
-                val entry = cache[relPath]
-                val text = readNoteBody(relPath, entry, meta)
-                val words = countWords(text)
-                val chars = text.length
-                val hash = if (text.isNotEmpty()) text.hashCode().toLong() else 0L
+                    val entry = cache[relPath]
+                    val text = readNoteBody(relPath, entry, meta)
+                    val words = countWords(text)
+                    val chars = text.length
+                    val hash = if (text.isNotEmpty()) text.hashCode().toLong() else 0L
 
-                val updatedMeta = meta.copy(
-                    wordCount = words,
-                    charCount = chars,
-                    contentHash = hash,
-                    statsStale = false
-                )
-                putMetadata(updatedMeta)
-                metadataChanged = true
+                    val updatedMeta = meta.copy(
+                        wordCount = words,
+                        charCount = chars,
+                        contentHash = hash,
+                        statsStale = false
+                    )
+                    putMetadata(updatedMeta)
+                    metadataChanged = true
 
-                // Check external change for currently open note
-                if (openId != null && entry?.note?.id == openId) {
-                    val prevContent = entry.note.content
-                    if (prevContent.isNotEmpty() && prevContent != text) {
-                        _externalNoteChange.value = ExternalNoteChange(
-                            note = entry.note.copy(content = text, wordCount = words, charCount = chars, statsStale = false),
-                            diskContent = text,
-                            lastModified = entry.lastModified
+                    // Check external change for currently open note
+                    if (openId != null && entry?.note?.id == openId) {
+                        val prevContent = entry.note.content
+                        if (prevContent.isNotEmpty() && prevContent != text) {
+                            _externalNoteChange.value = ExternalNoteChange(
+                                note = entry.note.copy(content = text, wordCount = words, charCount = chars, statsStale = false),
+                                diskContent = text,
+                                lastModified = entry.lastModified
+                            )
+                        }
+                    }
+
+                    if (entry != null) {
+                        val updatedNote = entry.note.copy(
+                            wordCount = words,
+                            charCount = chars,
+                            statsStale = false,
+                            content = if (entry.note.content.isNotEmpty()) text else entry.note.content
                         )
+                        cache[relPath] = entry.copy(note = updatedNote)
+                    }
+
+                    batchCount++
+                    if (batchCount % 3 == 0) {
+                        recomputeFlows()
+                        kotlinx.coroutines.yield()
+                    } else {
+                        kotlinx.coroutines.yield()
                     }
                 }
 
-                if (entry != null) {
-                    val updatedNote = entry.note.copy(
-                        wordCount = words,
-                        charCount = chars,
-                        statsStale = false,
-                        content = if (entry.note.content.isNotEmpty()) text else entry.note.content
-                    )
-                    cache[relPath] = entry.copy(note = updatedNote)
-                }
-
-                batchCount++
-                if (batchCount % 3 == 0) {
+                if (metadataChanged) {
+                    saveMetadata()
                     recomputeFlows()
-                    kotlinx.coroutines.yield()
-                } else {
-                    kotlinx.coroutines.yield()
                 }
-            }
-
-            if (metadataChanged) {
-                saveMetadata()
-                recomputeFlows()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("VaultRepo", "Stats worker failed", e)
             }
         }
     }
@@ -1236,7 +1289,7 @@ class VaultNoteRepository(
                 } else {
                     meta.path.substringAfterLast("/").removeSuffix(".md")
                 }
-                val isDailyJournal = Regex("""^\d{4}-\d{2}-\d{2}""").containsMatchIn(baseTitle)
+                val isDailyJournal = isDailyBase(baseTitle) && !meta.path.contains("/")
                 val folderName = if (isDailyJournal) {
                     DAILY_JOURNALS_DIR
                 } else if (isTrash) {
@@ -1276,7 +1329,8 @@ class VaultNoteRepository(
                         file = vaultDoc,
                         parentDir = vaultDoc,
                         relPath = meta.path,
-                        lastModified = meta.modifiedAt
+                        lastModified = meta.modifiedAt,
+                        isPlaceholder = true
                     )
                 }
             }
@@ -1455,12 +1509,12 @@ class VaultNoteRepository(
         val targetFolder = if (isDailyJournal) DAILY_JOURNAL_DIR else if (note.folder.isBlank()) GENERAL_DIR else note.folder.trim()
         val targetDir = if (isDailyJournal) getOrCreateDailyJournalDir(vaultDoc) ?: vaultDoc else vaultManager.getOrCreateDirRecursive(vaultDoc, targetFolder) ?: vaultDoc
 
-        val sanitizedTitle = VaultManager.sanitizeFilename(note.title.ifBlank { "Untitled Note" })
+        val sanitizedTitle = safeFileBase(note.title, "Untitled Note")
+        val isExactDaily = isDailyBase(sanitizedTitle)
 
         // Prevent duplicate notes/files for the same daily journal date
-        if (isDailyJournal) {
-            val dateMatch = Regex("""^(\d{4}-\d{2}-\d{2})""").find(sanitizedTitle) ?: Regex("""^(\d{4}-\d{2}-\d{2})""").find(note.title.trim())
-            val datePrefix = dateMatch?.groupValues?.get(1) ?: sanitizedTitle
+        if (isDailyJournal && isExactDaily) {
+            val datePrefix = sanitizedTitle
             val canonicalFileName = "$datePrefix.md"
             val canonicalRelPath = "$DAILY_JOURNAL_DIR/$canonicalFileName"
 
@@ -1531,10 +1585,8 @@ class VaultNoteRepository(
             }
         }
 
-        val finalFileName = if (isDailyJournal) {
-            val dateMatch = Regex("""^(\d{4}-\d{2}-\d{2})""").find(sanitizedTitle) ?: Regex("""^(\d{4}-\d{2}-\d{2})""").find(note.title.trim())
-            val datePrefix = dateMatch?.groupValues?.get(1) ?: sanitizedTitle
-            "$datePrefix.md"
+        val finalFileName = if (isDailyJournal && isExactDaily) {
+            "${sanitizedTitle.trim()}.md"
         } else {
             vaultManager.resolveDuplicateFileName(targetDir, sanitizedTitle, ".md")
         }
@@ -1619,14 +1671,14 @@ class VaultNoteRepository(
         ids
     }
 
-    suspend fun update(note: Note) = withContext(Dispatchers.IO) {
+    suspend fun update(note: Note, writeContent: Boolean = true) = withContext(Dispatchers.IO) {
         val vaultDoc = currentVaultDoc ?: return@withContext
         mutex.withLock {
-            updateInternal(note, vaultDoc)
+            updateInternal(note, vaultDoc, writeContent)
         }
     }
 
-    private suspend fun updateInternal(note: Note, vaultDoc: DocumentFile) {
+    private suspend fun updateInternal(note: Note, vaultDoc: DocumentFile, writeContent: Boolean = true) {
         val oldRelPath = idToPathMap[note.id]
         var entry = oldRelPath?.let { cache[it] }
 
@@ -1676,6 +1728,12 @@ class VaultNoteRepository(
             insertInternal(note, vaultDoc)
             return
         }
+
+        val resolved = materializeEntry(entry) ?: run {
+            _lastSaveError.value = "Note file not found on disk"
+            return
+        }
+        entry = resolved
 
         var currentFile = entry.file
         var currentParent = entry.parentDir
@@ -1760,10 +1818,10 @@ class VaultNoteRepository(
         if (!note.isDeleted && (entry.note.isDeleted || currentRelPath.startsWith(TRASH_PREFIX) || currentRelPath.startsWith(".KOTHAPAD/trash/"))) {
             val meta = getMetadataForPath(currentRelPath) ?: metadataByIdMap.values.firstOrNull { it.trashFileName == currentFile.name }
             val originalRel = meta?.originalRelPath ?: "${note.folder}/${note.title}.md".trimStart('/')
-            val isDaily = isDailyJournal || Regex("^\\d{4}-\\d{2}-\\d{2}").containsMatchIn(note.title)
+            val isDaily = isDailyJournal || isDailyBase(note.title)
             val destFolder = if (isDaily) DAILY_JOURNAL_DIR else if (originalRel.contains("/")) originalRel.substringBeforeLast("/") else (if (note.folder.isNotBlank() && !note.folder.equals(TRASH_DIR, ignoreCase = true)) note.folder else DAILY_JOURNAL_DIR)
             val baseName = if (isDaily) {
-                Regex("^\\d{4}-\\d{2}-\\d{2}").find(note.title)?.value ?: note.title
+                note.title
             } else {
                 originalRel.substringAfterLast("/").removeSuffix(".md").ifBlank { note.title.ifBlank { "Restored Note" } }
             }
@@ -1855,9 +1913,10 @@ class VaultNoteRepository(
         }
 
         // 2. Check title change (Rename)
-        val expectedFileName = "${VaultManager.sanitizeFilename(note.title)}.md"
+        val safeTitle = safeFileBase(note.title, entry.note.title.ifBlank { "Untitled Note" })
+        val expectedFileName = "$safeTitle.md"
         if (currentFile.name != null && !currentFile.name.equals(expectedFileName, ignoreCase = true)) {
-            val uniqueName = vaultManager.resolveDuplicateFileName(currentParent, note.title, ".md")
+            val uniqueName = vaultManager.resolveDuplicateFileName(currentParent, safeTitle, ".md")
             val renamed = vaultManager.rename(currentFile, uniqueName)
             if (renamed) {
                 val parentPath = if (currentRelPath.contains("/")) currentRelPath.substringBeforeLast("/") else ""
@@ -1884,91 +1943,78 @@ class VaultNoteRepository(
             }
         }
 
-        // 3. Write markdown content atomically if changed
-        if (entry.note.content != note.content) {
-            val fileName = currentFile.name ?: "${VaultManager.sanitizeFilename(note.title)}.md"
+        // 3. Write markdown content only when the caller really supplied it
+        var contentWritten = false
+        if (writeContent && entry.note.content != note.content) {
+            val fileName = currentFile.name ?: "$safeTitle.md"
             val writtenFile = vaultManager.writeTextAtomic(
-                parentDir = currentParent,
-                fileName = fileName,
-                text = note.content,
-                mimeType = "text/markdown"
+                parentDir = currentParent, fileName = fileName,
+                text = note.content, mimeType = "text/markdown"
             )
-            if (writtenFile != null) {
-                currentFile = writtenFile
-            } else {
-                _lastSaveError.value = "Failed to write note to disk"
-            }
+            if (writtenFile != null) { currentFile = writtenFile; contentWritten = true }
+            else _lastSaveError.value = "Failed to write note to disk"
         }
 
-        // 4. Update metadata in notes-meta.json
+        // 4. Metadata
         val now = System.currentTimeMillis()
         val existingMeta = getMetadataForPath(currentRelPath)
-        val words = countWords(note.content)
-        val chars = note.content.length
-        val hash = note.content.hashCode().toLong()
+        val renamedOrMoved = entry.relPath != currentRelPath
+        val words = if (contentWritten || existingMeta == null) countWords(note.content) else existingMeta.wordCount
+        val chars = if (contentWritten || existingMeta == null) note.content.length else existingMeta.charCount
+        val hash  = if (contentWritten || existingMeta == null) note.content.hashCode().toLong() else existingMeta.contentHash
+        val realModified = currentFile.lastModified()
         val fileSize = currentFile.length()
 
         val meta = (existingMeta ?: NoteMetadata(
             id = java.util.UUID.randomUUID().toString(),
-            path = currentRelPath,
-            createdAt = note.createdAt,
-            sessionCount = note.sessionCount
+            path = currentRelPath, createdAt = note.createdAt, sessionCount = note.sessionCount
         )).copy(
             path = currentRelPath,
-            isPinned = note.isPinned,
-            isArchived = note.isArchived,
-            isDeleted = note.isDeleted,
-            deletedAt = note.deletedAt,
+            isPinned = note.isPinned, isArchived = note.isArchived,
+            isDeleted = note.isDeleted, deletedAt = note.deletedAt,
             createdAt = if (existingMeta != null && existingMeta.createdAt > 0L) existingMeta.createdAt else note.createdAt,
-            updatedAt = now,
-            modifiedAt = now,
+            // only bump the timestamp when something real changed (also stops spurious "external edit" on next scan)
+            updatedAt = if (contentWritten || renamedOrMoved || existingMeta == null) now else existingMeta.updatedAt,
+            modifiedAt = realModified,
             sessionCount = existingMeta?.sessionCount ?: note.sessionCount,
-            timeSpent = note.sessionDurationSec,
-            sessionDurationSec = note.sessionDurationSec,
-            wordCount = words,
-            charCount = chars,
-            fileSize = fileSize,
-            contentHash = hash,
-            languageCode = note.languageCode,
-            highlightColor = note.highlightColor,
-            fontSizeModifier = note.fontSizeModifier,
-            tags = note.tags,
-            isOrphaned = false,
-            orphanedAt = null,
-            statsStale = false
+            timeSpent = note.sessionDurationSec, sessionDurationSec = note.sessionDurationSec,
+            wordCount = words, charCount = chars,
+            fileSize = fileSize, contentHash = hash,
+            languageCode = note.languageCode, highlightColor = note.highlightColor,
+            fontSizeModifier = note.fontSizeModifier, tags = note.tags,
+            isOrphaned = false, orphanedAt = null,
+            statsStale = if (contentWritten || existingMeta == null) false else existingMeta.statsStale
         )
         putMetadata(meta)
-        noteBodyLruCache.put(currentRelPath, note.content)
-        saveContentToLocalCache(meta.id, note.content)
+        if (contentWritten) {
+            noteBodyLruCache.put(currentRelPath, note.content)
+            saveContentToLocalCache(meta.id, note.content)
+        }
 
         val updatedNote = note.copy(
             id = entry.note.id,
-            title = currentFile.name?.removeSuffix(".md") ?: note.title,
+            title = currentFile.name?.removeSuffix(".md") ?: safeTitle,
             folder = targetFolder,
-            updatedAt = now,
+            content = if (writeContent) note.content else entry.note.content,
+            updatedAt = meta.updatedAt,
             sessionCount = meta.sessionCount,
-            wordCount = words,
-            charCount = chars,
-            statsStale = false
+            wordCount = words, charCount = chars,
+            statsStale = meta.statsStale
         )
-        val newEntry = CachedNoteEntry(
-            note = updatedNote,
-            file = currentFile,
-            parentDir = currentParent,
-            relPath = currentRelPath,
-            lastModified = currentFile.lastModified()
+        cache[currentRelPath] = CachedNoteEntry(
+            note = updatedNote, file = currentFile, parentDir = currentParent,
+            relPath = currentRelPath, lastModified = realModified
         )
-        cache[currentRelPath] = newEntry
 
         saveMetadata()
         recomputeFlows()
     }
 
-    suspend fun updateAll(notes: List<Note>) = withContext(Dispatchers.IO) {
+    suspend fun updateAll(notes: List<Note>, writeContent: Boolean = true) = withContext(Dispatchers.IO) {
         val vaultDoc = currentVaultDoc ?: return@withContext
         mutex.withLock {
             for (n in notes) {
-                updateInternal(n, vaultDoc)
+                updateInternal(n, vaultDoc, writeContent)
             }
         }
     }
@@ -1980,11 +2026,22 @@ class VaultNoteRepository(
     }
 
     private suspend fun deleteInternal(note: Note) {
-        val relPath = idToPathMap[note.id] ?: cache.entries.firstOrNull { it.value.note.id == note.id }?.key
+        val relPath = idToPathMap[note.id]
+            ?: cache.entries.firstOrNull { it.value.note.id == note.id }?.key
         if (relPath != null) {
-            val entry = cache[relPath]
-            if (entry != null) {
-                vaultManager.delete(entry.file)
+            val raw = cache[relPath]
+            if (raw != null) {
+                val real = materializeEntry(raw)
+                if (real != null) {
+                    if (real.file.isDirectory || real.file.uri == currentVaultDoc?.uri) {
+                        _lastSaveError.value = "Refusing to delete a directory"
+                        return
+                    }
+                    if (!vaultManager.delete(real.file) && real.file.exists()) {
+                        _lastSaveError.value = "Failed to delete note"
+                        return          // keep it in the cache so the UI stays truthful
+                    }
+                }
                 cache.remove(relPath)
                 noteBodyLruCache.remove(relPath)
                 removeIdForPath(relPath)
@@ -2083,21 +2140,39 @@ class VaultNoteRepository(
     suspend fun deleteFolderOnDisk(folder: String, deleteContainedNotes: Boolean): Boolean = withContext(Dispatchers.IO) {
         val vaultDoc = currentVaultDoc ?: return@withContext false
         val dir = vaultManager.findDirRecursive(vaultDoc, folder) ?: return@withContext false
-        if (!deleteContainedNotes) {
-            // Move contained notes to General first
-            val generalDir = vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR) ?: vaultDoc
-            val children = vaultManager.listChildrenFast(dir)
-            for (ch in children) {
-                if (ch.isFile && ch.displayName.endsWith(".md", ignoreCase = true)) {
-                    val chDoc = ch.toDocumentFile(context) ?: continue
-                    vaultManager.move(chDoc, dir, generalDir)
+        val treeUri = vaultManager.getVaultTreeUri() ?: return@withContext false
+        scanJob?.cancelAndJoin()                       // avoid racing the background scan
+
+        if (deleteContainedNotes) {
+            // Soft-delete: send contained notes to Trash so they stay recoverable
+            val prefix = "$folder/"
+            val victims = cache.values.map { it.note }.filter { n ->
+                val p = idToPathMap[n.id] ?: return@filter false
+                p.startsWith(prefix, ignoreCase = true) && !n.isDeleted
+            }
+            val now = System.currentTimeMillis()
+            mutex.withLock {
+                for (n in victims) updateInternal(n.copy(isDeleted = true, deletedAt = now), vaultDoc, writeContent = false)
+            }
+        } else {
+            val generalDir = vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR) ?: return@withContext false
+            for (ch in vaultManager.listChildrenFast(dir, treeUri)) {           // ALL children: files and subfolders
+                val chDoc = ch.toDocumentFile(context, treeUri) ?: continue
+                if (vaultManager.move(chDoc, dir, generalDir) == null) {
+                    // name clash: copy .md under a unique name, then remove the original
+                    if (ch.isFile && ch.displayName.endsWith(".md", ignoreCase = true)) {
+                        val unique = vaultManager.resolveDuplicateFileName(generalDir, ch.displayName.removeSuffix(".md"), ".md")
+                        val ok = vaultManager.writeTextAtomic(generalDir, unique, vaultManager.readText(chDoc), "text/markdown") != null
+                        if (ok) vaultManager.delete(chDoc)
+                    }
                 }
             }
         }
-        val deleted = vaultManager.delete(dir)
-        if (deleted) {
-            scanVaultRecursive(vaultDoc)
-        }
+
+        // Only remove the folder if it is really empty now
+        val leftovers = vaultManager.listChildrenFast(dir, treeUri)
+        val deleted = if (leftovers.isEmpty()) vaultManager.delete(dir) else false
+        scanVaultRecursive(vaultDoc)
         deleted
     }
 
