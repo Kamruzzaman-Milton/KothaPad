@@ -43,10 +43,13 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Keyboard
@@ -55,7 +58,9 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Tune
+import com.example.data.model.Note
 import com.example.data.model.Stamp
+import androidx.compose.runtime.mutableIntStateOf
 import com.example.ui.dialogs.EditTemplateDialog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -331,12 +336,16 @@ fun SettingsScreen(
     onReloadVaultFromDisk: () -> Unit = {},
     onRebuildVaultIndex: () -> Unit = {},
     onDeleteOldInternalData: () -> Unit = {},
-    // Templates Callbacks & State
+    // Templates & Trash Callbacks & State
     templates: List<Stamp> = emptyList(),
     onSaveTemplate: (Stamp) -> Unit = {},
     onDeleteTemplate: (Stamp) -> Unit = {},
     onPinTemplate: (Stamp) -> Unit = {},
     onReorderTemplates: (List<Stamp>) -> Unit = {},
+    trashedNotes: List<Note> = emptyList(),
+    onRestoreNote: (Note) -> Unit = {},
+    onPermanentlyDeleteNote: (Note) -> Unit = {},
+    onEmptyTrash: () -> Unit = {},
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -349,9 +358,12 @@ fun SettingsScreen(
     var importJsonText by remember { mutableStateOf("") }
     var importError by remember { mutableStateOf(false) }
 
-    // Templates state
+    // Templates & Trash state
     var editingTemplate by remember { mutableStateOf<Stamp?>(null) }
     var isCreatingTemplate by remember { mutableStateOf(false) }
+    var selectedTemplatesTrashTab by remember { mutableIntStateOf(0) }
+    var showEmptyTrashConfirmDialog by remember { mutableStateOf(false) }
+    var noteToDeletePermanently by remember { mutableStateOf<Note?>(null) }
 
     // Backup & Restore states
     var isExporting by remember { mutableStateOf(false) }
@@ -536,11 +548,11 @@ fun SettingsScreen(
                 }
             ),
 
-            // Templates & Quick Text Section
+            // Templates & Trash Section
             SettingHeadlineSection(
                 id = "templates_section",
-                title = "Templates & Quick Text",
-                subtitle = "Create, edit, pin, and organize reusable templates",
+                title = "Templates & Trash",
+                subtitle = "Manage reusable templates, view trashed journal notes & restore them",
                 icon = Icons.Outlined.PostAdd,
                 items = listOf(
                     SettingItem.CustomContent(
@@ -550,172 +562,315 @@ fun SettingsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
+                                // Sub-Tabs: Templates vs Trash
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(
-                                        text = "Saved Templates (${templates.size})",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Button(
-                                        onClick = {
-                                            editingTemplate = Stamp(
-                                                id = 0,
-                                                label = "",
-                                                templateText = "",
-                                                isPinned = false
+                                    FilterChip(
+                                        selected = selectedTemplatesTrashTab == 0,
+                                        onClick = { selectedTemplatesTrashTab = 0 },
+                                        label = { Text("Templates (${templates.size})") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Outlined.PostAdd,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
                                             )
-                                            isCreatingTemplate = true
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Add Template", style = MaterialTheme.typography.labelMedium)
-                                    }
+                                        }
+                                    )
+                                    FilterChip(
+                                        selected = selectedTemplatesTrashTab == 1,
+                                        onClick = { selectedTemplatesTrashTab = 1 },
+                                        label = { Text("Trash (${trashedNotes.size})") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Delete,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    )
                                 }
 
-                                if (templates.isEmpty()) {
-                                    Text(
-                                        text = "No templates saved yet. Tap 'Add Template' to create reusable templates for your notes and journal entries.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(vertical = 8.dp)
-                                    )
-                                } else {
-                                    templates.forEachIndexed { index, tmpl ->
-                                        Surface(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = MaterialTheme.colorScheme.surface,
-                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                                if (selectedTemplatesTrashTab == 0) {
+                                    // ==========================================
+                                    // 1. Templates Tab
+                                    // ==========================================
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Saved Templates (${templates.size})",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Button(
+                                            onClick = {
+                                                editingTemplate = Stamp(
+                                                    id = 0,
+                                                    label = "",
+                                                    templateText = "",
+                                                    isPinned = false
+                                                )
+                                                isCreatingTemplate = true
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                         ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Add Template", style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
+
+                                    if (templates.isEmpty()) {
+                                        Text(
+                                            text = "No templates saved yet. Tap 'Add Template' to create reusable templates for your notes and journal entries.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    } else {
+                                        templates.forEachIndexed { index, tmpl ->
+                                            Surface(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.surface,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
                                             ) {
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Text(
+                                                                text = tmpl.label.ifBlank { "Untitled Template" },
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                maxLines = 1,
+                                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                            )
+                                                            if (tmpl.isPinned) {
+                                                                Spacer(modifier = Modifier.width(6.dp))
+                                                                Icon(
+                                                                    imageVector = Icons.Default.PushPin,
+                                                                    contentDescription = "Pinned",
+                                                                    tint = MaterialTheme.colorScheme.primary,
+                                                                    modifier = Modifier.size(14.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                        if (tmpl.templateText.isNotBlank()) {
+                                                            Text(
+                                                                text = tmpl.templateText.trim(),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                maxLines = 2,
+                                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                            )
+                                                        }
+                                                    }
+
+                                                    // Reorder Up
+                                                    IconButton(
+                                                        onClick = {
+                                                            if (index > 0) {
+                                                                val mutable = templates.toMutableList()
+                                                                val item = mutable.removeAt(index)
+                                                                mutable.add(index - 1, item)
+                                                                onReorderTemplates(mutable)
+                                                            }
+                                                        },
+                                                        enabled = index > 0,
+                                                        modifier = Modifier.size(32.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.ArrowUpward,
+                                                            contentDescription = "Move Up",
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+
+                                                    // Reorder Down
+                                                    IconButton(
+                                                        onClick = {
+                                                            if (index < templates.size - 1) {
+                                                                val mutable = templates.toMutableList()
+                                                                val item = mutable.removeAt(index)
+                                                                mutable.add(index + 1, item)
+                                                                onReorderTemplates(mutable)
+                                                            }
+                                                        },
+                                                        enabled = index < templates.size - 1,
+                                                        modifier = Modifier.size(32.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.ArrowDownward,
+                                                            contentDescription = "Move Down",
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+
+                                                    // Pin toggle
+                                                    IconButton(
+                                                        onClick = { onPinTemplate(tmpl) },
+                                                        modifier = Modifier.size(32.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (tmpl.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                                                            contentDescription = if (tmpl.isPinned) "Unpin" else "Pin",
+                                                            tint = if (tmpl.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+
+                                                    // Edit
+                                                    IconButton(
+                                                        onClick = {
+                                                            editingTemplate = tmpl
+                                                            isCreatingTemplate = false
+                                                        },
+                                                        modifier = Modifier.size(32.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Edit,
+                                                            contentDescription = "Edit Template",
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+
+                                                    // Delete
+                                                    IconButton(
+                                                        onClick = { onDeleteTemplate(tmpl) },
+                                                        modifier = Modifier.size(32.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Delete,
+                                                            contentDescription = "Delete Template",
+                                                            tint = MaterialTheme.colorScheme.error,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // ==========================================
+                                    // 2. Trash Tab
+                                    // ==========================================
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Deleted Journal Notes (${trashedNotes.size})",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (trashedNotes.isNotEmpty()) {
+                                            TextButton(
+                                                onClick = { showEmptyTrashConfirmDialog = true },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Empty Trash", style = MaterialTheme.typography.labelMedium)
+                                            }
+                                        }
+                                    }
+
+                                    if (trashedNotes.isEmpty()) {
+                                        Text(
+                                            text = "Trash is empty. Whenever you delete a note associated with a specific date, it is automatically moved to the Trash folder and will appear here for viewing or restoring.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    } else {
+                                        trashedNotes.forEach { trNote ->
+                                            Surface(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.surface,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Column(modifier = Modifier.weight(1f)) {
                                                         Text(
-                                                            text = tmpl.label.ifBlank { "Untitled Template" },
+                                                            text = trNote.title.ifBlank { "Untitled Note" },
                                                             style = MaterialTheme.typography.bodyMedium,
                                                             fontWeight = FontWeight.SemiBold,
                                                             maxLines = 1,
                                                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                         )
-                                                        if (tmpl.isPinned) {
-                                                            Spacer(modifier = Modifier.width(6.dp))
-                                                            Icon(
-                                                                imageVector = Icons.Default.PushPin,
-                                                                contentDescription = "Pinned",
-                                                                tint = MaterialTheme.colorScheme.primary,
-                                                                modifier = Modifier.size(14.dp)
+                                                        if (trNote.deletedAt != null && trNote.deletedAt > 0L) {
+                                                            Text(
+                                                                text = "Deleted: ${com.example.util.NoteTimeFormatter.formatTimestamp(trNote.deletedAt)}",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                                                            )
+                                                        }
+                                                        if (trNote.content.isNotBlank()) {
+                                                            Text(
+                                                                text = trNote.content.trim(),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                maxLines = 2,
+                                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                             )
                                                         }
                                                     }
-                                                    if (tmpl.templateText.isNotBlank()) {
-                                                        Text(
-                                                            text = tmpl.templateText.trim(),
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            maxLines = 2,
-                                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+
+                                                    // Restore Button
+                                                    IconButton(
+                                                        onClick = { onRestoreNote(trNote) },
+                                                        modifier = Modifier.size(36.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Restore,
+                                                            contentDescription = "Restore Note",
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(20.dp)
                                                         )
                                                     }
-                                                }
 
-                                                // Reorder Up
-                                                IconButton(
-                                                    onClick = {
-                                                        if (index > 0) {
-                                                            val mutable = templates.toMutableList()
-                                                            val item = mutable.removeAt(index)
-                                                            mutable.add(index - 1, item)
-                                                            onReorderTemplates(mutable)
-                                                        }
-                                                    },
-                                                    enabled = index > 0,
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.ArrowUpward,
-                                                        contentDescription = "Move Up",
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-
-                                                // Reorder Down
-                                                IconButton(
-                                                    onClick = {
-                                                        if (index < templates.size - 1) {
-                                                            val mutable = templates.toMutableList()
-                                                            val item = mutable.removeAt(index)
-                                                            mutable.add(index + 1, item)
-                                                            onReorderTemplates(mutable)
-                                                        }
-                                                    },
-                                                    enabled = index < templates.size - 1,
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.ArrowDownward,
-                                                        contentDescription = "Move Down",
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-
-                                                // Pin toggle
-                                                IconButton(
-                                                    onClick = { onPinTemplate(tmpl) },
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = if (tmpl.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
-                                                        contentDescription = if (tmpl.isPinned) "Unpin" else "Pin",
-                                                        tint = if (tmpl.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-
-                                                // Edit
-                                                IconButton(
-                                                    onClick = {
-                                                        editingTemplate = tmpl
-                                                        isCreatingTemplate = false
-                                                    },
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Edit,
-                                                        contentDescription = "Edit Template",
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-
-                                                // Delete
-                                                IconButton(
-                                                    onClick = { onDeleteTemplate(tmpl) },
-                                                    modifier = Modifier.size(32.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Delete,
-                                                        contentDescription = "Delete Template",
-                                                        tint = MaterialTheme.colorScheme.error,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
+                                                    // Delete Permanently Button
+                                                    IconButton(
+                                                        onClick = { noteToDeletePermanently = trNote },
+                                                        modifier = Modifier.size(36.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.DeleteForever,
+                                                            contentDescription = "Delete Permanently",
+                                                            tint = MaterialTheme.colorScheme.error,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -1580,15 +1735,21 @@ fun SettingsScreen(
             // About Section
             SettingHeadlineSection(
                 id = "about",
-                title = "About KothaPad",
-                subtitle = "Version, architecture & privacy policy",
+                title = "About Notepad",
+                subtitle = "Features tour, productivity tips, version & privacy",
                 icon = Icons.Outlined.Info,
                 items = listOf(
                     SettingItem.InfoText(
                         id = "about_info",
                         title = "KothaPad v1.0",
-                        description = "100% Kotlin & Jetpack Compose native speech notepad for power users. Local-first architecture with Room, DataStore, and Android SpeechRecognizer.",
+                        description = "100% Kotlin & Jetpack Compose native speech notepad for power users. Local-first architecture with strict Obsidian-style Vault, Room, DataStore, and Android SpeechRecognizer.",
                         badge = "🔒 Privacy: 0 accounts • 0 ads • 0 analytics • Audio processed only on device/system recognizer."
+                    ),
+                    SettingItem.CustomContent(
+                        id = "about_guides",
+                        content = {
+                            AboutNotepadGuides()
+                        }
                     )
                 )
             )
@@ -1601,7 +1762,8 @@ fun SettingsScreen(
 
     val isAnyDialogOpen = showSwitchVaultDialog || showOpenOrNewVaultDialog ||
             showRecentVaultsDialog || showExportDialog || showImportDialog ||
-            showCreateVaultNameDialog || showDeleteOldDataDialog || showFinishSetupDialog || (validationError != null)
+            showCreateVaultNameDialog || showDeleteOldDataDialog || showFinishSetupDialog ||
+            showEmptyTrashConfirmDialog || (noteToDeletePermanently != null) || (validationError != null)
 
     Scaffold(
         modifier = modifier
@@ -2148,6 +2310,60 @@ fun SettingsScreen(
             onDismiss = { editingTemplate = null }
         )
     }
+
+    // Confirm Empty Trash Dialog
+    if (showEmptyTrashConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showEmptyTrashConfirmDialog = false },
+            title = { Text("Empty Trash?") },
+            text = {
+                Text("All notes currently in Trash will be permanently deleted. This action cannot be undone.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onEmptyTrash()
+                        showEmptyTrashConfirmDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Empty Trash")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEmptyTrashConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Confirm Permanent Delete Single Note Dialog
+    noteToDeletePermanently?.let { noteToDelete ->
+        AlertDialog(
+            onDismissRequest = { noteToDeletePermanently = null },
+            title = { Text("Permanently Delete Note?") },
+            text = {
+                Text("Are you sure you want to permanently delete \"${noteToDelete.title.ifBlank { "Untitled Note" }}\"? This cannot be recovered.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onPermanentlyDeleteNote(noteToDelete)
+                        noteToDeletePermanently = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete Forever")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { noteToDeletePermanently = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 // ==========================================
@@ -2466,6 +2682,131 @@ private fun InfoTextControl(item: SettingItem.InfoText) {
             ) {
                 Text(item.actionButtonText, fontSize = 12.sp)
             }
+        }
+    }
+}
+
+@Composable
+private fun AboutNotepadGuides() {
+    var selectedGuideTab by remember { mutableIntStateOf(0) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = selectedGuideTab == 0,
+                onClick = { selectedGuideTab = 0 },
+                label = { Text("⚡ Features Tour", fontSize = 12.sp) }
+            )
+            FilterChip(
+                selected = selectedGuideTab == 1,
+                onClick = { selectedGuideTab = 1 },
+                label = { Text("💡 Tips & Workflows", fontSize = 12.sp) }
+            )
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (selectedGuideTab == 0) {
+                    GuideItem(
+                        icon = "🎙️",
+                        title = "Advanced Voice Dictation",
+                        desc = "Proprietary non-stop Speech Supervisor loop prevents 3-second timeouts. Supports Bluetooth/wired headsets and offline-preferred on-device transcription."
+                    )
+                    GuideItem(
+                        icon = "🗣️",
+                        title = "Bilingual Spoken Commands",
+                        desc = "Typographic punctuation in Bengali (\"দাঁড়ি\", \"কমা\", \"নতুন লাইন\") and English (\"period\", \"comma\", \"new paragraph\"), plus spoken undo/delete."
+                    )
+                    GuideItem(
+                        icon = "✍️",
+                        title = "Obsidian-Style Markdown",
+                        desc = "Live styling in editor mode, dimmed syntax markers, auto-continuing lists (- [ ], 1., -), and rich reading mode with tap-to-complete checkboxes."
+                    )
+                    GuideItem(
+                        icon = "🎛️",
+                        title = "Quick Format Bar & Side Rail",
+                        desc = "Customizable drag-and-drop format bar and ergonomic thumb side rail for fluid one-handed control during active speech."
+                    )
+                    GuideItem(
+                        icon = "⌨️",
+                        title = "In-App Dual-Language Keyboard",
+                        desc = "Dedicated Bengali & English soft keyboard allowing concurrent typing and cursor navigation without pausing voice dictation."
+                    )
+                    GuideItem(
+                        icon = "📁",
+                        title = "Obsidian-Compatible Vault",
+                        desc = "Strict 3-folder structure (Daily Journal, Templates, Trash). Copy your vault folder to any device for 100% identical notes, templates, and settings."
+                    )
+                } else {
+                    GuideItem(
+                        icon = "🎯",
+                        title = "High-Accuracy Dictation",
+                        desc = "Speak naturally near your mic. Speak punctuation commands directly while dictating to produce clean, ready-to-publish paragraphs hands-free."
+                    )
+                    GuideItem(
+                        icon = "✂️",
+                        title = "Voice Editing",
+                        desc = "Made a mispronunciation? Simply say \"delete last word\" (or \"শব্দ কাটো\") to erase it instantly without touching the screen."
+                    )
+                    GuideItem(
+                        icon = "📅",
+                        title = "Daily Journaling",
+                        desc = "Notes are organized by date in 'Daily Journal'. Swipe left or right or use the date picker to quickly navigate between journal days."
+                    )
+                    GuideItem(
+                        icon = "🏷️",
+                        title = "Templates & Fast Stamps",
+                        desc = "Tap the Stamp button above the keyboard to insert timestamps [{date} {time}] or fill out structured daily log prompts."
+                    )
+                    GuideItem(
+                        icon = "🚀",
+                        title = "Offline Privacy",
+                        desc = "Turn on 'Offline Preferred' in Settings for zero-latency dictation with zero internet transmission. All data stays strictly in your local vault."
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GuideItem(icon: String, title: String, desc: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(text = icon, fontSize = 18.sp)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = desc,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 18.sp
+            )
         }
     }
 }

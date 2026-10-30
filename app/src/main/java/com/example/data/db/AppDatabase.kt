@@ -174,46 +174,12 @@ Questions & Follow-ups:
         suspend fun ensureDefaultNotes(database: AppDatabase) {
             val noteDao = database.noteDao()
             val allNotes = noteDao.getAllNotesList()
-            val currentTime = System.currentTimeMillis()
-
-            // 1. Rename and upgrade existing "⚡ KothaPad Quick Tips" or create "⚡KothaPad Tips"
-            val oldQuickTips = allNotes.find { it.title == "⚡ KothaPad Quick Tips" }
-            if (oldQuickTips != null) {
-                noteDao.update(
-                    oldQuickTips.copy(
-                        title = "⚡KothaPad Tips",
-                        content = KOTHAPAD_TIPS_CONTENT,
-                        folder = "General",
-                        updatedAt = currentTime
-                    )
-                )
-            } else if (allNotes.none { it.title == "⚡KothaPad Tips" }) {
-                val tipsNote = Note(
-                    title = "⚡KothaPad Tips",
-                    content = KOTHAPAD_TIPS_CONTENT,
-                    isPinned = true,
-                    languageCode = "bn-BD",
-                    folder = "General",
-                    tags = "tips,guide,shortcuts,scenarios",
-                    createdAt = currentTime,
-                    updatedAt = currentTime
-                )
-                noteDao.insert(tipsNote)
-            }
-
-            // 2. Ensure "⚡KothaPad features" exists
-            if (allNotes.none { it.title == "⚡KothaPad features" }) {
-                val featuresNote = Note(
-                    title = "⚡KothaPad features",
-                    content = KOTHAPAD_FEATURES_CONTENT,
-                    isPinned = false,
-                    languageCode = "bn-BD",
-                    folder = "General",
-                    tags = "features,guide,docs,reference",
-                    createdAt = currentTime + 1,
-                    updatedAt = currentTime + 1
-                )
-                noteDao.insert(featuresNote)
+            for (note in allNotes) {
+                val t = note.title
+                if (t.contains("KothaPad Tips") || t.contains("KothaPad features") ||
+                    t.contains("Notepad Tips") || t.contains("Notepad Features")) {
+                    noteDao.delete(note)
+                }
             }
         }
 

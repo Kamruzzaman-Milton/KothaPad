@@ -12,4 +12,10 @@ object NoteTimeFormatter {
             else -> "${secs}s"
         }
     }
+
+    fun formatTimestamp(epochMillis: Long): String {
+        if (epochMillis <= 0L) return ""
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        return sdf.format(java.util.Date(epochMillis))
+    }
 }

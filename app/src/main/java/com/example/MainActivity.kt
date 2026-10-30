@@ -274,6 +274,7 @@ class MainActivity : ComponentActivity() {
                                 val hapticsLevel by viewModel.hapticsLevel.collectAsState()
                                 val floatingLayoutSettings by viewModel.floatingLayoutSettings.collectAsState()
                                 val markdownSettings by viewModel.markdownSettings.collectAsState()
+                                val trashedNotes by viewModel.trashedNotes.collectAsState()
 
                                 SettingsScreen(
                                     dictationMode = dictationMode,
@@ -436,6 +437,10 @@ class MainActivity : ComponentActivity() {
                                     onDeleteTemplate = { viewModel.deleteTemplate(it) },
                                     onPinTemplate = { viewModel.togglePinTemplate(it) },
                                     onReorderTemplates = { viewModel.reorderTemplates(it) },
+                                    trashedNotes = trashedNotes,
+                                    onRestoreNote = { viewModel.restoreNote(it) },
+                                    onPermanentlyDeleteNote = { viewModel.permanentlyDeleteNote(it) },
+                                    onEmptyTrash = { viewModel.emptyTrash() },
                                     onExportBackup = { uri, cb -> viewModel.exportBackup(uri, cb) },
                                     onValidateBackup = { uri, cb -> viewModel.validateBackup(uri, cb) },
                                     onRestoreBackup = { backup, cb -> viewModel.restoreBackup(backup, cb) },

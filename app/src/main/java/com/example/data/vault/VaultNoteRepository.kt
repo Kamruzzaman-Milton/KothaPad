@@ -196,7 +196,8 @@ class VaultNoteRepository(
         const val GENERAL_DIR = "General"
         const val DAILY_JOURNAL_DIR = "Daily Journal"
         const val DAILY_JOURNALS_DIR = "Daily Journal"
-        const val TRASH_PREFIX = ".KOTHAPAD/trash/"
+        const val TRASH_DIR = "Trash"
+        const val TRASH_PREFIX = "Trash/"
         private const val META_SCHEMA_VERSION = 2
         private const val WORKSPACE_SCHEMA_VERSION = 1
 
@@ -406,10 +407,10 @@ class VaultNoteRepository(
         // Single source of truth: initialize vault config and cleanup duplicates
         vaultConfigStore.initVault(vaultDoc)
 
-        // Ensure critical note content folders exist
-        vaultManager.getOrCreateDirRecursive(vaultDoc, TEMPLATES_DIR)
-        vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR)
+        // Ensure the 3 default vault folders exist: Daily Journal, Templates, and Trash
         getOrCreateDailyJournalDir(vaultDoc)
+        vaultManager.getOrCreateDirRecursive(vaultDoc, TEMPLATES_DIR)
+        vaultManager.getOrCreateDirRecursive(vaultDoc, TRASH_DIR)
 
         // Load metadata & workspace via VaultConfigStore before scanning
         // This IMMEDIATELY populates activeNotes and allNotes flows in memory
@@ -538,22 +539,16 @@ class VaultNoteRepository(
                     continue
                 }
 
-                // Check 2: ⚡ KothaPad features or tips duplicate in root
-                if (fileName.contains("KothaPad features", ignoreCase = true) || fileName.contains("KothaPad Tips", ignoreCase = true)) {
-                    val generalDir = vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR)
-                    if (generalDir != null) {
-                        val generalChildren = vaultManager.listChildrenFast(generalDir, treeUri)
-                        val duplicateInGeneral = generalChildren.firstOrNull { it.isFile && it.displayName.contains("features", ignoreCase = true) }
-                        if (duplicateInGeneral != null) {
-                            vaultManager.delete(rootFileDoc)
-                        } else {
-                            vaultManager.move(rootFileDoc, vaultDoc, generalDir)
-                        }
-                        removeMetadataForPath(fileName)
-                        cache.remove(fileName)
-                        removeIdForPath(fileName)
-                        metadataModified = true
-                    }
+                // Check 2: Purge any legacy tips or features notes from root (now displayed in Settings -> About Notepad)
+                if (fileName.contains("KothaPad features", ignoreCase = true) ||
+                    fileName.contains("KothaPad Tips", ignoreCase = true) ||
+                    fileName.contains("Notepad Features", ignoreCase = true) ||
+                    fileName.contains("Notepad Tips", ignoreCase = true)) {
+                    vaultManager.delete(rootFileDoc)
+                    removeMetadataForPath(fileName)
+                    cache.remove(fileName)
+                    removeIdForPath(fileName)
+                    metadataModified = true
                     continue
                 }
 
@@ -579,31 +574,73 @@ class VaultNoteRepository(
                 }
             }
 
-            // 2. Also check General folder for any misplaced Daily Journal files
-            val generalDir = vaultManager.getOrCreateDirRecursive(vaultDoc, GENERAL_DIR)
-            if (generalDir != null && dailyDir != null) {
+            // 2. Also check General folder for any misplaced Daily Journal files or legacy tips
+            val generalDir = vaultManager.findDirRecursive(vaultDoc, GENERAL_DIR)
+            if (generalDir != null) {
                 val generalChildren = vaultManager.listChildrenFast(generalDir, treeUri)
-                val generalDailyFiles = generalChildren.filter { it.isFile && dailyJournalRegex.containsMatchIn(it.displayName) }
-                val dailyChildren = vaultManager.listChildrenFast(dailyDir, treeUri)
-                for (gFile in generalDailyFiles) {
+                for (gFile in generalChildren) {
+                    val gName = gFile.displayName
+                    val gRelPath = "$GENERAL_DIR/$gName"
                     val gDoc = gFile.toDocumentFile(context, treeUri) ?: continue
-                    val duplicateInDaily = dailyChildren.firstOrNull { it.isFile && it.displayName.equals(gFile.displayName, ignoreCase = true) }
-                    val gRelPath = "$GENERAL_DIR/${gFile.displayName}"
-                    if (duplicateInDaily != null) {
-                        val dailyDoc = duplicateInDaily.toDocumentFile(context, treeUri)
-                        if (dailyDoc != null && dailyDoc.length() == 0L && gDoc.length() > 0L) {
-                            vaultManager.delete(dailyDoc)
-                            vaultManager.move(gDoc, generalDir, dailyDir)
+                    if (gName.contains("KothaPad features", ignoreCase = true) ||
+                        gName.contains("KothaPad Tips", ignoreCase = true) ||
+                        gName.contains("Notepad Features", ignoreCase = true) ||
+                        gName.contains("Notepad Tips", ignoreCase = true)) {
+                        vaultManager.delete(gDoc)
+                        removeMetadataForPath(gRelPath)
+                        cache.remove(gRelPath)
+                        removeIdForPath(gRelPath)
+                        metadataModified = true
+                    } else if (dailyJournalRegex.containsMatchIn(gName) && dailyDir != null) {
+                        val dailyChildren = vaultManager.listChildrenFast(dailyDir, treeUri)
+                        val duplicateInDaily = dailyChildren.firstOrNull { it.isFile && it.displayName.equals(gName, ignoreCase = true) }
+                        if (duplicateInDaily != null) {
+                            val dailyDoc = duplicateInDaily.toDocumentFile(context, treeUri)
+                            if (dailyDoc != null && dailyDoc.length() == 0L && gDoc.length() > 0L) {
+                                vaultManager.delete(dailyDoc)
+                                vaultManager.move(gDoc, generalDir, dailyDir)
+                            } else {
+                                vaultManager.delete(gDoc)
+                            }
                         } else {
-                            vaultManager.delete(gDoc)
+                            vaultManager.move(gDoc, generalDir, dailyDir)
                         }
-                    } else {
-                        vaultManager.move(gDoc, generalDir, dailyDir)
+                        removeMetadataForPath(gRelPath)
+                        cache.remove(gRelPath)
+                        removeIdForPath(gRelPath)
+                        metadataModified = true
                     }
-                    removeMetadataForPath(gRelPath)
-                    cache.remove(gRelPath)
-                    removeIdForPath(gRelPath)
-                    metadataModified = true
+                }
+                // If General folder is now empty, delete it to keep vault clean with only 3 default folders
+                val remainingGeneral = vaultManager.listChildrenFast(generalDir, treeUri)
+                if (remainingGeneral.isEmpty()) {
+                    vaultManager.delete(generalDir)
+                }
+            }
+
+            // 2b. Migrate any legacy files from .KOTHAPAD/trash to top-level Trash/ folder
+            val legacyTrashDir = vaultConfigStore.getTrashDir(vaultDoc)
+            if (legacyTrashDir != null && legacyTrashDir.exists()) {
+                val topTrashDir = vaultManager.getOrCreateDirRecursive(vaultDoc, TRASH_DIR)
+                if (topTrashDir != null) {
+                    val legacyTrashFiles = vaultManager.listChildrenFast(legacyTrashDir, treeUri)
+                    for (ltFile in legacyTrashFiles) {
+                        val ltDoc = ltFile.toDocumentFile(context, treeUri) ?: continue
+                        val oldLegacyRel = ".KOTHAPAD/trash/${ltFile.displayName}"
+                        val newTrashRel = "$TRASH_PREFIX${ltFile.displayName}"
+                        vaultManager.move(ltDoc, legacyTrashDir, topTrashDir)
+                        val oldMeta = getMetadataForPath(oldLegacyRel)
+                        if (oldMeta != null) {
+                            removeMetadataForPath(oldLegacyRel)
+                            putMetadata(oldMeta.copy(path = newTrashRel))
+                            updateIdPath(oldLegacyRel, newTrashRel)
+                        }
+                        metadataModified = true
+                    }
+                    val checkEmpty = vaultManager.listChildrenFast(legacyTrashDir, treeUri)
+                    if (checkEmpty.isEmpty()) {
+                        vaultManager.delete(legacyTrashDir)
+                    }
                 }
             }
 
@@ -709,7 +746,7 @@ class VaultNoteRepository(
                 }
 
                 if (child.isDirectory) {
-                    if (currentRelPath.isEmpty() && name.equals(TEMPLATES_DIR, ignoreCase = true)) {
+                    if (currentRelPath.isEmpty() && (name.equals(TEMPLATES_DIR, ignoreCase = true) || name.equals(TRASH_DIR, ignoreCase = true))) {
                         continue
                     }
                     val nextRel = if (currentRelPath.isEmpty()) name else "$currentRelPath/$name"
@@ -847,7 +884,7 @@ class VaultNoteRepository(
         traverse(vaultDoc, rootDocId, "")
 
         // One-time migration: Move any note marked as deleted in metadata that is still in normal folder
-        val trashDir = vaultConfigStore.getOrCreateTrashDir(vaultDoc)
+        val trashDir = vaultManager.getOrCreateDirRecursive(vaultDoc, TRASH_DIR)
         if (trashDir != null) {
             val trashedInNormalFolder = cache.entries.filter { entry ->
                 val meta = getMetadataForPath(entry.key)
@@ -891,7 +928,7 @@ class VaultNoteRepository(
                 }
             }
 
-            // Reconcile in-app Trash view with physical .KOTHAPAD/trash/ folder
+            // Reconcile in-app Trash view with physical Trash/ folder
             val trashFiles = vaultManager.listChildrenFast(trashDir, treeUri).filter { it.isFile && it.displayName.endsWith(".md", ignoreCase = true) }
             val trashRelPathsOnDisk = mutableSetOf<String>()
             for (tFile in trashFiles) {
@@ -902,9 +939,10 @@ class VaultNoteRepository(
 
                 val meta = getMetadataForPath(trashRel) ?: metadataByIdMap.values.firstOrNull { it.trashFileName == tName }
                 val origRel = meta?.originalRelPath ?: tName
-                val origFolder = if (origRel.contains("/")) origRel.substringBeforeLast("/") else GENERAL_DIR
                 val baseTitle = meta?.originalRelPath?.substringAfterLast("/")?.removeSuffix(".md")
                     ?: tName.removeSuffix(".md").replace(Regex("_\\d{10,}$"), "")
+                val isDaily = Regex("^\\d{4}-\\d{2}-\\d{2}").containsMatchIn(baseTitle)
+                val origFolder = if (isDaily) DAILY_JOURNAL_DIR else if (origRel.contains("/")) origRel.substringBeforeLast("/") else DAILY_JOURNAL_DIR
 
                 val trashIsUnchanged = (meta != null && Math.abs(meta.modifiedAt - tFile.lastModified) < 2000L && meta.fileSize == tFile.size)
                 val effectiveMeta = (meta ?: NoteMetadata(
@@ -1019,23 +1057,6 @@ class VaultNoteRepository(
             } catch (_: Exception) {}
         }
 
-        // Only seed tips notes if vault is completely empty (0 user notes)
-        if (cache.isEmpty() && discoveredEntries.isEmpty()) {
-            val tipsNote = Note(
-                title = "⚡KothaPad Tips",
-                content = com.example.data.db.AppDatabase.KOTHAPAD_TIPS_CONTENT,
-                folder = GENERAL_DIR,
-                isPinned = true,
-                tags = "tips,guide,shortcuts,scenarios",
-                createdAt = System.currentTimeMillis(),
-                updatedAt = System.currentTimeMillis()
-            )
-            val createdId = insertInternal(tipsNote, vaultDoc)
-            val createdNote = getNoteOnce(createdId)
-            if (createdNote != null) {
-                cache[getRelPathForNote(createdNote)]?.let { discoveredEntries.add(it) }
-            }
-        }
 
         // NO WRITE ON PURE OPEN: only save metadata if something actually changed!
         if (metadataChanged) {
@@ -1663,7 +1684,7 @@ class VaultNoteRepository(
 
         // Handle Physical Trashing
         if (note.isDeleted && (!entry.note.isDeleted || !currentRelPath.startsWith(TRASH_PREFIX))) {
-            val trashDir = vaultConfigStore.getOrCreateTrashDir(vaultDoc)
+            val trashDir = vaultManager.getOrCreateDirRecursive(vaultDoc, TRASH_DIR)
             if (trashDir != null) {
                 val currentFileName = currentFile.name ?: "${VaultManager.sanitizeFilename(note.title)}.md"
                 val trashChildren = vaultManager.listChildrenFast(trashDir)
@@ -1736,11 +1757,16 @@ class VaultNoteRepository(
         }
 
         // Handle Physical Restoring from Trash
-        if (!note.isDeleted && (entry.note.isDeleted || currentRelPath.startsWith(TRASH_PREFIX))) {
+        if (!note.isDeleted && (entry.note.isDeleted || currentRelPath.startsWith(TRASH_PREFIX) || currentRelPath.startsWith(".KOTHAPAD/trash/"))) {
             val meta = getMetadataForPath(currentRelPath) ?: metadataByIdMap.values.firstOrNull { it.trashFileName == currentFile.name }
             val originalRel = meta?.originalRelPath ?: "${note.folder}/${note.title}.md".trimStart('/')
-            val destFolder = if (originalRel.contains("/")) originalRel.substringBeforeLast("/") else (if (note.folder.isNotBlank()) note.folder else GENERAL_DIR)
-            val baseName = originalRel.substringAfterLast("/").removeSuffix(".md").ifBlank { note.title.ifBlank { "Restored Note" } }
+            val isDaily = isDailyJournal || Regex("^\\d{4}-\\d{2}-\\d{2}").containsMatchIn(note.title)
+            val destFolder = if (isDaily) DAILY_JOURNAL_DIR else if (originalRel.contains("/")) originalRel.substringBeforeLast("/") else (if (note.folder.isNotBlank() && !note.folder.equals(TRASH_DIR, ignoreCase = true)) note.folder else DAILY_JOURNAL_DIR)
+            val baseName = if (isDaily) {
+                Regex("^\\d{4}-\\d{2}-\\d{2}").find(note.title)?.value ?: note.title
+            } else {
+                originalRel.substringAfterLast("/").removeSuffix(".md").ifBlank { note.title.ifBlank { "Restored Note" } }
+            }
 
             val targetDir = vaultManager.getOrCreateDirRecursive(vaultDoc, destFolder) ?: vaultDoc
             val uniqueName = vaultManager.resolveDuplicateFileName(targetDir, baseName, ".md")
@@ -2013,7 +2039,7 @@ class VaultNoteRepository(
             }
             val vaultDoc = currentVaultDoc
             if (vaultDoc != null) {
-                val trashDir = vaultConfigStore.getTrashDir(vaultDoc)
+                val trashDir = vaultManager.findDirRecursive(vaultDoc, TRASH_DIR) ?: vaultConfigStore.getTrashDir(vaultDoc)
                 if (trashDir != null && trashDir.exists()) {
                     for (f in vaultManager.listChildrenFast(trashDir)) {
                         f.toDocumentFile(context)?.let { vaultManager.delete(it) }
