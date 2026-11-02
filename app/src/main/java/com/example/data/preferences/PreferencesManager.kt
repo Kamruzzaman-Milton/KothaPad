@@ -50,6 +50,8 @@ class PreferencesManager(private val context: Context) {
         val keyboardType: String = "",
         val showWordCount: Boolean = false,
         val keyboardLayoutJson: String? = null,
+        val keyboardLayout2Json: String? = null,
+        val activeKeyboardIndex: Int = 0,
         val keyboardKeyHeightDp: Int = 0,
         val keyboardFontSizeSp: Int = 0,
         val keyboardHaptic: Boolean = false,
@@ -201,6 +203,8 @@ class PreferencesManager(private val context: Context) {
         val KEY_KEYBOARD_TYPE = stringPreferencesKey("keyboard_type") // "IN_APP" or "SYSTEM"
         val KEY_SHOW_WORD_COUNT = booleanPreferencesKey("show_word_count")
         val KEY_KEYBOARD_LAYOUT_JSON = stringPreferencesKey("keyboard_layout_json")
+        val KEY_KEYBOARD_LAYOUT_2_JSON = stringPreferencesKey("keyboard_layout_2_json")
+        val KEY_ACTIVE_KEYBOARD_INDEX = intPreferencesKey("active_keyboard_index")
         val KEY_KEYBOARD_KEY_HEIGHT_DP = intPreferencesKey("keyboard_key_height_dp") // 30-56 dp, default 40
         val KEY_KEYBOARD_FONT_SIZE_SP = intPreferencesKey("keyboard_font_size_sp") // default 15
         val KEY_KEYBOARD_HAPTIC = booleanPreferencesKey("keyboard_haptic") // default true
@@ -302,6 +306,8 @@ class PreferencesManager(private val context: Context) {
             KEY_KEYBOARD_TYPE.name to PrefType.STRING,
             KEY_SHOW_WORD_COUNT.name to PrefType.BOOLEAN,
             KEY_KEYBOARD_LAYOUT_JSON.name to PrefType.STRING,
+            KEY_KEYBOARD_LAYOUT_2_JSON.name to PrefType.STRING,
+            KEY_ACTIVE_KEYBOARD_INDEX.name to PrefType.INT,
             KEY_KEYBOARD_KEY_HEIGHT_DP.name to PrefType.INT,
             KEY_KEYBOARD_FONT_SIZE_SP.name to PrefType.INT,
             KEY_KEYBOARD_HAPTIC.name to PrefType.BOOLEAN,
@@ -531,6 +537,8 @@ class PreferencesManager(private val context: Context) {
 
     // Keyboard Flows
     val keyboardLayoutJson: Flow<String?> = context.dataStore.data.map { it[KEY_KEYBOARD_LAYOUT_JSON] }
+    val keyboardLayout2Json: Flow<String?> = context.dataStore.data.map { it[KEY_KEYBOARD_LAYOUT_2_JSON] }
+    val activeKeyboardIndex: Flow<Int> = context.dataStore.data.map { it[KEY_ACTIVE_KEYBOARD_INDEX] ?: 0 }
     val keyboardKeyHeightDp: Flow<Int> = context.dataStore.data.map { it[KEY_KEYBOARD_KEY_HEIGHT_DP] ?: 40 }
     val keyboardFontSizeSp: Flow<Int> = context.dataStore.data.map { it[KEY_KEYBOARD_FONT_SIZE_SP] ?: 15 }
     val keyboardHaptic: Flow<Boolean> = context.dataStore.data.map { it[KEY_KEYBOARD_HAPTIC] ?: true }
@@ -694,6 +702,16 @@ class PreferencesManager(private val context: Context) {
             if (json != null) it[KEY_KEYBOARD_LAYOUT_JSON] = json else it.remove(KEY_KEYBOARD_LAYOUT_JSON)
         }
         notifyRepo { it.copy(keyboardLayoutJson = json) }
+    }
+    suspend fun setKeyboardLayout2Json(json: String?) {
+        context.dataStore.edit {
+            if (json != null) it[KEY_KEYBOARD_LAYOUT_2_JSON] = json else it.remove(KEY_KEYBOARD_LAYOUT_2_JSON)
+        }
+        notifyRepo { it.copy(keyboardLayout2Json = json) }
+    }
+    suspend fun setActiveKeyboardIndex(index: Int) {
+        context.dataStore.edit { it[KEY_ACTIVE_KEYBOARD_INDEX] = index }
+        notifyRepo { it.copy(activeKeyboardIndex = index) }
     }
     suspend fun setKeyboardKeyHeightDp(dp: Int) {
         context.dataStore.edit { it[KEY_KEYBOARD_KEY_HEIGHT_DP] = dp }

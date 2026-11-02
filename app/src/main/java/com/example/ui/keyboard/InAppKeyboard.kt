@@ -37,9 +37,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.composed
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.abs
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InAppKeyboard(
     layout: KeyboardLayout,
+    activeKeyboardIndex: Int = 0,
+    onSwitchKeyboard: () -> Unit = {},
     keyHeightDp: Int = 40,
     fontSizeSp: Int = 15,
     hapticEnabled: Boolean = true,
@@ -53,6 +66,10 @@ fun InAppKeyboard(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
+            .keyboardSwipeToSwitch(
+                enabled = true,
+                onSwitch = onSwitchKeyboard
+            )
             .testTag("in_app_keyboard_3x10"),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 4.dp
@@ -60,9 +77,42 @@ fun InAppKeyboard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(horizontal = 4.dp, vertical = 3.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Subtle 2-dot indicator showing active keyboard without wasting editing space
+            Row(
+                modifier = Modifier
+                    .padding(vertical = 1.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .combinedClickable(
+                        onClick = onSwitchKeyboard
+                    )
+                    .padding(horizontal = 8.dp, vertical = 1.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = if (activeKeyboardIndex == 0) 14.dp else 5.dp, height = 4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(
+                            if (activeKeyboardIndex == 0) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
+                        )
+                )
+                Box(
+                    modifier = Modifier
+                        .size(width = if (activeKeyboardIndex == 1) 14.dp else 5.dp, height = 4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(
+                            if (activeKeyboardIndex == 1) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)
+                        )
+                )
+            }
+
             // Exactly 3 rows x 10 columns
             for (rowIndex in 0 until minOf(3, layout.rows.size)) {
                 val row = layout.rows[rowIndex]
@@ -83,6 +133,77 @@ fun InAppKeyboard(
                             onClick = { onKeyAction(key) },
                             onEdit = { onKeyEditRequest(key) }
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Detects horizontal swipe in either direction (left-to-right or right-to-left) across the in-app
+ * keyboard to switch between Keyboard 1 and Keyboard 2, while completely preserving normal key taps and holds.
+ */
+fun Modifier.keyboardSwipeToSwitch(
+    enabled: Boolean = true,
+    onSwitch: () -> Unit
+): Modifier = composed {
+    if (!enabled) return@composed Modifier
+    val density = LocalDensity.current
+    val thresholdPx = with(density) { 28.dp.toPx() }
+    val velocityThresholdPx = with(density) { 280.dp.toPx() }
+
+    this.pointerInput(enabled) {
+        val touchSlop = viewConfiguration.touchSlop
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val velocityTracker = VelocityTracker()
+            velocityTracker.addPosition(down.uptimeMillis, down.position)
+
+            var totalDx = 0f
+            var totalDy = 0f
+            var isDragging = false
+            var triggered = false
+            val pointerId = down.id
+
+            while (true) {
+                val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+
+                if (!change.pressed) {
+                    if (!triggered && isDragging) {
+                        val velocityX = velocityTracker.calculateVelocity().x
+                        if (abs(totalDx) >= thresholdPx || abs(velocityX) >= velocityThresholdPx) {
+                            change.consume()
+                            onSwitch()
+                        }
+                    }
+                    break
+                }
+
+                velocityTracker.addPosition(change.uptimeMillis, change.position)
+                val delta = change.position - change.previousPosition
+                totalDx += delta.x
+                totalDy += delta.y
+
+                val absX = abs(totalDx)
+                val absY = abs(totalDy)
+
+                if (!isDragging) {
+                    if (absX > touchSlop || absY > touchSlop) {
+                        if (absX > absY * 1.2f) {
+                            isDragging = true
+                            change.consume()
+                        } else {
+                            break
+                        }
+                    }
+                } else if (!triggered) {
+                    change.consume()
+                    if (abs(totalDx) >= thresholdPx) {
+                        triggered = true
+                        onSwitch()
+                        break
                     }
                 }
             }

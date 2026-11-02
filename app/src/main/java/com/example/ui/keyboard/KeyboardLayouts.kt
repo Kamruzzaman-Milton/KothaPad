@@ -61,6 +61,58 @@ object KeyboardLayouts {
         )
     }
 
+    fun getDefault3x10Layout2(): KeyboardLayout {
+        // Secondary Customizable 3x10 Keyboard layout
+        // Row 1: 1, 2, 3, 4, 5, 6, 7, 8, 9, 0
+        val row1 = listOf(
+            KeyboardKey(id = "k2_0_0", label = "1", actionType = KeyActionType.INSERT, outputText = "1", smartSpacing = false),
+            KeyboardKey(id = "k2_0_1", label = "2", actionType = KeyActionType.INSERT, outputText = "2", smartSpacing = false),
+            KeyboardKey(id = "k2_0_2", label = "3", actionType = KeyActionType.INSERT, outputText = "3", smartSpacing = false),
+            KeyboardKey(id = "k2_0_3", label = "4", actionType = KeyActionType.INSERT, outputText = "4", smartSpacing = false),
+            KeyboardKey(id = "k2_0_4", label = "5", actionType = KeyActionType.INSERT, outputText = "5", smartSpacing = false),
+            KeyboardKey(id = "k2_0_5", label = "6", actionType = KeyActionType.INSERT, outputText = "6", smartSpacing = false),
+            KeyboardKey(id = "k2_0_6", label = "7", actionType = KeyActionType.INSERT, outputText = "7", smartSpacing = false),
+            KeyboardKey(id = "k2_0_7", label = "8", actionType = KeyActionType.INSERT, outputText = "8", smartSpacing = false),
+            KeyboardKey(id = "k2_0_8", label = "9", actionType = KeyActionType.INSERT, outputText = "9", smartSpacing = false),
+            KeyboardKey(id = "k2_0_9", label = "0", actionType = KeyActionType.INSERT, outputText = "0", smartSpacing = false)
+        )
+
+        // Row 2: !, @, #, $, %, &, *, /, :, ;
+        val row2 = listOf(
+            KeyboardKey(id = "k2_1_0", label = "!", actionType = KeyActionType.INSERT, outputText = "!", smartSpacing = true),
+            KeyboardKey(id = "k2_1_1", label = "@", actionType = KeyActionType.INSERT, outputText = "@", smartSpacing = false),
+            KeyboardKey(id = "k2_1_2", label = "#", actionType = KeyActionType.INSERT, outputText = "#", smartSpacing = false),
+            KeyboardKey(id = "k2_1_3", label = "$", actionType = KeyActionType.INSERT, outputText = "$", smartSpacing = false),
+            KeyboardKey(id = "k2_1_4", label = "%", actionType = KeyActionType.INSERT, outputText = "%", smartSpacing = false),
+            KeyboardKey(id = "k2_1_5", label = "&", actionType = KeyActionType.INSERT, outputText = "&", smartSpacing = false),
+            KeyboardKey(id = "k2_1_6", label = "*", actionType = KeyActionType.INSERT, outputText = "*", smartSpacing = false),
+            KeyboardKey(id = "k2_1_7", label = "/", actionType = KeyActionType.INSERT, outputText = "/", smartSpacing = false),
+            KeyboardKey(id = "k2_1_8", label = ":", actionType = KeyActionType.INSERT, outputText = ":", smartSpacing = true),
+            KeyboardKey(id = "k2_1_9", label = ";", actionType = KeyActionType.INSERT, outputText = ";", smartSpacing = true)
+        )
+
+        // Row 3: ", ', -, +, =, (, ), [, ], ␣
+        val row3 = listOf(
+            KeyboardKey(id = "k2_2_0", label = "\"", actionType = KeyActionType.INSERT, outputText = "\"", smartSpacing = false),
+            KeyboardKey(id = "k2_2_1", label = "'", actionType = KeyActionType.INSERT, outputText = "'", smartSpacing = false),
+            KeyboardKey(id = "k2_2_2", label = "-", actionType = KeyActionType.INSERT, outputText = "-", smartSpacing = false),
+            KeyboardKey(id = "k2_2_3", label = "+", actionType = KeyActionType.INSERT, outputText = "+", smartSpacing = false),
+            KeyboardKey(id = "k2_2_4", label = "=", actionType = KeyActionType.INSERT, outputText = "=", smartSpacing = false),
+            KeyboardKey(id = "k2_2_5", label = "(", actionType = KeyActionType.INSERT, outputText = "(", smartSpacing = false),
+            KeyboardKey(id = "k2_2_6", label = ")", actionType = KeyActionType.INSERT, outputText = ")", smartSpacing = false),
+            KeyboardKey(id = "k2_2_7", label = "[", actionType = KeyActionType.INSERT, outputText = "[", smartSpacing = false),
+            KeyboardKey(id = "k2_2_8", label = "]", actionType = KeyActionType.INSERT, outputText = "]", smartSpacing = false),
+            KeyboardKey(id = "k2_2_9", label = "␣", actionType = KeyActionType.SPACE, outputText = null, smartSpacing = false)
+        )
+
+        return KeyboardLayout(
+            id = "custom_3x10_2",
+            name = "Secondary 3x10 Keyboard",
+            languageCode = "all",
+            rows = listOf(KeyboardRow(row1), KeyboardRow(row2), KeyboardRow(row3))
+        )
+    }
+
     fun serializeToJson(layout: KeyboardLayout): String {
         val root = JSONObject()
         root.put("id", layout.id)

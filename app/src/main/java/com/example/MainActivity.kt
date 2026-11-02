@@ -209,6 +209,7 @@ class MainActivity : ComponentActivity() {
                                 val keyFontSizeSp by viewModel.keyboardFontSizeSp.collectAsState()
                                 val keyHaptic by viewModel.keyboardHaptic.collectAsState()
                                 val keyHoldBehavior by viewModel.keyboardHoldBehavior.collectAsState()
+                                val activeKeyboardIndex by viewModel.activeKeyboardIndex.collectAsState()
 
                                 val customFontName by viewModel.customFontName.collectAsState()
                                 val customFontPath by viewModel.customFontPath.collectAsState()
@@ -294,6 +295,8 @@ class MainActivity : ComponentActivity() {
                                     onCornerRadiusDpChange = { viewModel.setCornerRadiusDp(it) },
                                     onDictationAnimationStyleChange = { viewModel.setDictationAnimationStyle(it) },
                                     onHapticsLevelChange = { viewModel.setHapticsLevel(it) },
+                                    activeKeyboardIndex = activeKeyboardIndex,
+                                    onActiveKeyboardIndexChange = { viewModel.setActiveKeyboardIndex(it) },
                                     keyboardKeyHeightDp = keyHeightDp,
                                     keyboardFontSizeSp = keyFontSizeSp,
                                     keyboardHaptic = keyHaptic,
@@ -302,9 +305,9 @@ class MainActivity : ComponentActivity() {
                                     onKeyboardFontSizeChange = { viewModel.setKeyboardFontSizeSp(it) },
                                     onKeyboardHapticChange = { viewModel.setKeyboardHaptic(it) },
                                     onKeyboardHoldBehaviorChange = { viewModel.setKeyboardHoldBehavior(it) },
-                                    onResetKeyboardLayout = { viewModel.resetKeyboardLayout() },
-                                    onExportKeyboardLayout = { viewModel.exportKeyboardLayoutJson() },
-                                    onImportKeyboardLayout = { viewModel.importKeyboardLayoutJson(it) },
+                                    onResetKeyboardLayout = { idx -> viewModel.resetKeyboardLayout(idx) },
+                                    onExportKeyboardLayout = { idx -> viewModel.exportKeyboardLayoutJson(idx) },
+                                    onImportKeyboardLayout = { json, idx -> viewModel.importKeyboardLayoutJson(json, idx) },
                                     onDictationModeChange = { viewModel.setDictationModePref(it) },
                                     onTimedMinutesChange = { viewModel.setTimedMinutesPref(it) },
                                     onPauseToleranceChange = { viewModel.setPauseToleranceSecPref(it) },

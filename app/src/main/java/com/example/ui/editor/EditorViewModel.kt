@@ -270,9 +270,15 @@ class EditorViewModel(
     private val _userWantsBuiltInKeyboard = MutableStateFlow(true)
     val userWantsBuiltInKeyboard: StateFlow<Boolean> = _userWantsBuiltInKeyboard.asStateFlow()
 
-    // 3x10 Layout State
+    // 3x10 Layout State (Keyboard 1 & Keyboard 2)
     private val _keyboardLayout = MutableStateFlow(KeyboardLayouts.getDefault3x10Layout())
     val keyboardLayout: StateFlow<KeyboardLayout> = _keyboardLayout.asStateFlow()
+
+    private val _keyboardLayout2 = MutableStateFlow(KeyboardLayouts.getDefault3x10Layout2())
+    val keyboardLayout2: StateFlow<KeyboardLayout> = _keyboardLayout2.asStateFlow()
+
+    private val _activeKeyboardIndex = MutableStateFlow(0)
+    val activeKeyboardIndex: StateFlow<Int> = _activeKeyboardIndex.asStateFlow()
 
     private val _currentScreen = MutableStateFlow("EDITOR") // "EDITOR" or "SETTINGS"
     val currentScreen: StateFlow<String> = _currentScreen.asStateFlow()
@@ -326,6 +332,26 @@ class EditorViewModel(
                 } else {
                     _keyboardLayout.value = KeyboardLayouts.getDefault3x10Layout()
                 }
+            }
+        }
+
+        viewModelScope.launch {
+            preferencesManager.keyboardLayout2Json.collect { jsonStr ->
+                if (!jsonStr.isNullOrBlank()) {
+                    try {
+                        _keyboardLayout2.value = KeyboardLayouts.deserializeFromJson(jsonStr)
+                    } catch (_: Exception) {
+                        _keyboardLayout2.value = KeyboardLayouts.getDefault3x10Layout2()
+                    }
+                } else {
+                    _keyboardLayout2.value = KeyboardLayouts.getDefault3x10Layout2()
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            preferencesManager.activeKeyboardIndex.collect { idx ->
+                _activeKeyboardIndex.value = idx.coerceIn(0, 1)
             }
         }
 
@@ -820,43 +846,92 @@ class EditorViewModel(
     }
 
     // Keyboard Customization & Persistence
-    fun updateKeyInLayout(updatedKey: KeyboardKey) {
-        val current = _keyboardLayout.value
-        val newRows = current.rows.map { row ->
-            val newKeys = row.keys.map { k ->
-                if (k.id == updatedKey.id) updatedKey else k
-            }
-            row.copy(keys = newKeys)
-        }
-        val newLayout = current.copy(rows = newRows)
-        _keyboardLayout.value = newLayout
+    fun switchKeyboardLayout() {
+        val nextIndex = if (_activeKeyboardIndex.value == 0) 1 else 0
+        setActiveKeyboardIndex(nextIndex)
+    }
 
+    fun setActiveKeyboardIndex(index: Int) {
+        val target = index.coerceIn(0, 1)
+        _activeKeyboardIndex.value = target
         viewModelScope.launch(Dispatchers.IO) {
-            val json = KeyboardLayouts.serializeToJson(newLayout)
-            preferencesManager.setKeyboardLayoutJson(json)
+            preferencesManager.setActiveKeyboardIndex(target)
+        }
+    }
+
+    fun updateKeyInLayout(updatedKey: KeyboardKey) {
+        val isLayout2Key = _keyboardLayout2.value.rows.any { row -> row.keys.any { it.id == updatedKey.id } } ||
+                (_activeKeyboardIndex.value == 1 && !_keyboardLayout.value.rows.any { row -> row.keys.any { it.id == updatedKey.id } })
+
+        if (isLayout2Key) {
+            val current = _keyboardLayout2.value
+            val newRows = current.rows.map { row ->
+                val newKeys = row.keys.map { k ->
+                    if (k.id == updatedKey.id) updatedKey else k
+                }
+                row.copy(keys = newKeys)
+            }
+            val newLayout = current.copy(rows = newRows)
+            _keyboardLayout2.value = newLayout
+
+            viewModelScope.launch(Dispatchers.IO) {
+                val json = KeyboardLayouts.serializeToJson(newLayout)
+                preferencesManager.setKeyboardLayout2Json(json)
+            }
+        } else {
+            val current = _keyboardLayout.value
+            val newRows = current.rows.map { row ->
+                val newKeys = row.keys.map { k ->
+                    if (k.id == updatedKey.id) updatedKey else k
+                }
+                row.copy(keys = newKeys)
+            }
+            val newLayout = current.copy(rows = newRows)
+            _keyboardLayout.value = newLayout
+
+            viewModelScope.launch(Dispatchers.IO) {
+                val json = KeyboardLayouts.serializeToJson(newLayout)
+                preferencesManager.setKeyboardLayoutJson(json)
+            }
         }
     }
 
     fun resetKeyToDefault(keyToReset: KeyboardKey) {
-        val defaultLayout = KeyboardLayouts.getDefault3x10Layout()
+        val isLayout2Key = _keyboardLayout2.value.rows.any { row -> row.keys.any { it.id == keyToReset.id } } || _activeKeyboardIndex.value == 1
+        val defaultLayout = if (isLayout2Key) KeyboardLayouts.getDefault3x10Layout2() else KeyboardLayouts.getDefault3x10Layout()
         val defaultKey = defaultLayout.rows.flatMap { it.keys }.find { it.id == keyToReset.id } ?: return
         updateKeyInLayout(defaultKey)
     }
 
-    fun resetKeyboardLayout() {
-        val defaultLayout = KeyboardLayouts.getDefault3x10Layout()
-        _keyboardLayout.value = defaultLayout
-        viewModelScope.launch(Dispatchers.IO) {
-            preferencesManager.setKeyboardLayoutJson(null)
+    fun resetKeyboardLayout(keyboardIndex: Int = _activeKeyboardIndex.value) {
+        if (keyboardIndex == 1) {
+            val defaultLayout = KeyboardLayouts.getDefault3x10Layout2()
+            _keyboardLayout2.value = defaultLayout
+            viewModelScope.launch(Dispatchers.IO) {
+                preferencesManager.setKeyboardLayout2Json(null)
+            }
+        } else {
+            val defaultLayout = KeyboardLayouts.getDefault3x10Layout()
+            _keyboardLayout.value = defaultLayout
+            viewModelScope.launch(Dispatchers.IO) {
+                preferencesManager.setKeyboardLayoutJson(null)
+            }
         }
     }
 
-    fun importKeyboardLayoutJson(jsonStr: String): Boolean {
+    fun importKeyboardLayoutJson(jsonStr: String, keyboardIndex: Int = _activeKeyboardIndex.value): Boolean {
         return try {
             val layout = KeyboardLayouts.deserializeFromJson(jsonStr)
-            _keyboardLayout.value = layout
-            viewModelScope.launch(Dispatchers.IO) {
-                preferencesManager.setKeyboardLayoutJson(jsonStr)
+            if (keyboardIndex == 1) {
+                _keyboardLayout2.value = layout
+                viewModelScope.launch(Dispatchers.IO) {
+                    preferencesManager.setKeyboardLayout2Json(jsonStr)
+                }
+            } else {
+                _keyboardLayout.value = layout
+                viewModelScope.launch(Dispatchers.IO) {
+                    preferencesManager.setKeyboardLayoutJson(jsonStr)
+                }
             }
             true
         } catch (_: Exception) {
@@ -864,8 +939,9 @@ class EditorViewModel(
         }
     }
 
-    fun exportKeyboardLayoutJson(): String {
-        return KeyboardLayouts.serializeToJson(_keyboardLayout.value)
+    fun exportKeyboardLayoutJson(keyboardIndex: Int = _activeKeyboardIndex.value): String {
+        val layout = if (keyboardIndex == 1) _keyboardLayout2.value else _keyboardLayout.value
+        return KeyboardLayouts.serializeToJson(layout)
     }
 
     fun setUserWantsBuiltInKeyboard(wants: Boolean) {
@@ -1809,6 +1885,21 @@ class EditorViewModel(
                 }
             } else {
                 _keyboardLayout.value = KeyboardLayouts.getDefault3x10Layout()
+            }
+        }
+
+        val layout2Json = preferencesManager.keyboardLayout2Json.first()
+        val activeIndex = preferencesManager.activeKeyboardIndex.first()
+        withContext(Dispatchers.Main) {
+            _activeKeyboardIndex.value = activeIndex.coerceIn(0, 1)
+            if (!layout2Json.isNullOrBlank()) {
+                try {
+                    _keyboardLayout2.value = KeyboardLayouts.deserializeFromJson(layout2Json)
+                } catch (_: Exception) {
+                    _keyboardLayout2.value = KeyboardLayouts.getDefault3x10Layout2()
+                }
+            } else {
+                _keyboardLayout2.value = KeyboardLayouts.getDefault3x10Layout2()
             }
         }
     }

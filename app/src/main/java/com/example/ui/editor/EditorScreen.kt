@@ -223,6 +223,9 @@ fun EditorScreen(
     // Keyboard Settings & State
     val userWantsBuiltIn by viewModel.userWantsBuiltInKeyboard.collectAsState()
     val keyboardLayout by viewModel.keyboardLayout.collectAsState()
+    val keyboardLayout2 by viewModel.keyboardLayout2.collectAsState()
+    val activeKeyboardIndex by viewModel.activeKeyboardIndex.collectAsState()
+    val currentKeyboardLayout = if (activeKeyboardIndex == 1) keyboardLayout2 else keyboardLayout
     val keyHeightDp by viewModel.keyboardKeyHeightDp.collectAsState()
     val keyboardFontSizeSp by viewModel.keyboardFontSizeSp.collectAsState()
     val keyboardHaptic by viewModel.keyboardHaptic.collectAsState()
@@ -396,20 +399,24 @@ fun EditorScreen(
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .horizontalSwipeNavigation(
-                    enabled = isEditorActive && !isAnyDialogOpen,
-                    allowSwipeLeft = true,  // right-to-left: opens Settings
-                    allowSwipeRight = true, // left-to-right: opens Calendar
-                    onSwipeLeft = {
-                        keyboardController?.hide()
-                        focusManager.clearFocus(force = true)
-                        viewModel.navigateTo("SETTINGS")
-                    },
-                    onSwipeRight = {
-                        keyboardController?.hide()
-                        focusManager.clearFocus(force = true)
-                        viewModel.openDailyJournalManager()
-                    }
+                .then(
+                    if (isReadingMode) {
+                        Modifier.horizontalSwipeNavigation(
+                            enabled = isEditorActive && !isAnyDialogOpen,
+                            allowSwipeLeft = true,  // right-to-left: opens Settings
+                            allowSwipeRight = true, // left-to-right: opens Calendar
+                            onSwipeLeft = {
+                                keyboardController?.hide()
+                                focusManager.clearFocus(force = true)
+                                viewModel.navigateTo("SETTINGS")
+                            },
+                            onSwipeRight = {
+                                keyboardController?.hide()
+                                focusManager.clearFocus(force = true)
+                                viewModel.openDailyJournalManager()
+                            }
+                        )
+                    } else Modifier
                 )
                 .imePadding()
                 .testTag("editor_screen"),
@@ -505,7 +512,11 @@ fun EditorScreen(
             bottomBar = {
                 if (!isReadingMode && builtInKeyboardVisible) {
                     InAppKeyboard(
-                        layout = keyboardLayout,
+                        layout = currentKeyboardLayout,
+                        activeKeyboardIndex = activeKeyboardIndex,
+                        onSwitchKeyboard = {
+                            viewModel.switchKeyboardLayout()
+                        },
                         keyHeightDp = keyHeightDp,
                         fontSizeSp = keyboardFontSizeSp,
                         hapticEnabled = keyboardHaptic,
@@ -698,6 +709,25 @@ fun EditorScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .then(
+                            if (!isReadingMode) {
+                                Modifier.horizontalSwipeNavigation(
+                                    enabled = isEditorActive && !isAnyDialogOpen,
+                                    allowSwipeLeft = true,  // right-to-left: opens Settings
+                                    allowSwipeRight = true, // left-to-right: opens Calendar
+                                    onSwipeLeft = {
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus(force = true)
+                                        viewModel.navigateTo("SETTINGS")
+                                    },
+                                    onSwipeRight = {
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus(force = true)
+                                        viewModel.openDailyJournalManager()
+                                    }
+                                )
+                            } else Modifier
+                        )
                         .verticalScroll(scrollState)
                         .padding(start = editorStartPad, end = editorEndPad, top = 12.dp, bottom = 12.dp)
                         .then(

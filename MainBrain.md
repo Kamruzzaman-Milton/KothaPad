@@ -25,7 +25,9 @@
 - Customizable typography: font family, font size, line spacing, letter spacing, paragraph spacing, and text alignment.
 
 ## 5. Keyboards & Input Layouts
-- Dual keyboard support: built-in custom in-app keyboard (Bengali/English layouts, key editor) and system IME.
+- Dual in-app keyboard interfaces (Keyboard 1 & Keyboard 2) with bi-directional swipe switching (swiping left-to-right or right-to-left across the in-app keyboard seamlessly toggles between layouts with zero loss of active editing space).
+- Separate, independent button customization for Keyboard 1 and Keyboard 2, with independent settings, reset, export, and import options.
+- Built-in custom in-app keyboard (Bengali/English/Symbols/Numbers layouts, key editor) and system IME toggle.
 - Floating layout controls and side rail layout with customizable scale, side (left/right), offsets, and text clearance.
 
 ## 6. Storage, Notes & Backup Management
@@ -36,10 +38,13 @@
 - **Feature & Tips Guides in "About Notepad":** "Notepad Features" and "Notepad Tips" are not seeded as journal notes; comprehensive summarized guides are displayed directly inside the "About Notepad" section in Settings.
 - **Robust Export/Import System:** Comprehensive, flexible backup format (manifest, notes, templates, preferences, and custom commands). Fully backward-compatible with legacy JSON exports and previous Obsidian-style vault ZIP archives. Restores exact state, settings, and notes without data loss.
 - **No Note Session Timers:** Individual note session timers and background timer jobs are completely removed to maintain simplicity and prevent crashes.
-- **Horizontal Swipe Navigation:** Fluid, flicker-free gestures with immediate response. In note editor: swiping left-to-right immediately opens Daily Journal Calendar; swiping right-to-left opens Settings. In Calendar: swiping right-to-left immediately closes Calendar and returns to editor. In Settings: swiping left-to-right closes Settings and returns to editor. Intercepts touches before child scrolling to guarantee 100% accuracy in Calendar and Settings.
+- **Horizontal Swipe Navigation & Editing Isolation:** Fluid gestures with immediate response. In Reading Mode: screen-wide swipes work as before (left-to-right opens Calendar, right-to-left opens Settings). In Editing Mode: calendar and settings swipe gestures are isolated strictly to the note's content area (text and blank spaces) and never trigger from interactions with floating buttons, toolbars, Markdown formatting bars, forms, recording buttons, or the in-app keyboard. In Calendar: swiping right-to-left returns to editor. In Settings: swiping left-to-right returns to editor.
 - **High-Performance Architecture:** Single-pass custom calendar layout with zero nested rows and zero two-pass weights; background-prewarmed month cache; O(1) bitmask note presence checks; static day cell styles/shapes; lazy conditional rendering of settings accordion contents; fast substring date parsing; zero-delay gesture callbacks.
 - **Daily Journal Calendar Visual Indicators & Layout:** Active currently opened note displays a contrasting blinking cyan border and a small cyan dot beneath the date number (clearly visible against theme fill, distinct from today's white outline). On opening, target month displays with generous bottom clearance ensuring the last row of dates sits comfortably above the floating action buttons without obstruction or manual scroll.
 - **Daily Journal Calendar Date Selection:** Tapping any date opens that exact date's note (in reading mode if existing, in editing mode if created new).
 - **Daily Journal Plus Button:** Always targets today's actual date (LocalDate.now()), opening today's note directly in editing mode (creates if absent, focuses editor).
 - **Reading Mode Date Navigation:** 3 floating buttons (Previous Note, Read/Edit Toggle, Next Note) in a horizontal row. Default position is elevated higher above navigation bar, with a customizable bottom offset slider in Floating Layout settings that accurately exports in backups.
 - **Note Metrics Display:** Word count, reading time, characters with configurable order, style, and toggle.
+
+## 7. Universal Backup Synchronization Rule
+- **Mandatory Backup Synchronization:** Whenever any feature, setting, configuration, customization, or other app functionality is added or modified, the corresponding changes must automatically be included in the Export/Import backup system. All DataStore keys must be registered in `KNOWN_PREF_TYPES` and exported in `settings.json`, Room entities serialized and restored with rollback safety, and custom layouts/options preserved across export/import cycles. No future app modifications may be accidentally excluded from backups.

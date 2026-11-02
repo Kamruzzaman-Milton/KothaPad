@@ -268,6 +268,8 @@ fun SettingsScreen(
     onDictationAnimationStyleChange: (String) -> Unit = {},
     onHapticsLevelChange: (String) -> Unit = {},
     // Keyboard Settings
+    activeKeyboardIndex: Int = 0,
+    onActiveKeyboardIndexChange: (Int) -> Unit = {},
     keyboardKeyHeightDp: Int = 40,
     keyboardFontSizeSp: Int = 15,
     keyboardHaptic: Boolean = true,
@@ -276,9 +278,9 @@ fun SettingsScreen(
     onKeyboardFontSizeChange: (Int) -> Unit = {},
     onKeyboardHapticChange: (Boolean) -> Unit = {},
     onKeyboardHoldBehaviorChange: (String) -> Unit = {},
-    onResetKeyboardLayout: () -> Unit = {},
-    onExportKeyboardLayout: () -> String = { "" },
-    onImportKeyboardLayout: (String) -> Boolean = { false },
+    onResetKeyboardLayout: (Int) -> Unit = {},
+    onExportKeyboardLayout: (Int) -> String = { "" },
+    onImportKeyboardLayout: (String, Int) -> Boolean = { _, _ -> false },
     // Callbacks
     onDictationModeChange: (String) -> Unit,
     onTimedMinutesChange: (Int) -> Unit,
@@ -415,7 +417,7 @@ fun SettingsScreen(
 
     // Construct the fully data-driven sections list
     val sections = remember(
-        keyboardKeyHeightDp, keyboardFontSizeSp, keyboardHaptic, keyboardHoldBehavior,
+        activeKeyboardIndex, keyboardKeyHeightDp, keyboardFontSizeSp, keyboardHaptic, keyboardHoldBehavior,
         dictationMode, muteBeepMethod, pauseToleranceSeconds, insertionMode,
         offlinePreferred, keepScreenOn, idleAutoStopMinutes,
         appTheme, fontSize, lineSpacing, fontFamily, showWordCount, showNoteMetrics, noteMetricsStyle, noteMetricsOrder, noteMetricsHiddenItems,
@@ -826,14 +828,25 @@ fun SettingsScreen(
                         selectedKey = keyboardHoldBehavior,
                         onOptionSelected = onKeyboardHoldBehaviorChange
                     ),
+                    SettingItem.ChipGroup(
+                        id = "active_keyboard_selector",
+                        title = "Configured Keyboard",
+                        subtitle = "Select which keyboard layout to customize, reset, export, or import (Swipe ◀ ▶ on keyboard in editor to toggle)",
+                        options = listOf(
+                            ChipOption("0", "Keyboard 1 (Primary)"),
+                            ChipOption("1", "Keyboard 2 (Secondary)")
+                        ),
+                        selectedKey = activeKeyboardIndex.toString(),
+                        onOptionSelected = { onActiveKeyboardIndexChange(it.toIntOrNull() ?: 0) }
+                    ),
                     SettingItem.ButtonRow(
                         id = "keyboard_layout_actions",
-                        title = "Layout Actions",
+                        title = "Layout Actions (${if (activeKeyboardIndex == 1) "Keyboard 2" else "Keyboard 1"})",
                         buttons = listOf(
                             SettingButtonOption(
                                 label = "Reset Layout",
                                 isDestructive = true,
-                                onClick = onResetKeyboardLayout
+                                onClick = { onResetKeyboardLayout(activeKeyboardIndex) }
                             ),
                             SettingButtonOption(
                                 label = "Export JSON",
@@ -1716,10 +1729,10 @@ fun SettingsScreen(
 
     // Export Layout Dialog
     if (showExportDialog) {
-        val exportedJson = remember { onExportKeyboardLayout() }
+        val exportedJson = remember(showExportDialog, activeKeyboardIndex) { onExportKeyboardLayout(activeKeyboardIndex) }
         AlertDialog(
             onDismissRequest = { showExportDialog = false },
-            title = { Text("Export Keyboard Layout (JSON)") },
+            title = { Text("Export ${if (activeKeyboardIndex == 1) "Keyboard 2" else "Keyboard 1"} Layout (JSON)") },
             text = {
                 OutlinedTextField(
                     value = exportedJson,
@@ -1753,7 +1766,7 @@ fun SettingsScreen(
     if (showImportDialog) {
         AlertDialog(
             onDismissRequest = { showImportDialog = false },
-            title = { Text("Import Keyboard Layout (JSON)") },
+            title = { Text("Import ${if (activeKeyboardIndex == 1) "Keyboard 2" else "Keyboard 1"} Layout (JSON)") },
             text = {
                 Column {
                     OutlinedTextField(
@@ -1781,7 +1794,7 @@ fun SettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val success = onImportKeyboardLayout(importJsonText)
+                        val success = onImportKeyboardLayout(importJsonText, activeKeyboardIndex)
                         if (success) {
                             showImportDialog = false
                         } else {
