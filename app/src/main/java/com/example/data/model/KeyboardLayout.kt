@@ -23,7 +23,8 @@ enum class KeyActionType {
     PASTE,
     TOGGLE_SYSTEM_KEYBOARD,
     SWITCH_LAYOUT,
-    DISMISS_KEYBOARD
+    DISMISS_KEYBOARD,
+    TOGGLE_EDIT_MODE
 }
 
 data class KeyboardKey(

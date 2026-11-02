@@ -22,7 +22,7 @@ object KeyboardLayouts {
             KeyboardKey(id = "k_0_6", label = "?", actionType = KeyActionType.INSERT, outputText = "?", smartSpacing = true, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
             KeyboardKey(id = "k_0_7", label = ".", actionType = KeyActionType.INSERT, outputText = ".", smartSpacing = true, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
             KeyboardKey(id = "k_0_8", label = "⌫", actionType = KeyActionType.BACKSPACE, outputText = null, smartSpacing = false, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
-            KeyboardKey(id = "k_0_9", label = "⌫", actionType = KeyActionType.BACKSPACE, outputText = null, smartSpacing = false, dateFormat = null, timeFormat = null)
+            KeyboardKey(id = "k_0_9", label = "✎", actionType = KeyActionType.TOGGLE_EDIT_MODE, outputText = null, smartSpacing = false, dateFormat = null, timeFormat = null)
         )
 
         // Row 2: ◀, ▲, ▼, ▶, ↵, 📅, 🕒, 📋, ¶, 🌐
@@ -74,7 +74,7 @@ object KeyboardLayouts {
             KeyboardKey(id = "k2_0_6", label = "7", actionType = KeyActionType.INSERT, outputText = "7", smartSpacing = false),
             KeyboardKey(id = "k2_0_7", label = "8", actionType = KeyActionType.INSERT, outputText = "8", smartSpacing = false),
             KeyboardKey(id = "k2_0_8", label = "9", actionType = KeyActionType.INSERT, outputText = "9", smartSpacing = false),
-            KeyboardKey(id = "k2_0_9", label = "0", actionType = KeyActionType.INSERT, outputText = "0", smartSpacing = false)
+            KeyboardKey(id = "k2_0_9", label = "✎", actionType = KeyActionType.TOGGLE_EDIT_MODE, outputText = null, smartSpacing = false)
         )
 
         // Row 2: !, @, #, $, %, &, *, /, :, ;
@@ -194,6 +194,35 @@ object KeyboardLayouts {
             rows.add(KeyboardRow(keys))
         }
 
-        return KeyboardLayout(id, name, lang, rows)
+        return ensureEditingTogglePresence(KeyboardLayout(id, name, lang, rows))
+    }
+
+    /**
+     * Guarantees that every keyboard layout contains at least one EDITING MODE TOGGLE button.
+     * If missing, sets the top-right key (row 0, col 9) as the mandatory toggle button.
+     */
+    fun ensureEditingTogglePresence(layout: KeyboardLayout): KeyboardLayout {
+        val hasEditKey = layout.rows.any { row ->
+            row.keys.any { it.actionType == KeyActionType.TOGGLE_EDIT_MODE }
+        }
+        if (hasEditKey) return layout
+
+        val newRows = layout.rows.mapIndexed { rIndex, row ->
+            if (rIndex == 0) {
+                val newKeys = row.keys.mapIndexed { cIndex, key ->
+                    if (cIndex == 9) {
+                        KeyboardKey(
+                            id = if (key.id.isNotEmpty()) key.id else "k_0_9",
+                            label = "✎",
+                            actionType = KeyActionType.TOGGLE_EDIT_MODE,
+                            outputText = null,
+                            smartSpacing = false
+                        )
+                    } else key
+                }
+                KeyboardRow(newKeys)
+            } else row
+        }
+        return layout.copy(rows = newRows)
     }
 }

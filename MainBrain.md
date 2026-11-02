@@ -26,6 +26,10 @@
 
 ## 5. Keyboards & Input Layouts
 - Dual in-app keyboard interfaces (Keyboard 1 & Keyboard 2) with bi-directional swipe switching (swiping left-to-right or right-to-left across the in-app keyboard seamlessly toggles between layouts with zero loss of active editing space).
+- **Default Drag-and-Drop Repositioning:** When keyboard editing mode is disabled, pressing and holding (> 320ms) any keyboard button initiates drag-and-drop repositioning with elevated preview and hover highlight, smoothly swapping button positions on release without triggering normal button tap actions.
+- **Editing Mode Toggle Button:** Dedicated toggle button (`KeyActionType.TOGGLE_EDIT_MODE`, default label "✎") positioned by default in the top-right corner. Tapping toggles editing mode ON/OFF with distinct active highlighting. While ON, a single tap on any button opens the button customization menu (`EditKeyDialog`). Long-pressing the toggle button allows dragging and repositioning it anywhere on the grid like any other button.
+- **Mandatory Editing Toggle Presence:** Every keyboard layout (Keyboard 1 & Keyboard 2) must strictly maintain at least one Editing Mode Toggle button. The sole remaining toggle button cannot be deleted, remapped to another action in `EditKeyDialog`, or transferred away without replacement. Layout deserialization automatically guarantees its presence.
+- **Cross-Keyboard Edge Dragging:** Dragging a button to the left or right edge of the keyboard and holding briefly (~450ms) triggers active keyboard layout switching, allowing buttons to be dragged and swapped across different keyboards just like launcher icons between pages.
 - Separate, independent button customization for Keyboard 1 and Keyboard 2, with independent settings, reset, export, and import options.
 - Built-in custom in-app keyboard (Bengali/English/Symbols/Numbers layouts, key editor) and system IME toggle.
 - Floating layout controls and side rail layout with customizable scale, side (left/right), offsets, and text clearance.

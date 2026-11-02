@@ -517,6 +517,15 @@ fun EditorScreen(
                         onSwitchKeyboard = {
                             viewModel.switchKeyboardLayout()
                         },
+                        onSwapKeysInLayout = { fromRow, fromCol, toRow, toCol ->
+                            viewModel.swapKeysInLayout(fromRow, fromCol, toRow, toCol, activeKeyboardIndex)
+                        },
+                        onSwapKeysBetweenLayouts = { fromKbd, fromRow, fromCol, toKbd, toRow, toCol ->
+                            viewModel.swapKeysBetweenLayouts(fromKbd, fromRow, fromCol, toKbd, toRow, toCol)
+                        },
+                        onToggleEditMode = {
+                            viewModel.setKeyboardEditMode(!keyboardEditMode)
+                        },
                         keyHeightDp = keyHeightDp,
                         fontSizeSp = keyboardFontSizeSp,
                         hapticEnabled = keyboardHaptic,
@@ -1303,8 +1312,13 @@ fun EditorScreen(
     }
 
     editingKey?.let { keyToEdit ->
+        val currentLayoutForEdit = if (activeKeyboardIndex == 1) keyboardLayout2 else keyboardLayout
+        val editKeysCount = currentLayoutForEdit.rows.sumOf { r -> r.keys.count { it.actionType == com.example.data.model.KeyActionType.TOGGLE_EDIT_MODE } }
+        val isMandatory = (keyToEdit.actionType == com.example.data.model.KeyActionType.TOGGLE_EDIT_MODE && editKeysCount <= 1)
+
         EditKeyDialog(
             key = keyToEdit,
+            isMandatoryEditKey = isMandatory,
             onSaveKey = { updated ->
                 viewModel.updateKeyInLayout(updated)
                 viewModel.editingKey.value = null

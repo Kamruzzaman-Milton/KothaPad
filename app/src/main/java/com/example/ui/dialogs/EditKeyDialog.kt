@@ -53,6 +53,7 @@ import com.example.data.model.KeyboardKey
 @Composable
 fun EditKeyDialog(
     key: KeyboardKey,
+    isMandatoryEditKey: Boolean = false,
     onSaveKey: (KeyboardKey) -> Unit,
     onResetKey: () -> Unit,
     onDismiss: () -> Unit,
@@ -60,7 +61,7 @@ fun EditKeyDialog(
 ) {
     val view = LocalView.current
     var label by remember { mutableStateOf(key.label) }
-    var selectedAction by remember { mutableStateOf(key.actionType) }
+    var selectedAction by remember { mutableStateOf(if (isMandatoryEditKey) KeyActionType.TOGGLE_EDIT_MODE else key.actionType) }
     var outputText by remember { mutableStateOf(key.outputText ?: "") }
     var smartSpacing by remember { mutableStateOf(key.smartSpacing) }
     var dateFormat by remember { mutableStateOf(key.dateFormat ?: "dd MMM yyyy") }
@@ -71,6 +72,7 @@ fun EditKeyDialog(
     val allActions = remember {
         listOf(
             KeyActionType.INSERT to "Insert text",
+            KeyActionType.TOGGLE_EDIT_MODE to "Editing Mode Toggle (✎)",
             KeyActionType.CURSOR_LEFT to "Cursor Left",
             KeyActionType.CURSOR_RIGHT to "Cursor Right",
             KeyActionType.CURSOR_UP to "Cursor Up",
@@ -133,38 +135,66 @@ fun EditKeyDialog(
                 )
 
                 // Action dropdown
-                ExposedDropdownMenuBox(
-                    expanded = actionDropdownExpanded,
-                    onExpandedChange = { actionDropdownExpanded = it }
-                ) {
+                if (isMandatoryEditKey) {
                     OutlinedTextField(
-                        value = allActions.find { it.first == selectedAction }?.second ?: selectedAction.name,
+                        value = "Editing Mode Toggle (✎)",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Action") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = actionDropdownExpanded) },
+                        enabled = false,
+                        label = { Text("Action (Mandatory)") },
+                        supportingText = {
+                            Text(
+                                "Each keyboard must have at least one Editing Mode Toggle button. It cannot be deleted or changed to another action.",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 11.sp
+                            )
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                             .testTag("edit_key_action_dropdown"),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                            disabledBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                            disabledLabelColor = MaterialTheme.colorScheme.primary
                         )
                     )
-
-                    ExposedDropdownMenu(
+                } else {
+                    ExposedDropdownMenuBox(
                         expanded = actionDropdownExpanded,
-                        onDismissRequest = { actionDropdownExpanded = false }
+                        onExpandedChange = { actionDropdownExpanded = it }
                     ) {
-                        for ((action, name) in allActions) {
-                            DropdownMenuItem(
-                                text = { Text(name) },
-                                onClick = {
-                                    selectedAction = action
-                                    actionDropdownExpanded = false
-                                }
+                        OutlinedTextField(
+                            value = allActions.find { it.first == selectedAction }?.second ?: selectedAction.name,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Action") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = actionDropdownExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                                .testTag("edit_key_action_dropdown"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             )
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = actionDropdownExpanded,
+                            onDismissRequest = { actionDropdownExpanded = false }
+                        ) {
+                            for ((action, name) in allActions) {
+                                DropdownMenuItem(
+                                    text = { Text(name) },
+                                    onClick = {
+                                        selectedAction = action
+                                        if (action == KeyActionType.TOGGLE_EDIT_MODE && (label.isBlank() || label == " ")) {
+                                            label = "✎"
+                                        }
+                                        actionDropdownExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -293,7 +323,11 @@ fun EditKeyDialog(
                     OutlinedButton(
                         onClick = {
                             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                            onResetKey()
+                            if (isMandatoryEditKey) {
+                                onSaveKey(key.copy(label = "✎", actionType = KeyActionType.TOGGLE_EDIT_MODE, outputText = null, smartSpacing = false))
+                            } else {
+                                onResetKey()
+                            }
                             onDismiss()
                         },
                         shape = RoundedCornerShape(8.dp)

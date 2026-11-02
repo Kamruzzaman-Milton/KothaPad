@@ -742,8 +742,11 @@ class EditorViewModel(
             KeyActionType.TOGGLE_SYSTEM_KEYBOARD -> {
                 _userWantsBuiltInKeyboard.value = !_userWantsBuiltInKeyboard.value
             }
+            KeyActionType.TOGGLE_EDIT_MODE -> {
+                setKeyboardEditMode(!keyboardEditMode.value)
+            }
             KeyActionType.SWITCH_LAYOUT -> {
-                // Not used in 3x10 fixed grid
+                switchKeyboardLayout()
             }
             KeyActionType.DISMISS_KEYBOARD -> {
                 _userWantsBuiltInKeyboard.value = false
@@ -863,15 +866,23 @@ class EditorViewModel(
         val isLayout2Key = _keyboardLayout2.value.rows.any { row -> row.keys.any { it.id == updatedKey.id } } ||
                 (_activeKeyboardIndex.value == 1 && !_keyboardLayout.value.rows.any { row -> row.keys.any { it.id == updatedKey.id } })
 
+        val current = if (isLayout2Key) _keyboardLayout2.value else _keyboardLayout.value
+        val oldKey = current.rows.flatMap { it.keys }.find { it.id == updatedKey.id }
+        if (oldKey?.actionType == KeyActionType.TOGGLE_EDIT_MODE && updatedKey.actionType != KeyActionType.TOGGLE_EDIT_MODE) {
+            val totalEditKeys = current.rows.sumOf { r -> r.keys.count { it.actionType == KeyActionType.TOGGLE_EDIT_MODE } }
+            if (totalEditKeys <= 1) {
+                return
+            }
+        }
+
         if (isLayout2Key) {
-            val current = _keyboardLayout2.value
             val newRows = current.rows.map { row ->
                 val newKeys = row.keys.map { k ->
                     if (k.id == updatedKey.id) updatedKey else k
                 }
                 row.copy(keys = newKeys)
             }
-            val newLayout = current.copy(rows = newRows)
+            val newLayout = KeyboardLayouts.ensureEditingTogglePresence(current.copy(rows = newRows))
             _keyboardLayout2.value = newLayout
 
             viewModelScope.launch(Dispatchers.IO) {
@@ -879,20 +890,90 @@ class EditorViewModel(
                 preferencesManager.setKeyboardLayout2Json(json)
             }
         } else {
-            val current = _keyboardLayout.value
             val newRows = current.rows.map { row ->
                 val newKeys = row.keys.map { k ->
                     if (k.id == updatedKey.id) updatedKey else k
                 }
                 row.copy(keys = newKeys)
             }
-            val newLayout = current.copy(rows = newRows)
+            val newLayout = KeyboardLayouts.ensureEditingTogglePresence(current.copy(rows = newRows))
             _keyboardLayout.value = newLayout
 
             viewModelScope.launch(Dispatchers.IO) {
                 val json = KeyboardLayouts.serializeToJson(newLayout)
                 preferencesManager.setKeyboardLayoutJson(json)
             }
+        }
+    }
+
+    fun swapKeysInLayout(fromRow: Int, fromCol: Int, toRow: Int, toCol: Int, keyboardIndex: Int = _activeKeyboardIndex.value) {
+        if (fromRow == toRow && fromCol == toCol) return
+        val currentLayout = if (keyboardIndex == 1) _keyboardLayout2.value else _keyboardLayout.value
+        if (fromRow !in currentLayout.rows.indices || toRow !in currentLayout.rows.indices) return
+        if (fromCol !in currentLayout.rows[fromRow].keys.indices || toCol !in currentLayout.rows[toRow].keys.indices) return
+
+        val newRows = currentLayout.rows.map { it.keys.toMutableList() }.toMutableList()
+        val temp = newRows[fromRow][fromCol]
+        newRows[fromRow][fromCol] = newRows[toRow][toCol]
+        newRows[toRow][toCol] = temp
+
+        val updatedLayout = currentLayout.copy(rows = newRows.map { com.example.data.model.KeyboardRow(it) })
+        if (keyboardIndex == 1) {
+            _keyboardLayout2.value = updatedLayout
+            viewModelScope.launch(Dispatchers.IO) {
+                preferencesManager.setKeyboardLayout2Json(KeyboardLayouts.serializeToJson(updatedLayout))
+            }
+        } else {
+            _keyboardLayout.value = updatedLayout
+            viewModelScope.launch(Dispatchers.IO) {
+                preferencesManager.setKeyboardLayoutJson(KeyboardLayouts.serializeToJson(updatedLayout))
+            }
+        }
+    }
+
+    fun swapKeysBetweenLayouts(fromKbd: Int, fromRow: Int, fromCol: Int, toKbd: Int, toRow: Int, toCol: Int) {
+        if (fromKbd == toKbd) {
+            swapKeysInLayout(fromRow, fromCol, toRow, toCol, fromKbd)
+            return
+        }
+        val layout1 = _keyboardLayout.value
+        val layout2 = _keyboardLayout2.value
+
+        val rows1 = layout1.rows.map { it.keys.toMutableList() }.toMutableList()
+        val rows2 = layout2.rows.map { it.keys.toMutableList() }.toMutableList()
+
+        val fromKey = if (fromKbd == 0) rows1.getOrNull(fromRow)?.getOrNull(fromCol) else rows2.getOrNull(fromRow)?.getOrNull(fromCol)
+        val toKey = if (toKbd == 0) rows1.getOrNull(toRow)?.getOrNull(toCol) else rows2.getOrNull(toRow)?.getOrNull(toCol)
+
+        if (fromKey == null || toKey == null) return
+
+        val fromKbdEditKeysCount = (if (fromKbd == 0) rows1 else rows2).sumOf { r -> r.count { it.actionType == KeyActionType.TOGGLE_EDIT_MODE } }
+        val toKbdEditKeysCount = (if (toKbd == 0) rows1 else rows2).sumOf { r -> r.count { it.actionType == KeyActionType.TOGGLE_EDIT_MODE } }
+
+        if (fromKey.actionType == KeyActionType.TOGGLE_EDIT_MODE && fromKbdEditKeysCount <= 1 && toKey.actionType != KeyActionType.TOGGLE_EDIT_MODE) {
+            return
+        }
+        if (toKey.actionType == KeyActionType.TOGGLE_EDIT_MODE && toKbdEditKeysCount <= 1 && fromKey.actionType != KeyActionType.TOGGLE_EDIT_MODE) {
+            return
+        }
+
+        if (fromKbd == 0) {
+            rows1[fromRow][fromCol] = toKey
+            rows2[toRow][toCol] = fromKey
+        } else {
+            rows2[fromRow][fromCol] = toKey
+            rows1[toRow][toCol] = fromKey
+        }
+
+        val updatedLayout1 = KeyboardLayouts.ensureEditingTogglePresence(layout1.copy(rows = rows1.map { com.example.data.model.KeyboardRow(it) }))
+        val updatedLayout2 = KeyboardLayouts.ensureEditingTogglePresence(layout2.copy(rows = rows2.map { com.example.data.model.KeyboardRow(it) }))
+
+        _keyboardLayout.value = updatedLayout1
+        _keyboardLayout2.value = updatedLayout2
+
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesManager.setKeyboardLayoutJson(KeyboardLayouts.serializeToJson(updatedLayout1))
+            preferencesManager.setKeyboardLayout2Json(KeyboardLayouts.serializeToJson(updatedLayout2))
         }
     }
 
