@@ -255,6 +255,21 @@ class PreferencesManager(private val context: Context) {
         val KEY_WAVEFORM_SHOW = booleanPreferencesKey("waveform_show")
         val KEY_READING_NAV_BOTTOM_OFFSET_DP = intPreferencesKey("reading_nav_bottom_offset_dp")
 
+        // Automatic Backup Keys
+        val KEY_AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")
+        val KEY_AUTO_BACKUP_SCHEDULE = stringPreferencesKey("auto_backup_schedule")
+        val KEY_AUTO_BACKUP_CUSTOM_VALUE = intPreferencesKey("auto_backup_custom_value")
+        val KEY_AUTO_BACKUP_CUSTOM_UNIT = stringPreferencesKey("auto_backup_custom_unit")
+        val KEY_AUTO_BACKUP_ON_APP_OPEN = booleanPreferencesKey("auto_backup_on_app_open")
+        val KEY_AUTO_BACKUP_KEEP_COUNT = intPreferencesKey("auto_backup_keep_count")
+        val KEY_AUTO_BACKUP_LOCATION_URI = stringPreferencesKey("auto_backup_location_uri")
+        val KEY_AUTO_BACKUP_ONLY_CHARGING = booleanPreferencesKey("auto_backup_only_charging")
+        val KEY_AUTO_BACKUP_SKIP_LOW_STORAGE = booleanPreferencesKey("auto_backup_skip_low_storage")
+        val KEY_AUTO_BACKUP_LAST_TIME = longPreferencesKey("auto_backup_last_time")
+        val KEY_AUTO_BACKUP_LAST_SIZE = longPreferencesKey("auto_backup_last_size")
+        val KEY_AUTO_BACKUP_LAST_STATUS = stringPreferencesKey("auto_backup_last_status")
+        val KEY_AUTO_BACKUP_LAST_HASH = stringPreferencesKey("auto_backup_last_hash")
+
         val KNOWN_PREF_TYPES: Map<String, PrefType> = mapOf(
             KEY_DICTATION_MODE.name to PrefType.STRING,
             KEY_TIMED_MINUTES.name to PrefType.INT,
@@ -371,7 +386,20 @@ class PreferencesManager(private val context: Context) {
             KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR.name to PrefType.BOOLEAN,
             KEY_WAVEFORM_SCALE.name to PrefType.FLOAT,
             KEY_WAVEFORM_SHOW.name to PrefType.BOOLEAN,
-            KEY_READING_NAV_BOTTOM_OFFSET_DP.name to PrefType.INT
+            KEY_READING_NAV_BOTTOM_OFFSET_DP.name to PrefType.INT,
+            KEY_AUTO_BACKUP_ENABLED.name to PrefType.BOOLEAN,
+            KEY_AUTO_BACKUP_SCHEDULE.name to PrefType.STRING,
+            KEY_AUTO_BACKUP_CUSTOM_VALUE.name to PrefType.INT,
+            KEY_AUTO_BACKUP_CUSTOM_UNIT.name to PrefType.STRING,
+            KEY_AUTO_BACKUP_ON_APP_OPEN.name to PrefType.BOOLEAN,
+            KEY_AUTO_BACKUP_KEEP_COUNT.name to PrefType.INT,
+            KEY_AUTO_BACKUP_LOCATION_URI.name to PrefType.STRING,
+            KEY_AUTO_BACKUP_ONLY_CHARGING.name to PrefType.BOOLEAN,
+            KEY_AUTO_BACKUP_SKIP_LOW_STORAGE.name to PrefType.BOOLEAN,
+            KEY_AUTO_BACKUP_LAST_TIME.name to PrefType.LONG,
+            KEY_AUTO_BACKUP_LAST_SIZE.name to PrefType.LONG,
+            KEY_AUTO_BACKUP_LAST_STATUS.name to PrefType.STRING,
+            KEY_AUTO_BACKUP_LAST_HASH.name to PrefType.STRING
         )
 
         val KNOWN_SYNC_PREF_TYPES: Map<String, PrefType> = mapOf(
@@ -555,6 +583,39 @@ class PreferencesManager(private val context: Context) {
     val customFolders: Flow<Set<String>> = context.dataStore.data.map { it[KEY_CUSTOM_FOLDERS] ?: emptySet() }
     val noteSortOption: Flow<String> = context.dataStore.data.map { it[KEY_NOTE_SORT_OPTION] ?: "MODIFIED_DESC" }
     val isOldDataMigrated: Flow<Boolean> = context.dataStore.data.map { it[KEY_OLD_DATA_MIGRATED] ?: false }
+
+    // Auto Backup Flows
+    val autoBackupEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_ENABLED] ?: false }
+    val autoBackupSchedule: Flow<String> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_SCHEDULE] ?: "OFF" }
+    val autoBackupCustomValue: Flow<Int> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_CUSTOM_VALUE] ?: 1 }
+    val autoBackupCustomUnit: Flow<String> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_CUSTOM_UNIT] ?: "HOURS" }
+    val autoBackupOnAppOpen: Flow<Boolean> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_ON_APP_OPEN] ?: true }
+    val autoBackupKeepCount: Flow<Int> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_KEEP_COUNT] ?: 5 }
+    val autoBackupLocationUri: Flow<String> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_LOCATION_URI] ?: "" }
+    val autoBackupOnlyCharging: Flow<Boolean> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_ONLY_CHARGING] ?: false }
+    val autoBackupSkipLowStorage: Flow<Boolean> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_SKIP_LOW_STORAGE] ?: false }
+    val autoBackupLastTime: Flow<Long> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_LAST_TIME] ?: 0L }
+    val autoBackupLastSize: Flow<Long> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_LAST_SIZE] ?: 0L }
+    val autoBackupLastStatus: Flow<String> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_LAST_STATUS] ?: "" }
+    val autoBackupLastHash: Flow<String> = context.dataStore.data.map { it[KEY_AUTO_BACKUP_LAST_HASH] ?: "" }
+
+    suspend fun setAutoBackupEnabled(enabled: Boolean) = context.dataStore.edit { it[KEY_AUTO_BACKUP_ENABLED] = enabled }
+    suspend fun setAutoBackupSchedule(schedule: String) = context.dataStore.edit { it[KEY_AUTO_BACKUP_SCHEDULE] = schedule }
+    suspend fun setAutoBackupCustomValue(value: Int) = context.dataStore.edit { it[KEY_AUTO_BACKUP_CUSTOM_VALUE] = value }
+    suspend fun setAutoBackupCustomUnit(unit: String) = context.dataStore.edit { it[KEY_AUTO_BACKUP_CUSTOM_UNIT] = unit }
+    suspend fun setAutoBackupOnAppOpen(enabled: Boolean) = context.dataStore.edit { it[KEY_AUTO_BACKUP_ON_APP_OPEN] = enabled }
+    suspend fun setAutoBackupKeepCount(count: Int) = context.dataStore.edit { it[KEY_AUTO_BACKUP_KEEP_COUNT] = count }
+    suspend fun setAutoBackupLocationUri(uri: String) = context.dataStore.edit { it[KEY_AUTO_BACKUP_LOCATION_URI] = uri }
+    suspend fun setAutoBackupOnlyCharging(charging: Boolean) = context.dataStore.edit { it[KEY_AUTO_BACKUP_ONLY_CHARGING] = charging }
+    suspend fun setAutoBackupSkipLowStorage(skip: Boolean) = context.dataStore.edit { it[KEY_AUTO_BACKUP_SKIP_LOW_STORAGE] = skip }
+    suspend fun setAutoBackupLastResult(time: Long, size: Long, status: String, hash: String? = null) = context.dataStore.edit {
+        it[KEY_AUTO_BACKUP_LAST_TIME] = time
+        it[KEY_AUTO_BACKUP_LAST_SIZE] = size
+        it[KEY_AUTO_BACKUP_LAST_STATUS] = status
+        if (hash != null) {
+            it[KEY_AUTO_BACKUP_LAST_HASH] = hash
+        }
+    }
 
     suspend fun setNoteSortOption(option: String) {
         context.dataStore.edit { it[KEY_NOTE_SORT_OPTION] = option }

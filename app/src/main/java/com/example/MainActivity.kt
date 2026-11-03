@@ -133,6 +133,10 @@ class MainActivity : ComponentActivity() {
                         viewModel.navigateTo("SETTINGS")
                     }
 
+                    currentScreen == "AUTO_BACKUP_RESTORE" -> {
+                        viewModel.navigateTo("SETTINGS")
+                    }
+
                     currentScreen == "DAILY_JOURNAL_MANAGER" -> {
                         viewModel.onBackFromDailyJournalManager()
                     }
@@ -232,6 +236,19 @@ class MainActivity : ComponentActivity() {
                                 val floatingLayoutSettings by viewModel.floatingLayoutSettings.collectAsState()
                                 val markdownSettings by viewModel.markdownSettings.collectAsState()
                                 val trashedNotes by viewModel.trashedNotes.collectAsState()
+
+                                val autoBackupEnabled by viewModel.autoBackupEnabled.collectAsState()
+                                val autoBackupSchedule by viewModel.autoBackupSchedule.collectAsState()
+                                val autoBackupCustomValue by viewModel.autoBackupCustomValue.collectAsState()
+                                val autoBackupCustomUnit by viewModel.autoBackupCustomUnit.collectAsState()
+                                val autoBackupOnAppOpen by viewModel.autoBackupOnAppOpen.collectAsState()
+                                val autoBackupKeepCount by viewModel.autoBackupKeepCount.collectAsState()
+                                val autoBackupLocationUri by viewModel.autoBackupLocationUri.collectAsState()
+                                val autoBackupOnlyCharging by viewModel.autoBackupOnlyCharging.collectAsState()
+                                val autoBackupSkipLowStorage by viewModel.autoBackupSkipLowStorage.collectAsState()
+                                val autoBackupLastTime by viewModel.autoBackupLastTime.collectAsState()
+                                val autoBackupLastSize by viewModel.autoBackupLastSize.collectAsState()
+                                val autoBackupLastStatus by viewModel.autoBackupLastStatus.collectAsState()
 
                                 SettingsScreen(
                                     dictationMode = dictationMode,
@@ -371,6 +388,28 @@ class MainActivity : ComponentActivity() {
                                     onExportBackup = { uri, cb -> viewModel.exportBackup(uri, cb) },
                                     onValidateBackup = { uri, cb -> viewModel.validateBackup(uri, cb) },
                                     onRestoreBackup = { backup, cb -> viewModel.restoreBackup(backup, cb) },
+                                    autoBackupEnabled = autoBackupEnabled,
+                                    autoBackupSchedule = autoBackupSchedule,
+                                    autoBackupCustomValue = autoBackupCustomValue,
+                                    autoBackupCustomUnit = autoBackupCustomUnit,
+                                    autoBackupOnAppOpen = autoBackupOnAppOpen,
+                                    autoBackupKeepCount = autoBackupKeepCount,
+                                    autoBackupLocationUri = autoBackupLocationUri,
+                                    autoBackupOnlyCharging = autoBackupOnlyCharging,
+                                    autoBackupSkipLowStorage = autoBackupSkipLowStorage,
+                                    autoBackupLastTime = autoBackupLastTime,
+                                    autoBackupLastSize = autoBackupLastSize,
+                                    autoBackupLastStatus = autoBackupLastStatus,
+                                    onAutoBackupEnabledChange = { viewModel.setAutoBackupEnabled(it) },
+                                    onAutoBackupScheduleChange = { viewModel.setAutoBackupSchedule(it) },
+                                    onAutoBackupCustomIntervalChange = { v, u -> viewModel.setAutoBackupCustomInterval(v, u) },
+                                    onAutoBackupOnAppOpenChange = { viewModel.setAutoBackupOnAppOpen(it) },
+                                    onAutoBackupKeepCountChange = { viewModel.setAutoBackupKeepCount(it) },
+                                    onAutoBackupLocationUriChange = { viewModel.setAutoBackupLocationUri(it) },
+                                    onAutoBackupOnlyChargingChange = { viewModel.setAutoBackupOnlyCharging(it) },
+                                    onAutoBackupSkipLowStorageChange = { viewModel.setAutoBackupSkipLowStorage(it) },
+                                    onTriggerManualAutoBackup = { cb -> viewModel.triggerManualAutoBackup(cb) },
+                                    onViewAutoBackupsClick = { viewModel.navigateTo("AUTO_BACKUP_RESTORE") },
                                     onBackClick = { viewModel.navigateTo("EDITOR") }
                                 )
                             }
@@ -386,6 +425,19 @@ class MainActivity : ComponentActivity() {
                                     onUpdateSettings = { viewModel.updateMarkdownSettings(it) },
                                     onResetToDefaults = { viewModel.resetMarkdownSettingsToDefault() },
                                     onBackClick = { viewModel.navigateTo("SETTINGS") }
+                                )
+                            }
+
+                            AnimatedVisibility(
+                                visible = currentScreen == "AUTO_BACKUP_RESTORE",
+                                enter = slideInHorizontally(tween(200, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(160)),
+                                exit = slideOutHorizontally(tween(180, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(140))
+                            ) {
+                                com.example.ui.settings.AutoBackupRestoreScreen(
+                                    onBackClick = { viewModel.navigateTo("SETTINGS") },
+                                    onRestoreBackupFile = { backup, cb ->
+                                        viewModel.restoreAutoBackupFile(backup, cb)
+                                    }
                                 )
                             }
 

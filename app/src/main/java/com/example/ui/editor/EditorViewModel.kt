@@ -10,6 +10,9 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.KothaPadApp
+import com.example.data.backup.AutoBackupExecutionResult
+import com.example.data.backup.AutoBackupManager
+import com.example.data.backup.BackupFileInfo
 import com.example.data.backup.BackupManager
 import com.example.data.backup.BackupSummary
 import com.example.data.backup.ParsedBackupData
@@ -265,6 +268,32 @@ class EditorViewModel(
     val floatingLayoutSettings: StateFlow<com.example.data.model.FloatingLayoutSettings> = preferencesManager.floatingLayoutSettings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.example.data.model.FloatingLayoutSettings())
 
+    // Auto Backup StateFlows
+    val autoBackupEnabled: StateFlow<Boolean> = preferencesManager.autoBackupEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val autoBackupSchedule: StateFlow<String> = preferencesManager.autoBackupSchedule
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "OFF")
+    val autoBackupCustomValue: StateFlow<Int> = preferencesManager.autoBackupCustomValue
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
+    val autoBackupCustomUnit: StateFlow<String> = preferencesManager.autoBackupCustomUnit
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "HOURS")
+    val autoBackupOnAppOpen: StateFlow<Boolean> = preferencesManager.autoBackupOnAppOpen
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val autoBackupKeepCount: StateFlow<Int> = preferencesManager.autoBackupKeepCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 5)
+    val autoBackupLocationUri: StateFlow<String> = preferencesManager.autoBackupLocationUri
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val autoBackupOnlyCharging: StateFlow<Boolean> = preferencesManager.autoBackupOnlyCharging
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val autoBackupSkipLowStorage: StateFlow<Boolean> = preferencesManager.autoBackupSkipLowStorage
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val autoBackupLastTime: StateFlow<Long> = preferencesManager.autoBackupLastTime
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+    val autoBackupLastSize: StateFlow<Long> = preferencesManager.autoBackupLastSize
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+    val autoBackupLastStatus: StateFlow<String> = preferencesManager.autoBackupLastStatus
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
     // UI state
     // userWantsBuiltIn reflects the toggle in the toolbar / settings
     private val _userWantsBuiltInKeyboard = MutableStateFlow(true)
@@ -402,6 +431,19 @@ class EditorViewModel(
 
             withContext(Dispatchers.Main) {
                 openDailyJournalNote(noteToLoad, dateStr, startInEditMode = false)
+            }
+        }
+
+        // Auto Backup on app open check (skips if last backup is less than 1 hour old)
+        viewModelScope.launch(Dispatchers.IO) {
+            val enabled = preferencesManager.autoBackupEnabled.first()
+            val onOpen = preferencesManager.autoBackupOnAppOpen.first()
+            if (enabled && onOpen) {
+                val lastTime = preferencesManager.autoBackupLastTime.first()
+                val now = System.currentTimeMillis()
+                if (now - lastTime >= 3600_000L) {
+                    AutoBackupManager.performBackup(getApplication(), force = false)
+                }
             }
         }
     }
@@ -1940,6 +1982,101 @@ class EditorViewModel(
                 withContext(Dispatchers.Main) {
                     onResult(Result.failure(e))
                 }
+            }
+        }
+    }
+
+    // Auto Backup Settings Methods
+    fun setAutoBackupEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setAutoBackupEnabled(enabled)
+            rescheduleAutoBackup()
+        }
+    }
+
+    fun setAutoBackupSchedule(schedule: String) {
+        viewModelScope.launch {
+            preferencesManager.setAutoBackupSchedule(schedule)
+            rescheduleAutoBackup()
+        }
+    }
+
+    fun setAutoBackupCustomInterval(value: Int, unit: String) {
+        viewModelScope.launch {
+            preferencesManager.setAutoBackupCustomValue(value)
+            preferencesManager.setAutoBackupCustomUnit(unit)
+            rescheduleAutoBackup()
+        }
+    }
+
+    fun setAutoBackupOnAppOpen(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setAutoBackupOnAppOpen(enabled)
+        }
+    }
+
+    fun setAutoBackupKeepCount(count: Int) {
+        viewModelScope.launch {
+            preferencesManager.setAutoBackupKeepCount(count)
+        }
+    }
+
+    fun setAutoBackupLocationUri(uri: String) {
+        viewModelScope.launch {
+            preferencesManager.setAutoBackupLocationUri(uri)
+        }
+    }
+
+    fun setAutoBackupOnlyCharging(charging: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setAutoBackupOnlyCharging(charging)
+            rescheduleAutoBackup()
+        }
+    }
+
+    fun setAutoBackupSkipLowStorage(skip: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setAutoBackupSkipLowStorage(skip)
+            rescheduleAutoBackup()
+        }
+    }
+
+    private suspend fun rescheduleAutoBackup() {
+        val enabled = preferencesManager.autoBackupEnabled.first()
+        val schedule = preferencesManager.autoBackupSchedule.first()
+        val customVal = preferencesManager.autoBackupCustomValue.first()
+        val customUnit = preferencesManager.autoBackupCustomUnit.first()
+        val charging = preferencesManager.autoBackupOnlyCharging.first()
+        val lowStorage = preferencesManager.autoBackupSkipLowStorage.first()
+
+        AutoBackupManager.scheduleAutoBackup(
+            context = getApplication(),
+            enabled = enabled,
+            schedule = schedule,
+            customValue = customVal,
+            customUnit = customUnit,
+            onlyCharging = charging,
+            skipLowStorage = lowStorage
+        )
+    }
+
+    fun triggerManualAutoBackup(onResult: (Result<AutoBackupExecutionResult>) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = AutoBackupManager.performBackup(getApplication(), force = true)
+            withContext(Dispatchers.Main) {
+                onResult(result)
+            }
+        }
+    }
+
+    fun restoreAutoBackupFile(backup: BackupFileInfo, onResult: (Result<BackupSummary>) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = AutoBackupManager.restoreAutoBackup(getApplication(), backup)
+            if (result.isSuccess) {
+                reloadAfterImport()
+            }
+            withContext(Dispatchers.Main) {
+                onResult(result)
             }
         }
     }

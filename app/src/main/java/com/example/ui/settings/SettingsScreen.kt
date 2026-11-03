@@ -328,6 +328,29 @@ fun SettingsScreen(
     onExportBackup: (Uri, (Result<BackupSummary>) -> Unit) -> Unit = { _, _ -> },
     onValidateBackup: (Uri, (Result<ParsedBackupData>) -> Unit) -> Unit = { _, _ -> },
     onRestoreBackup: (ParsedBackupData, (Result<BackupSummary>) -> Unit) -> Unit = { _, _ -> },
+    // Automatic Backup Callbacks & State
+    autoBackupEnabled: Boolean = false,
+    autoBackupSchedule: String = "OFF",
+    autoBackupCustomValue: Int = 1,
+    autoBackupCustomUnit: String = "HOURS",
+    autoBackupOnAppOpen: Boolean = true,
+    autoBackupKeepCount: Int = 5,
+    autoBackupLocationUri: String = "",
+    autoBackupOnlyCharging: Boolean = false,
+    autoBackupSkipLowStorage: Boolean = false,
+    autoBackupLastTime: Long = 0L,
+    autoBackupLastSize: Long = 0L,
+    autoBackupLastStatus: String = "",
+    onAutoBackupEnabledChange: (Boolean) -> Unit = {},
+    onAutoBackupScheduleChange: (String) -> Unit = {},
+    onAutoBackupCustomIntervalChange: (value: Int, unit: String) -> Unit = { _, _ -> },
+    onAutoBackupOnAppOpenChange: (Boolean) -> Unit = {},
+    onAutoBackupKeepCountChange: (Int) -> Unit = {},
+    onAutoBackupLocationUriChange: (String) -> Unit = {},
+    onAutoBackupOnlyChargingChange: (Boolean) -> Unit = {},
+    onAutoBackupSkipLowStorageChange: (Boolean) -> Unit = {},
+    onTriggerManualAutoBackup: ((Result<com.example.data.backup.AutoBackupExecutionResult>) -> Unit) -> Unit = {},
+    onViewAutoBackupsClick: () -> Unit = {},
     // Templates & Trash Callbacks & State
     templates: List<Stamp> = emptyList(),
     onSaveTemplate: (Stamp) -> Unit = {},
@@ -361,6 +384,7 @@ fun SettingsScreen(
     var isExporting by remember { mutableStateOf(false) }
     var isValidating by remember { mutableStateOf(false) }
     var isRestoring by remember { mutableStateOf(false) }
+    var isManualBackingUp by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
     var pendingRestoreData by remember { mutableStateOf<ParsedBackupData?>(null) }
     var showFinishSetupDialog by remember { mutableStateOf(false) }
@@ -405,6 +429,21 @@ fun SettingsScreen(
         }
     }
 
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, takeFlags)
+                onAutoBackupLocationUriChange(uri.toString())
+                Toast.makeText(context, "Folder selected for backups", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Failed to persist folder permission: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     // Exactly one section open at a time; starts with ALL collapsed
     var expandedSectionId by remember { mutableStateOf<String?>(null) }
 
@@ -427,7 +466,11 @@ fun SettingsScreen(
         micButtonSize, micButtonShape, micButtonColor, micButtonPosition, micButtonOffsetY,
         statusChipStyle, uiDensity, cornerRadiusDp, dictationAnimationStyle, hapticsLevel,
         pipelineSpacing, pipelineAutoCap, pipelineCommands, needsDndPermission,
-        floatingLayoutSettings, markdownSettings, templates
+        floatingLayoutSettings, markdownSettings, templates,
+        autoBackupEnabled, autoBackupSchedule, autoBackupCustomValue, autoBackupCustomUnit,
+        autoBackupOnAppOpen, autoBackupKeepCount, autoBackupLocationUri, autoBackupOnlyCharging,
+        autoBackupSkipLowStorage, autoBackupLastTime, autoBackupLastSize, autoBackupLastStatus,
+        isManualBackingUp
     ) {
         listOf(
             // Templates & Trash Section
@@ -1595,6 +1638,266 @@ fun SettingsScreen(
                         onCheckedChange = onPipelineCommandsChange
                     )
                 )
+            ),
+
+            // Automatic Backup Section (collapsed by default)
+            SettingHeadlineSection(
+                id = "auto_backup_section",
+                title = "Automatic Backup",
+                subtitle = "Scheduled archives, retention limit & safety restore",
+                icon = Icons.Outlined.Backup,
+                items = buildList {
+                    add(
+                        SettingItem.Switch(
+                            id = "auto_backup_master",
+                            title = "Enable automatic backup",
+                            subtitle = "Regularly creates verified archives of notes & settings in the background",
+                            checked = autoBackupEnabled,
+                            onCheckedChange = onAutoBackupEnabledChange
+                        )
+                    )
+
+                    if (autoBackupEnabled) {
+                        add(
+                            SettingItem.ChipGroup(
+                                id = "auto_backup_schedule",
+                                title = "Schedule",
+                                subtitle = "Frequency of background periodic backups",
+                                options = listOf(
+                                    ChipOption("OFF", "Off"),
+                                    ChipOption("HOURS_6", "Every 6 hours"),
+                                    ChipOption("DAILY", "Daily"),
+                                    ChipOption("WEEKLY", "Weekly"),
+                                    ChipOption("CUSTOM", "Custom")
+                                ),
+                                selectedKey = autoBackupSchedule,
+                                onOptionSelected = onAutoBackupScheduleChange
+                            )
+                        )
+
+                        if (autoBackupSchedule == "CUSTOM") {
+                            add(
+                                SettingItem.CustomContent(
+                                    id = "auto_backup_custom_interval",
+                                    content = {
+                                        var customValueStr by remember(autoBackupCustomValue) { mutableStateOf(autoBackupCustomValue.toString()) }
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "Custom Interval (Minimum 15 minutes)",
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                OutlinedTextField(
+                                                    value = customValueStr,
+                                                    onValueChange = { input ->
+                                                        val filtered = input.filter { it.isDigit() }
+                                                        customValueStr = filtered
+                                                        val parsed = filtered.toIntOrNull() ?: 1
+                                                        onAutoBackupCustomIntervalChange(parsed, autoBackupCustomUnit)
+                                                    },
+                                                    label = { Text("Every") },
+                                                    modifier = Modifier.weight(1f),
+                                                    singleLine = true
+                                                )
+                                                Row(
+                                                    modifier = Modifier.weight(2f),
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    listOf("MINUTES", "HOURS", "DAYS").forEach { unit ->
+                                                        FilterChip(
+                                                            selected = autoBackupCustomUnit.equals(unit, ignoreCase = true),
+                                                            onClick = {
+                                                                val parsed = customValueStr.toIntOrNull() ?: 1
+                                                                onAutoBackupCustomIntervalChange(parsed, unit)
+                                                            },
+                                                            label = {
+                                                                Text(
+                                                                    unit.lowercase().replaceFirstChar { it.uppercase() }
+                                                                )
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            if (autoBackupCustomUnit.equals("MINUTES", ignoreCase = true) && (customValueStr.toIntOrNull() ?: 0) < 15) {
+                                                Text(
+                                                    text = "⚠️ Minimum interval is 15 minutes (Android system limit).",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.error
+                                                )
+                                            }
+                                        }
+                                    }
+                                )
+                            )
+                        }
+
+                        add(
+                            SettingItem.Switch(
+                                id = "auto_backup_on_app_open",
+                                title = "Also back up when I open the app",
+                                subtitle = "Skips if the last successful backup is less than 1 hour old to prevent rapid duplicate backups",
+                                checked = autoBackupOnAppOpen,
+                                onCheckedChange = onAutoBackupOnAppOpenChange
+                            )
+                        )
+
+                        add(
+                            SettingItem.ChipGroup(
+                                id = "auto_backup_keep_count",
+                                title = "Keep last N backups",
+                                subtitle = "Older backups are deleted only after a new backup is created and verified",
+                                options = listOf(
+                                    ChipOption("3", "3"),
+                                    ChipOption("5", "5 (Default)"),
+                                    ChipOption("10", "10"),
+                                    ChipOption("20", "20")
+                                ),
+                                selectedKey = autoBackupKeepCount.toString(),
+                                onOptionSelected = { onAutoBackupKeepCountChange(it.toIntOrNull() ?: 5) }
+                            )
+                        )
+
+                        add(
+                            SettingItem.CustomContent(
+                                id = "auto_backup_location",
+                                content = {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "Backup Folder",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = if (autoBackupLocationUri.isBlank()) {
+                                                "Default: Phone's Download / KOTHAPAD Backups"
+                                            } else {
+                                                "Custom Folder: $autoBackupLocationUri"
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                                        )
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = { folderPickerLauncher.launch(null) }
+                                            ) {
+                                                Text("Choose another folder")
+                                            }
+                                            if (autoBackupLocationUri.isNotBlank()) {
+                                                TextButton(
+                                                    onClick = { onAutoBackupLocationUriChange("") }
+                                                ) {
+                                                    Text("Reset to default")
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        )
+
+                        add(
+                            SettingItem.Switch(
+                                id = "auto_backup_only_charging",
+                                title = "Only when charging",
+                                subtitle = "Automatic backup will wait until the device is connected to power",
+                                checked = autoBackupOnlyCharging,
+                                onCheckedChange = onAutoBackupOnlyChargingChange
+                            )
+                        )
+
+                        add(
+                            SettingItem.Switch(
+                                id = "auto_backup_skip_low_storage",
+                                title = "Skip when storage is low",
+                                subtitle = "Prevents backups if storage has less than 50 MB free space",
+                                checked = autoBackupSkipLowStorage,
+                                onCheckedChange = onAutoBackupSkipLowStorageChange
+                            )
+                        )
+                    }
+
+                    // Status line
+                    val statusText = if (autoBackupLastTime > 0L) {
+                        val diff = System.currentTimeMillis() - autoBackupLastTime
+                        val mins = diff / (60 * 1000)
+                        val hours = diff / (60 * 60 * 1000)
+                        val days = diff / (24 * 60 * 60 * 1000)
+                        val relTime = when {
+                            mins < 1 -> "just now"
+                            mins < 60 -> "$mins minute${if (mins == 1L) "" else "s"} ago"
+                            hours < 24 -> "$hours hour${if (hours == 1L) "" else "s"} ago"
+                            else -> "$days day${if (days == 1L) "" else "s"} ago"
+                        }
+                        val formattedSize = if (autoBackupLastSize >= 1024 * 1024) {
+                            "%.1f MB".format(java.util.Locale.US, autoBackupLastSize / (1024.0 * 1024.0))
+                        } else {
+                            "%.1f KB".format(java.util.Locale.US, autoBackupLastSize / 1024.0)
+                        }
+
+                        if (autoBackupLastStatus == "SUCCESS") {
+                            "Last backup: $relTime, success ($formattedSize)"
+                        } else {
+                            "Last backup: $relTime ($autoBackupLastStatus)"
+                        }
+                    } else {
+                        "No automatic backups completed yet."
+                    }
+
+                    add(
+                        SettingItem.InfoText(
+                            id = "auto_backup_status",
+                            title = "Status",
+                            description = statusText,
+                            badge = if (autoBackupLastStatus == "SUCCESS") "✓ Operational" else if (autoBackupLastStatus.isNotBlank()) "Notice" else null
+                        )
+                    )
+
+                    // Buttons: "Back up now", "View backups / Restore"
+                    add(
+                        SettingItem.ButtonRow(
+                            id = "auto_backup_actions",
+                            title = "Backup Actions",
+                            buttons = listOf(
+                                SettingButtonOption(
+                                    label = if (isManualBackingUp) "Backing up..." else "Back up now",
+                                    onClick = {
+                                        isManualBackingUp = true
+                                        onTriggerManualAutoBackup { res ->
+                                            isManualBackingUp = false
+                                            res.onSuccess {
+                                                Toast.makeText(context, "Backup created successfully!", Toast.LENGTH_SHORT).show()
+                                            }.onFailure { err ->
+                                                Toast.makeText(context, "Backup failed: ${err.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
+                                ),
+                                SettingButtonOption(
+                                    label = "View backups / Restore",
+                                    onClick = onViewAutoBackupsClick
+                                )
+                            )
+                        )
+                    )
+                }
             ),
 
             // Backup & Restore Section
