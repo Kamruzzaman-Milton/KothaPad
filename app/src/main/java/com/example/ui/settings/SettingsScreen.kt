@@ -36,7 +36,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
+import com.example.ui.dialogs.AnalogClockPickerDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -407,6 +411,7 @@ fun SettingsScreen(
     // Notifications & Reminders state
     var editingReminder by remember { mutableStateOf<ScheduledReminder?>(null) }
     var isCreatingReminder by remember { mutableStateOf(false) }
+    var showInitialClockPicker by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
@@ -1691,26 +1696,24 @@ fun SettingsScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    Button(
+                                    FilledIconButton(
                                         onClick = {
-                                            editingReminder = ScheduledReminder(
-                                                id = "",
-                                                hour = 9,
-                                                minute = 0,
-                                                isEnabled = true
-                                            )
-                                            isCreatingReminder = true
+                                            showInitialClockPicker = true
                                         },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .testTag("add_reminder_fab"),
+                                        shape = CircleShape,
+                                        colors = IconButtonDefaults.filledIconButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        )
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Add,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
+                                            contentDescription = "Add Reminder",
+                                            modifier = Modifier.size(20.dp)
                                         )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Add Reminder", style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
 
@@ -1782,7 +1785,8 @@ fun SettingsScreen(
                                                             com.example.notification.ReminderScheduler.showSystemNotification(
                                                                 context,
                                                                 rem.id,
-                                                                rem.getEffectiveText()
+                                                                rem.getEffectiveText(),
+                                                                rem.formattedTime()
                                                             )
                                                         }
                                                     }
@@ -1832,18 +1836,24 @@ fun SettingsScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
 
-                                val sampleReminder = remember {
-                                    ScheduledReminder(
-                                        id = "sample_preview",
-                                        hour = 9,
-                                        minute = 0,
-                                        customText = "Did I forget to journal today?",
-                                        useCustomText = true
-                                    )
+                                val previewReminder = remember(scheduledReminders) {
+                                    val firstRem = scheduledReminders.firstOrNull()
+                                    if (firstRem != null) {
+                                        firstRem
+                                    } else {
+                                        val now = java.util.Calendar.getInstance()
+                                        ScheduledReminder(
+                                            id = "sample_preview",
+                                            hour = now.get(java.util.Calendar.HOUR_OF_DAY),
+                                            minute = now.get(java.util.Calendar.MINUTE),
+                                            customText = "Did I forget to journal today?",
+                                            useCustomText = false
+                                        )
+                                    }
                                 }
 
                                 com.example.ui.editor.FloatingNotificationBanner(
-                                    reminder = sampleReminder,
+                                    reminder = previewReminder,
                                     config = floatingNotificationConfig,
                                     onTodayPlusClick = {},
                                     onDismiss = {},
@@ -2765,6 +2775,31 @@ fun SettingsScreen(
                 editingTemplate = null
             },
             onDismiss = { editingTemplate = null }
+        )
+    }
+
+    // Initial Analog Clock Picker Dialog (opened directly upon pressing Plus button)
+    if (showInitialClockPicker) {
+        val now = remember { java.util.Calendar.getInstance() }
+        val currentHour = remember { now.get(java.util.Calendar.HOUR_OF_DAY) }
+        val currentMinute = remember { now.get(java.util.Calendar.MINUTE) }
+
+        AnalogClockPickerDialog(
+            initialHour = currentHour,
+            initialMinute = currentMinute,
+            onConfirm = { selectedHour, selectedMinute ->
+                showInitialClockPicker = false
+                editingReminder = ScheduledReminder(
+                    id = "",
+                    hour = selectedHour,
+                    minute = selectedMinute,
+                    isEnabled = true
+                )
+                isCreatingReminder = true
+            },
+            onDismiss = {
+                showInitialClockPicker = false
+            }
         )
     }
 

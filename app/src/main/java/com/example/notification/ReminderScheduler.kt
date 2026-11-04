@@ -40,6 +40,7 @@ object ReminderScheduler {
 
     const val EXTRA_REMINDER_ID = "extra_reminder_id"
     const val EXTRA_REMINDER_TEXT = "extra_reminder_text"
+    const val EXTRA_REMINDER_TIME = "extra_reminder_time"
     const val EXTRA_DISPLAY_MODE = "extra_display_mode"
 
     // Live state flow for in-app floating notification preview / popup when app is open
@@ -145,6 +146,7 @@ object ReminderScheduler {
             setPackage(context.packageName)
             putExtra(EXTRA_REMINDER_ID, reminder.id)
             putExtra(EXTRA_REMINDER_TEXT, reminder.getEffectiveText())
+            putExtra(EXTRA_REMINDER_TIME, reminder.formattedTime())
             putExtra(EXTRA_DISPLAY_MODE, reminder.displayMode.name)
         }
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -157,9 +159,9 @@ object ReminderScheduler {
     }
 
     /**
-     * Posts standard Android system notification with content text, heads-up priority, and direct (+) Note Action.
+     * Posts standard Android system notification with content text, scheduled time, heads-up priority, and direct (+) Note Action.
      */
-    fun showSystemNotification(context: Context, reminderId: String, text: String) {
+    fun showSystemNotification(context: Context, reminderId: String, text: String, timeStr: String = "") {
         ensureNotificationChannel(context)
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
@@ -182,11 +184,13 @@ object ReminderScheduler {
             contentPendingIntent
         ).build()
 
+        val title = if (timeStr.isNotBlank()) "KothaPad Reminder • $timeStr" else "KothaPad Reminder"
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("KothaPad Reminder")
+            .setContentTitle(title)
             .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setStyle(NotificationCompat.BigTextStyle().setBigContentTitle(title).bigText(text))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
@@ -224,6 +228,7 @@ class ReminderReceiver : BroadcastReceiver() {
             ReminderScheduler.ACTION_TRIGGER_REMINDER -> {
                 val reminderId = intent.getStringExtra(ReminderScheduler.EXTRA_REMINDER_ID) ?: ""
                 val text = intent.getStringExtra(ReminderScheduler.EXTRA_REMINDER_TEXT) ?: "Did I forget to journal today?"
+                val timeStr = intent.getStringExtra(ReminderScheduler.EXTRA_REMINDER_TIME) ?: ""
                 val modeStr = intent.getStringExtra(ReminderScheduler.EXTRA_DISPLAY_MODE) ?: NotificationDisplayMode.NORMAL.name
                 val displayMode = try {
                     NotificationDisplayMode.valueOf(modeStr)
@@ -245,27 +250,37 @@ class ReminderReceiver : BroadcastReceiver() {
                     }
                 }
 
+                val isForeground = com.example.KothaPadApp.isAppInForeground
+
                 if (displayMode == NotificationDisplayMode.FLOATING) {
-                    // Check if SYSTEM_ALERT_WINDOW is granted
-                    if (XiaomiOverlayHelper.canDrawOverlays(context)) {
-                        // Launch full screen overlay popup service over other apps
-                        ScreenOverlayReminderService.showOverlay(context, reminderId, text)
-                    } else {
-                        // Fallback to high priority notification and heads-up banner
-                        ReminderScheduler.showSystemNotification(context, reminderId, text)
-                    }
-                    // Also trigger in-app state if app is in foreground
-                    ReminderScheduler.showFloatingReminder(
-                        ScheduledReminder(
-                            id = reminderId,
-                            displayMode = NotificationDisplayMode.FLOATING,
-                            customText = text,
-                            useCustomText = true
+                    if (isForeground) {
+                        // App is actively open and in foreground right now
+                        // Show in-app floating banner with the scheduled time preserved
+                        val cal = Calendar.getInstance()
+                        ReminderScheduler.showFloatingReminder(
+                            ScheduledReminder(
+                                id = reminderId,
+                                hour = cal.get(Calendar.HOUR_OF_DAY),
+                                minute = cal.get(Calendar.MINUTE),
+                                displayMode = NotificationDisplayMode.FLOATING,
+                                customText = text,
+                                useCustomText = true
+                            )
                         )
-                    )
+                    } else {
+                        // App is MINIMIZED, in background, or closed:
+                        // Do NOT set in-app state (prevents delayed banner appearing later upon reopen)
+                        if (XiaomiOverlayHelper.canDrawOverlays(context)) {
+                            // Show true prominent screen overlay over whatever app is currently running
+                            ScreenOverlayManager.showOverlay(context, reminderId, text, timeStr)
+                        } else {
+                            // Fallback to high priority heads-up notification
+                            ReminderScheduler.showSystemNotification(context, reminderId, text, timeStr)
+                        }
+                    }
                 } else {
-                    // Normal mode: Standard notification + heads-up banner
-                    ReminderScheduler.showSystemNotification(context, reminderId, text)
+                    // Normal mode: Standard notification + heads-up banner with scheduled time
+                    ReminderScheduler.showSystemNotification(context, reminderId, text, timeStr)
                 }
             }
         }

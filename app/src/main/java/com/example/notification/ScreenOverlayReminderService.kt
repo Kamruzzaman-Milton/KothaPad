@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -22,7 +23,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.example.MainActivity
-import com.example.R
 import com.example.data.model.FloatingNotificationConfig
 import com.example.data.preferences.PreferencesManager
 import kotlinx.coroutines.CoroutineScope
@@ -31,60 +31,56 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * True system window overlay service (SYSTEM_ALERT_WINDOW) that displays a prominent,
- * customizable floating reminder popup over any running application or home screen.
+ * ScreenOverlayManager handles true system window overlays (SYSTEM_ALERT_WINDOW).
+ * Directly invokes WindowManager with TYPE_APPLICATION_OVERLAY on the main thread,
+ * ensuring immediate delivery over any app even when KothaPad is minimized or closed,
+ * without triggering Android 12+/14+ BackgroundServiceStartNotAllowedException.
  */
-class ScreenOverlayReminderService : Service() {
+object ScreenOverlayManager {
+    private const val TAG = "ScreenOverlayManager"
 
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
     private val handler = Handler(Looper.getMainLooper())
     private var autoDismissRunnable: Runnable? = null
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    fun showOverlay(context: Context, reminderId: String, text: String, timeStr: String = "") {
+        val appContext = context.applicationContext
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null) return START_NOT_STICKY
-
-        if (intent.action == ACTION_DISMISS) {
-            removeOverlay()
-            stopSelf()
-            return START_NOT_STICKY
-        }
-
-        val reminderId = intent.getStringExtra(EXTRA_REMINDER_ID) ?: ""
-        val reminderText = intent.getStringExtra(EXTRA_REMINDER_TEXT) ?: "Did I forget to journal today?"
-
-        CoroutineScope(Dispatchers.Main).launch {
-            val prefManager = PreferencesManager(applicationContext)
-            val configJson = prefManager.floatingNotificationConfigJson.first()
-            val config = FloatingNotificationConfig.fromJson(configJson)
-            displayOverlay(reminderId, reminderText, config)
-        }
-
-        return START_NOT_STICKY
-    }
-
-    private fun displayOverlay(reminderId: String, text: String, config: FloatingNotificationConfig) {
-        removeOverlay()
-
-        if (!XiaomiOverlayHelper.canDrawOverlays(this)) {
-            // Cannot draw overlay, fallback to system notification
-            ReminderScheduler.showSystemNotification(this, reminderId, text)
-            stopSelf()
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            handler.post { showOverlay(appContext, reminderId, text, timeStr) }
             return
         }
 
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+        CoroutineScope(Dispatchers.Main).launch {
+            val prefManager = PreferencesManager(appContext)
+            val configJson = prefManager.floatingNotificationConfigJson.first()
+            val config = FloatingNotificationConfig.fromJson(configJson)
+            displayOverlay(appContext, reminderId, text, timeStr, config)
+        }
+    }
 
-        val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
+    private fun displayOverlay(
+        context: Context,
+        reminderId: String,
+        text: String,
+        timeStr: String,
+        config: FloatingNotificationConfig
+    ) {
+        removeOverlay()
+
+        if (!XiaomiOverlayHelper.canDrawOverlays(context)) {
+            // Cannot draw overlay, fallback to heads-up system notification
+            ReminderScheduler.showSystemNotification(context, reminderId, text, timeStr)
+            return
         }
 
-        val density = resources.displayMetrics.density
+        val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return
+        windowManager = wm
+
+        val layoutType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+
+        val density = context.resources.displayMetrics.density
         val widthPx = (config.popupWidthDp * density).toInt()
         val minHeightPx = (config.minHeightDp * density).toInt()
         val paddingPx = (config.paddingDp * density).toInt()
@@ -112,15 +108,15 @@ class ScreenOverlayReminderService : Service() {
         }
 
         // Root container
-        val rootContainer = FrameLayout(this).apply {
+        val rootContainer = FrameLayout(context).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT
             )
         }
 
-        // Card Container using GradientDrawable (eliminating external cardview dependency)
-        val cardContainer = LinearLayout(this).apply {
+        // Card Container using GradientDrawable
+        val cardContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             minimumHeight = minHeightPx
             setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
@@ -145,8 +141,8 @@ class ScreenOverlayReminderService : Service() {
             }
         }
 
-        // Top Row: Title + Close (X) button
-        val topRow = LinearLayout(this).apply {
+        // Top Row: Title + Scheduled Time Badge + Close Button
+        val topRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -155,15 +151,41 @@ class ScreenOverlayReminderService : Service() {
             )
         }
 
-        val titleTv = TextView(this).apply {
+        val titleTv = TextView(context).apply {
             this.text = "KOTHAPAD REMINDER"
-            textSize = 11f
+            textSize = 10f
             setTextColor(Color.parseColor("#BB86FC"))
             typeface = Typeface.DEFAULT_BOLD
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
+        topRow.addView(titleTv)
 
-        val closeBtn = ImageView(this).apply {
+        // Scheduled Time Badge
+        if (timeStr.isNotBlank()) {
+            val timeBadge = TextView(context).apply {
+                this.text = timeStr
+                textSize = 11f
+                setTextColor(Color.WHITE)
+                typeface = Typeface.DEFAULT_BOLD
+                val padH = (8 * density).toInt()
+                val padV = (3 * density).toInt()
+                setPadding(padH, padV, padH, padV)
+                background = GradientDrawable().apply {
+                    setColor(Color.argb(80, 124, 77, 255))
+                    cornerRadius = 8f * density
+                    setStroke((1 * density).toInt(), Color.parseColor("#7C4DFF"))
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    marginEnd = (8 * density).toInt()
+                }
+            }
+            topRow.addView(timeBadge)
+        }
+
+        val closeBtn = ImageView(context).apply {
             setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
             setColorFilter(Color.parseColor("#B0BEC5"))
             val pad = (4 * density).toInt()
@@ -172,16 +194,14 @@ class ScreenOverlayReminderService : Service() {
             layoutParams = LinearLayout.LayoutParams(btnSize, btnSize)
             setOnClickListener {
                 removeOverlay()
-                stopSelf()
             }
         }
-
-        topRow.addView(titleTv)
         topRow.addView(closeBtn)
+
         cardContainer.addView(topRow)
 
         // Middle: Reminder Message Text
-        val messageTv = TextView(this).apply {
+        val messageTv = TextView(context).apply {
             this.text = text
             this.textSize = config.textSizeSp.toFloat()
             val textCol = runCatching { Color.parseColor(config.textColorHex) }.getOrDefault(Color.WHITE)
@@ -216,7 +236,7 @@ class ScreenOverlayReminderService : Service() {
         cardContainer.addView(messageTv)
 
         // Bottom: Dedicated PLUS (+) Button
-        val bottomRow = LinearLayout(this).apply {
+        val bottomRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(
@@ -226,7 +246,7 @@ class ScreenOverlayReminderService : Service() {
         }
 
         val btnSize = (52 * density).toInt()
-        val plusBtnLayout = FrameLayout(this).apply {
+        val plusBtnLayout = FrameLayout(context).apply {
             val btnRadius = 26f * density
             val parsedBorderColor = runCatching { Color.parseColor(config.borderColorHex) }.getOrDefault(Color.parseColor("#7C4DFF"))
             background = GradientDrawable().apply {
@@ -237,7 +257,7 @@ class ScreenOverlayReminderService : Service() {
             layoutParams = LinearLayout.LayoutParams(btnSize, btnSize)
         }
 
-        val plusIv = ImageView(this).apply {
+        val plusIv = ImageView(context).apply {
             setImageResource(android.R.drawable.ic_input_add)
             setColorFilter(Color.WHITE)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
@@ -248,15 +268,15 @@ class ScreenOverlayReminderService : Service() {
         }
 
         plusBtnLayout.addView(plusIv)
+
         plusBtnLayout.setOnClickListener {
             // Immediately open today's note in editing mode
-            val launchIntent = Intent(this@ScreenOverlayReminderService, MainActivity::class.java).apply {
+            val launchIntent = Intent(context, MainActivity::class.java).apply {
                 action = ReminderScheduler.ACTION_PLUS_CLICK
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
-            startActivity(launchIntent)
+            context.startActivity(launchIntent)
             removeOverlay()
-            stopSelf()
         }
 
         bottomRow.addView(plusBtnLayout)
@@ -280,12 +300,11 @@ class ScreenOverlayReminderService : Service() {
         rootContainer.startAnimation(animSet)
 
         try {
-            windowManager?.addView(rootContainer, params)
+            wm.addView(rootContainer, params)
             overlayView = rootContainer
-        } catch (_: Exception) {
-            // Fallback to system notification
-            ReminderScheduler.showSystemNotification(this, reminderId, text)
-            stopSelf()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add view to WindowManager, fallback to notification", e)
+            ReminderScheduler.showSystemNotification(context, reminderId, text, timeStr)
             return
         }
 
@@ -293,26 +312,52 @@ class ScreenOverlayReminderService : Service() {
         if (config.autoDismissSeconds > 0) {
             autoDismissRunnable = Runnable {
                 removeOverlay()
-                stopSelf()
             }
             handler.postDelayed(autoDismissRunnable!!, config.autoDismissSeconds * 1000L)
         }
     }
 
-    private fun removeOverlay() {
+    fun removeOverlay() {
         autoDismissRunnable?.let { handler.removeCallbacks(it) }
         autoDismissRunnable = null
-        if (overlayView != null && windowManager != null) {
+        val view = overlayView
+        val wm = windowManager
+        if (view != null && wm != null) {
             try {
-                windowManager?.removeView(overlayView)
+                wm.removeView(view)
             } catch (_: Exception) {}
             overlayView = null
         }
     }
+}
+
+/**
+ * Service implementation forwarding to ScreenOverlayManager for lifecycle and compatibility.
+ */
+class ScreenOverlayReminderService : Service() {
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent == null) return START_NOT_STICKY
+
+        if (intent.action == ACTION_DISMISS) {
+            ScreenOverlayManager.removeOverlay()
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        val reminderId = intent.getStringExtra(EXTRA_REMINDER_ID) ?: ""
+        val reminderText = intent.getStringExtra(EXTRA_REMINDER_TEXT) ?: "Did I forget to journal today?"
+        val reminderTime = intent.getStringExtra(EXTRA_REMINDER_TIME) ?: ""
+
+        ScreenOverlayManager.showOverlay(this, reminderId, reminderText, reminderTime)
+        stopSelf()
+        return START_NOT_STICKY
+    }
 
     override fun onDestroy() {
         super.onDestroy()
-        removeOverlay()
     }
 
     companion object {
@@ -320,14 +365,14 @@ class ScreenOverlayReminderService : Service() {
         const val ACTION_DISMISS = "com.example.notification.ACTION_DISMISS_OVERLAY"
         const val EXTRA_REMINDER_ID = "extra_reminder_id"
         const val EXTRA_REMINDER_TEXT = "extra_reminder_text"
+        const val EXTRA_REMINDER_TIME = "extra_reminder_time"
 
-        fun showOverlay(context: Context, reminderId: String, text: String) {
-            val intent = Intent(context, ScreenOverlayReminderService::class.java).apply {
-                action = ACTION_SHOW
-                putExtra(EXTRA_REMINDER_ID, reminderId)
-                putExtra(EXTRA_REMINDER_TEXT, text)
-            }
-            context.startService(intent)
+        fun showOverlay(context: Context, reminderId: String, text: String, timeStr: String = "") {
+            ScreenOverlayManager.showOverlay(context, reminderId, text, timeStr)
+        }
+
+        fun removeOverlay() {
+            ScreenOverlayManager.removeOverlay()
         }
     }
 }

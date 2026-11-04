@@ -29,5 +29,29 @@ class KothaPadApp : Application() {
     override fun onCreate() {
         super.onCreate()
         speechSupervisor.restoreCrashSafetyMute()
+
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: android.app.Activity) {
+                resumedActivities++
+            }
+
+            override fun onActivityPaused(activity: android.app.Activity) {
+                resumedActivities = (resumedActivities - 1).coerceAtLeast(0)
+            }
+
+            override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) {}
+            override fun onActivityStarted(activity: android.app.Activity) {}
+            override fun onActivityStopped(activity: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: android.os.Bundle) {}
+            override fun onActivityDestroyed(activity: android.app.Activity) {}
+        })
+    }
+
+    companion object {
+        @Volatile
+        private var resumedActivities = 0
+
+        val isAppInForeground: Boolean
+            get() = resumedActivities > 0
     }
 }
