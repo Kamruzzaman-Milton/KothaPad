@@ -362,7 +362,7 @@ fun EditReminderDialog(
     )
 
     if (showTimePicker) {
-        SimpleTimePickerDialog(
+        AnalogClockPickerDialog(
             initialHour = hour,
             initialMinute = minute,
             onConfirm = { h, m ->
@@ -373,86 +373,4 @@ fun EditReminderDialog(
             onDismiss = { showTimePicker = false }
         )
     }
-}
-
-@Composable
-fun SimpleTimePickerDialog(
-    initialHour: Int,
-    initialMinute: Int,
-    onConfirm: (hour: Int, minute: Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var selectedHour by remember { mutableIntStateOf(initialHour) }
-    var selectedMinute by remember { mutableIntStateOf(initialMinute) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Select Time",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Hour picker buttons
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Hour", style = MaterialTheme.typography.labelSmall)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { selectedHour = (selectedHour - 1 + 24) % 24 }) {
-                                Text("-", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Text(
-                                text = "%02d".format(selectedHour),
-                                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                                modifier = Modifier.padding(horizontal = 8.dp)
-                            )
-                            IconButton(onClick = { selectedHour = (selectedHour + 1) % 24 }) {
-                                Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-
-                    Text(":", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(horizontal = 4.dp))
-
-                    // Minute picker buttons
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Minute", style = MaterialTheme.typography.labelSmall)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { selectedMinute = (selectedMinute - 5 + 60) % 60 }) {
-                                Text("-", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Text(
-                                text = "%02d".format(selectedMinute),
-                                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                                modifier = Modifier.padding(horizontal = 8.dp)
-                            )
-                            IconButton(onClick = { selectedMinute = (selectedMinute + 5) % 60 }) {
-                                Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onConfirm(selectedHour, selectedMinute) }) {
-                Text("OK")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
-    )
 }

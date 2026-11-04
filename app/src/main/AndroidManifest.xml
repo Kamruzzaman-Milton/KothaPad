@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <queries>
         <intent>
@@ -48,6 +49,10 @@
             android:name=".service.DictationService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <service
+            android:name=".notification.ScreenOverlayReminderService"
+            android:exported="false" />
 
         <receiver
             android:name=".notification.ReminderReceiver"

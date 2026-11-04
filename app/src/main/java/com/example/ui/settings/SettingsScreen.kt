@@ -17,6 +17,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import com.example.ui.navigation.horizontalSwipeNavigation
@@ -1801,55 +1802,329 @@ fun SettingsScreen(
                             }
                         }
                     ),
-                    SettingItem.ChipGroup(
-                        id = "floating_popup_size",
-                        title = "Floating Notification Size",
-                        subtitle = "Controls the height and padding of floating reminder popups",
-                        options = listOf(
-                            ChipOption("COMPACT", "Compact"),
-                            ChipOption("MEDIUM", "Medium (Default)"),
-                            ChipOption("LARGE", "Large")
-                        ),
-                        selectedKey = floatingNotificationConfig.popupSize,
-                        onOptionSelected = {
-                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(popupSize = it))
+                    // Live Preview of Floating Overlay Popup
+                    SettingItem.CustomContent(
+                        id = "floating_live_preview",
+                        content = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Live Preview (Interactive)",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "Updates in real-time",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                val sampleReminder = remember {
+                                    ScheduledReminder(
+                                        id = "sample_preview",
+                                        hour = 9,
+                                        minute = 0,
+                                        customText = "Did I forget to journal today?",
+                                        useCustomText = true
+                                    )
+                                }
+
+                                com.example.ui.editor.FloatingNotificationBanner(
+                                    reminder = sampleReminder,
+                                    config = floatingNotificationConfig,
+                                    onTodayPlusClick = {},
+                                    onDismiss = {},
+                                    isPreview = true
+                                )
+                            }
+                        }
+                    ),
+
+                    // Permission & Xiaomi/MIUI compatibility checklist
+                    SettingItem.CustomContent(
+                        id = "floating_permissions_guide",
+                        content = {
+                            val isOverlayGranted = com.example.notification.XiaomiOverlayHelper.canDrawOverlays(context)
+                            val isXiaomi = com.example.notification.XiaomiOverlayHelper.isXiaomiOrMiui()
+
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isOverlayGranted)
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                                else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isOverlayGranted) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                    else MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = if (isOverlayGranted) "✓ Screen Overlay Permission Granted" else "⚠️ Screen Overlay Permission Required",
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (isOverlayGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Required to display prominent floating popups over other apps when reminders trigger.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                com.example.notification.XiaomiOverlayHelper.openOverlaySettings(context)
+                                            }
+                                        ) {
+                                            Text(if (isOverlayGranted) "Manage Overlay" else "Grant Overlay Permission", fontSize = 12.sp)
+                                        }
+
+                                        if (isXiaomi) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    com.example.notification.XiaomiOverlayHelper.openMiuiPopupPermissions(context)
+                                                }
+                                            ) {
+                                                Text("Xiaomi Pop-up Permission", fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ),
+
+                    // Size & Positioning
+                    SettingItem.Slider(
+                        id = "floating_width",
+                        title = "Popup Width",
+                        subtitle = "Overall width of the screen overlay card",
+                        value = floatingNotificationConfig.popupWidthDp.toFloat(),
+                        valueRange = 260f..400f,
+                        steps = 7,
+                        displayValue = "${floatingNotificationConfig.popupWidthDp} dp",
+                        onValueChange = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(popupWidthDp = it.toInt()))
+                        }
+                    ),
+                    SettingItem.Slider(
+                        id = "floating_min_height",
+                        title = "Popup Minimum Height",
+                        subtitle = "Minimum vertical height of the popup card",
+                        value = floatingNotificationConfig.minHeightDp.toFloat(),
+                        valueRange = 120f..260f,
+                        steps = 7,
+                        displayValue = "${floatingNotificationConfig.minHeightDp} dp",
+                        onValueChange = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(minHeightDp = it.toInt()))
                         }
                     ),
                     SettingItem.ChipGroup(
-                        id = "floating_visual_style",
-                        title = "Floating Notification Visual Style",
-                        subtitle = "Controls elevation shadow, borders, and appearance",
+                        id = "floating_vertical_pos",
+                        title = "Screen Vertical Position",
+                        subtitle = "Select where on the screen the popup appears",
                         options = listOf(
-                            ChipOption("ELEVATED", "Elevated Shadow"),
-                            ChipOption("MINIMAL", "Minimal Flat"),
-                            ChipOption("ACCENT_BORDER", "Accent Border")
+                            ChipOption("TOP", "Top"),
+                            ChipOption("CENTER", "Center (Prominent)"),
+                            ChipOption("BOTTOM", "Bottom")
                         ),
-                        selectedKey = floatingNotificationConfig.visualStyle,
+                        selectedKey = floatingNotificationConfig.verticalPosition,
                         onOptionSelected = {
-                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(visualStyle = it))
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(verticalPosition = it))
+                        }
+                    ),
+                    SettingItem.Slider(
+                        id = "floating_vertical_offset",
+                        title = "Fine Vertical Offset",
+                        subtitle = "Shift upward or downward from selected position",
+                        value = floatingNotificationConfig.verticalOffsetDp.toFloat(),
+                        valueRange = -100f..100f,
+                        steps = 8,
+                        displayValue = "${floatingNotificationConfig.verticalOffsetDp} dp",
+                        onValueChange = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(verticalOffsetDp = it.toInt()))
+                        }
+                    ),
+
+                    // Colors & Styling
+                    SettingItem.ChipGroup(
+                        id = "floating_bg_color",
+                        title = "Background Color Theme",
+                        subtitle = "Preset color palettes for the floating card",
+                        options = listOf(
+                            ChipOption("#1E1E2E", "Dark Navy (#1E1E2E)"),
+                            ChipOption("#000000", "AMOLED Black"),
+                            ChipOption("#121212", "Charcoal Gray"),
+                            ChipOption("#263238", "Deep Slate"),
+                            ChipOption("#2E1065", "Midnight Violet")
+                        ),
+                        selectedKey = floatingNotificationConfig.backgroundColorHex,
+                        onOptionSelected = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(backgroundColorHex = it))
                         }
                     ),
                     SettingItem.Slider(
                         id = "floating_opacity",
-                        title = "Floating Notification Background Opacity",
-                        subtitle = "Adjust transparency of the floating reminder card",
+                        title = "Background Opacity",
+                        subtitle = "Transparency level of the floating card",
                         value = floatingNotificationConfig.backgroundOpacity,
-                        valueRange = 0.70f..1.0f,
-                        steps = 5,
+                        valueRange = 0.60f..1.0f,
+                        steps = 8,
                         displayValue = "${(floatingNotificationConfig.backgroundOpacity * 100).toInt()}%",
                         onValueChange = {
                             onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(backgroundOpacity = it))
                         }
                     ),
+                    SettingItem.Slider(
+                        id = "floating_corner_radius",
+                        title = "Corner Radius",
+                        subtitle = "Smoothness of card corners",
+                        value = floatingNotificationConfig.cornerRadiusDp.toFloat(),
+                        valueRange = 0f..32f,
+                        steps = 8,
+                        displayValue = "${floatingNotificationConfig.cornerRadiusDp} dp",
+                        onValueChange = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(cornerRadiusDp = it.toInt()))
+                        }
+                    ),
+                    SettingItem.ChipGroup(
+                        id = "floating_border_color",
+                        title = "Accent Border Color",
+                        subtitle = "Highlight border and action button tint",
+                        options = listOf(
+                            ChipOption("#7C4DFF", "Purple (#7C4DFF)"),
+                            ChipOption("#FF7043", "Coral Orange"),
+                            ChipOption("#00E5FF", "Cyan Glow"),
+                            ChipOption("#00E676", "Emerald Green"),
+                            ChipOption("#FFD600", "Amber Gold")
+                        ),
+                        selectedKey = floatingNotificationConfig.borderColorHex,
+                        onOptionSelected = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(borderColorHex = it))
+                        }
+                    ),
+                    SettingItem.Slider(
+                        id = "floating_border_width",
+                        title = "Border Width",
+                        subtitle = "Thickness of accent outline (0 for none)",
+                        value = floatingNotificationConfig.borderWidthDp.toFloat(),
+                        valueRange = 0f..4f,
+                        steps = 4,
+                        displayValue = "${floatingNotificationConfig.borderWidthDp} dp",
+                        onValueChange = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(borderWidthDp = it.toInt()))
+                        }
+                    ),
+
+                    // Typography
+                    SettingItem.Slider(
+                        id = "floating_text_size",
+                        title = "Reminder Text Size",
+                        subtitle = "Font size for the reminder message",
+                        value = floatingNotificationConfig.textSizeSp.toFloat(),
+                        valueRange = 12f..24f,
+                        steps = 6,
+                        displayValue = "${floatingNotificationConfig.textSizeSp} sp",
+                        onValueChange = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(textSizeSp = it.toInt()))
+                        }
+                    ),
+                    SettingItem.ChipGroup(
+                        id = "floating_text_font",
+                        title = "Text Font Style",
+                        subtitle = "Font family for reminder message",
+                        options = listOf(
+                            ChipOption("DEFAULT", "Modern Sans"),
+                            ChipOption("SERIF", "Classic Serif"),
+                            ChipOption("MONOSPACE", "Monospace Code")
+                        ),
+                        selectedKey = floatingNotificationConfig.textFont,
+                        onOptionSelected = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(textFont = it))
+                        }
+                    ),
+                    SettingItem.ChipGroup(
+                        id = "floating_font_weight",
+                        title = "Font Weight",
+                        options = listOf(
+                            ChipOption("NORMAL", "Regular"),
+                            ChipOption("MEDIUM", "Medium"),
+                            ChipOption("BOLD", "Bold")
+                        ),
+                        selectedKey = floatingNotificationConfig.fontWeight,
+                        onOptionSelected = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(fontWeight = it))
+                        }
+                    ),
+                    SettingItem.ChipGroup(
+                        id = "floating_text_align",
+                        title = "Text Alignment",
+                        options = listOf(
+                            ChipOption("START", "Left"),
+                            ChipOption("CENTER", "Centered"),
+                            ChipOption("END", "Right")
+                        ),
+                        selectedKey = floatingNotificationConfig.textAlignment,
+                        onOptionSelected = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(textAlignment = it))
+                        }
+                    ),
+                    SettingItem.Slider(
+                        id = "floating_padding",
+                        title = "Internal Padding",
+                        subtitle = "Spacing around text and buttons inside popup",
+                        value = floatingNotificationConfig.paddingDp.toFloat(),
+                        valueRange = 10f..30f,
+                        steps = 5,
+                        displayValue = "${floatingNotificationConfig.paddingDp} dp",
+                        onValueChange = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(paddingDp = it.toInt()))
+                        }
+                    ),
+
+                    // Animation & Dismissal
+                    SettingItem.ChipGroup(
+                        id = "floating_animation",
+                        title = "Popup Appearance Animation",
+                        subtitle = "Animation effect when overlay popup appears",
+                        options = listOf(
+                            ChipOption("SCALE", "Scale & Pop"),
+                            ChipOption("FADE", "Smooth Fade"),
+                            ChipOption("SLIDE", "Slide")
+                        ),
+                        selectedKey = floatingNotificationConfig.animationEffect,
+                        onOptionSelected = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(animationEffect = it))
+                        }
+                    ),
                     SettingItem.ChipGroup(
                         id = "floating_auto_dismiss",
-                        title = "Floating Popup Auto-Dismiss",
-                        subtitle = "Duration the floating reminder stays on screen before disappearing",
+                        title = "Display Duration & Dismissal",
+                        subtitle = "How long the overlay popup remains before auto-dismissing",
                         options = listOf(
                             ChipOption("0", "Keep Until Dismissed"),
-                            ChipOption("8", "8 seconds"),
-                            ChipOption("12", "12 seconds (Default)"),
-                            ChipOption("20", "20 seconds")
+                            ChipOption("10", "10 seconds"),
+                            ChipOption("15", "15 seconds (Default)"),
+                            ChipOption("30", "30 seconds"),
+                            ChipOption("60", "60 seconds")
                         ),
                         selectedKey = floatingNotificationConfig.autoDismissSeconds.toString(),
                         onOptionSelected = {

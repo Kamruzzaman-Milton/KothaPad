@@ -5,26 +5,56 @@ import org.json.JSONObject
 import java.util.UUID
 
 /**
- * Display modes for reminders.
+ * Display modes for reminders:
+ * NORMAL: Conventional Android heads-up popup and notification shade.
+ * FLOATING: Prominent full screen overlay popup (SYSTEM_ALERT_WINDOW) over any application.
  */
 enum class NotificationDisplayMode {
-    NORMAL,    // Standard Android system notification
-    FLOATING   // In-app or overlay floating popup at the top of the screen
+    NORMAL,
+    FLOATING
 }
 
 /**
- * Visual styling preferences for floating notifications.
+ * Advanced Visual Styling & Geometry Configuration for Floating Popup Overlay.
  */
 data class FloatingNotificationConfig(
-    val popupSize: String = "MEDIUM", // "COMPACT", "MEDIUM", "LARGE"
-    val visualStyle: String = "ELEVATED", // "ELEVATED", "MINIMAL", "ACCENT_BORDER"
-    val backgroundOpacity: Float = 0.95f, // 0.7f to 1.0f
-    val autoDismissSeconds: Int = 12 // 0 for persistent until tapped/dismissed, or 5-30s
+    val popupWidthDp: Int = 320,              // 240..420 dp
+    val minHeightDp: Int = 160,               // 120..300 dp
+    val verticalPosition: String = "CENTER",  // "TOP", "CENTER", "BOTTOM"
+    val horizontalOffsetDp: Int = 0,          // -60..60 dp
+    val verticalOffsetDp: Int = 0,            // -150..150 dp
+    val backgroundColorHex: String = "#1E1E2E", // Hex color
+    val backgroundOpacity: Float = 0.96f,     // 0.60f..1.0f
+    val cornerRadiusDp: Int = 20,             // 0..32 dp
+    val borderWidthDp: Int = 1,               // 0..4 dp
+    val borderColorHex: String = "#7C4DFF",   // Border color
+    val textSizeSp: Int = 16,                 // 12..24 sp
+    val textFont: String = "DEFAULT",         // "DEFAULT", "SERIF", "MONOSPACE"
+    val fontWeight: String = "BOLD",          // "NORMAL", "MEDIUM", "BOLD"
+    val textColorHex: String = "#FFFFFF",     // Text color
+    val textAlignment: String = "CENTER",     // "START", "CENTER", "END"
+    val paddingDp: Int = 18,                  // 8..32 dp
+    val animationEffect: String = "SCALE",    // "FADE", "SCALE", "SLIDE"
+    val autoDismissSeconds: Int = 15          // 0 (persistent until tapped) or 5..60s
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
-        put("popupSize", popupSize)
-        put("visualStyle", visualStyle)
+        put("popupWidthDp", popupWidthDp)
+        put("minHeightDp", minHeightDp)
+        put("verticalPosition", verticalPosition)
+        put("horizontalOffsetDp", horizontalOffsetDp)
+        put("verticalOffsetDp", verticalOffsetDp)
+        put("backgroundColorHex", backgroundColorHex)
         put("backgroundOpacity", backgroundOpacity.toDouble())
+        put("cornerRadiusDp", cornerRadiusDp)
+        put("borderWidthDp", borderWidthDp)
+        put("borderColorHex", borderColorHex)
+        put("textSizeSp", textSizeSp)
+        put("textFont", textFont)
+        put("fontWeight", fontWeight)
+        put("textColorHex", textColorHex)
+        put("textAlignment", textAlignment)
+        put("paddingDp", paddingDp)
+        put("animationEffect", animationEffect)
         put("autoDismissSeconds", autoDismissSeconds)
     }
 
@@ -34,10 +64,24 @@ data class FloatingNotificationConfig(
             return try {
                 val obj = JSONObject(jsonStr)
                 FloatingNotificationConfig(
-                    popupSize = obj.optString("popupSize", "MEDIUM"),
-                    visualStyle = obj.optString("visualStyle", "ELEVATED"),
-                    backgroundOpacity = obj.optDouble("backgroundOpacity", 0.95).toFloat(),
-                    autoDismissSeconds = obj.optInt("autoDismissSeconds", 12)
+                    popupWidthDp = obj.optInt("popupWidthDp", 320),
+                    minHeightDp = obj.optInt("minHeightDp", 160),
+                    verticalPosition = obj.optString("verticalPosition", "CENTER"),
+                    horizontalOffsetDp = obj.optInt("horizontalOffsetDp", 0),
+                    verticalOffsetDp = obj.optInt("verticalOffsetDp", 0),
+                    backgroundColorHex = obj.optString("backgroundColorHex", "#1E1E2E"),
+                    backgroundOpacity = obj.optDouble("backgroundOpacity", 0.96).toFloat(),
+                    cornerRadiusDp = obj.optInt("cornerRadiusDp", 20),
+                    borderWidthDp = obj.optInt("borderWidthDp", 1),
+                    borderColorHex = obj.optString("borderColorHex", "#7C4DFF"),
+                    textSizeSp = obj.optInt("textSizeSp", 16),
+                    textFont = obj.optString("textFont", "DEFAULT"),
+                    fontWeight = obj.optString("fontWeight", "BOLD"),
+                    textColorHex = obj.optString("textColorHex", "#FFFFFF"),
+                    textAlignment = obj.optString("textAlignment", "CENTER"),
+                    paddingDp = obj.optInt("paddingDp", 18),
+                    animationEffect = obj.optString("animationEffect", "SCALE"),
+                    autoDismissSeconds = obj.optInt("autoDismissSeconds", 15)
                 )
             } catch (_: Exception) {
                 FloatingNotificationConfig()
@@ -47,22 +91,18 @@ data class FloatingNotificationConfig(
 }
 
 /**
- * Represents an individual scheduled reminder/notification.
- * Unlimited custom notifications can be created.
+ * Scheduled Reminder Entity
  */
 data class ScheduledReminder(
     val id: String = UUID.randomUUID().toString(),
     val hour: Int = 9,               // 0..23
-    val minute: Int = 0,             // 0..59
+    val minute: Int = 0,             // 0..59 (exact 1-minute precision)
     val isEnabled: Boolean = true,
     val displayMode: NotificationDisplayMode = NotificationDisplayMode.NORMAL,
     val useCustomText: Boolean = false,
     val customText: String = "",
     val defaultText: String = "Did I forget to journal today?"
 ) {
-    /**
-     * Resolves the actual text to display based on the toggle.
-     */
     fun getEffectiveText(): String {
         return if (useCustomText && customText.isNotBlank()) {
             customText.trim()
@@ -71,9 +111,6 @@ data class ScheduledReminder(
         }
     }
 
-    /**
-     * Formats 24h hour and minute to friendly 12h AM/PM string, e.g. "07:00 AM".
-     */
     fun formattedTime(): String {
         val h12 = when {
             hour == 0 -> 12

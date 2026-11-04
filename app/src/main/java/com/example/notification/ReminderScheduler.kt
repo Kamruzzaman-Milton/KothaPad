@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.R
@@ -23,12 +24,15 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 
 /**
- * Manages scheduling, canceling, and triggering of reminders.
+ * Robust Scheduler for Reminders with exact AlarmManager alarms,
+ * high-priority notification channel, and Screen Overlay / System notification delivery.
  */
 object ReminderScheduler {
 
-    const val CHANNEL_ID = "kothapad_reminders"
-    const val CHANNEL_NAME = "Daily Reminders"
+    private const val TAG = "ReminderScheduler"
+
+    const val CHANNEL_ID = "kothapad_reminders_v2"
+    const val CHANNEL_NAME = "Daily Journal Reminders"
 
     const val ACTION_TRIGGER_REMINDER = "com.example.notification.ACTION_TRIGGER_REMINDER"
     const val ACTION_PLUS_CLICK = "com.example.notification.ACTION_PLUS_CLICK"
@@ -38,7 +42,7 @@ object ReminderScheduler {
     const val EXTRA_REMINDER_TEXT = "extra_reminder_text"
     const val EXTRA_DISPLAY_MODE = "extra_display_mode"
 
-    // Live state flow for active in-app floating notification popup
+    // Live state flow for in-app floating notification preview / popup when app is open
     private val _activeFloatingReminder = MutableStateFlow<ScheduledReminder?>(null)
     val activeFloatingReminder = _activeFloatingReminder.asStateFlow()
 
@@ -60,6 +64,8 @@ object ReminderScheduler {
                 description = "Custom notifications and reminders for KothaPad journal"
                 enableVibration(true)
                 setShowBadge(true)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                setBypassDnd(true)
             }
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             nm?.createNotificationChannel(channel)
@@ -73,7 +79,6 @@ object ReminderScheduler {
         ensureNotificationChannel(context)
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
 
-        // First cancel all previous reminder pending intents for this list or general range
         reminders.forEach { reminder ->
             val pi = getAlarmPendingIntent(context, reminder)
             alarmManager.cancel(pi)
@@ -86,35 +91,42 @@ object ReminderScheduler {
     fun scheduleSingle(context: Context, alarmManager: AlarmManager, reminder: ScheduledReminder) {
         val pi = getAlarmPendingIntent(context, reminder)
 
+        val now = System.currentTimeMillis()
         val calendar = Calendar.getInstance().apply {
+            timeInMillis = now
             set(Calendar.HOUR_OF_DAY, reminder.hour)
             set(Calendar.MINUTE, reminder.minute)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-            if (timeInMillis <= System.currentTimeMillis()) {
+
+            // If time is now or in the past (within 10 seconds leeway), schedule for tomorrow
+            if (timeInMillis <= now + 10_000L) {
                 add(Calendar.DAY_OF_YEAR, 1)
             }
         }
+
+        val targetTime = calendar.timeInMillis
+        Log.d(TAG, "Scheduling reminder ${reminder.id} at $targetTime (${reminder.formattedTime()})")
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
+                    targetTime,
                     pi
                 )
             } else {
                 alarmManager.setExact(
                     AlarmManager.RTC_WAKEUP,
-                    calendar.timeInMillis,
+                    targetTime,
                     pi
                 )
             }
-        } catch (_: SecurityException) {
-            // In case exact alarm permission is missing on Android 12+, fallback to set()
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Exact alarm permission restricted, falling back to set()", e)
             alarmManager.set(
                 AlarmManager.RTC_WAKEUP,
-                calendar.timeInMillis,
+                targetTime,
                 pi
             )
         }
@@ -129,6 +141,8 @@ object ReminderScheduler {
     private fun getAlarmPendingIntent(context: Context, reminder: ScheduledReminder): PendingIntent {
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             action = ACTION_TRIGGER_REMINDER
+            // Explicit component ensures delivery even if app is stopped or in background
+            setPackage(context.packageName)
             putExtra(EXTRA_REMINDER_ID, reminder.id)
             putExtra(EXTRA_REMINDER_TEXT, reminder.getEffectiveText())
             putExtra(EXTRA_DISPLAY_MODE, reminder.displayMode.name)
@@ -143,13 +157,13 @@ object ReminderScheduler {
     }
 
     /**
-     * Posts standard Android system notification with content text and direct (+) Note Action.
+     * Posts standard Android system notification with content text, heads-up priority, and direct (+) Note Action.
      */
     fun showSystemNotification(context: Context, reminderId: String, text: String) {
         ensureNotificationChannel(context)
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
-        // Tap content: open today's note in editing mode
+        // Tap content: open today's note directly in editing mode
         val contentIntent = Intent(context, MainActivity::class.java).apply {
             action = ACTION_PLUS_CLICK
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -173,11 +187,14 @@ object ReminderScheduler {
             .setContentTitle("KothaPad Reminder")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(contentPendingIntent)
             .addAction(plusAction)
+            .setFullScreenIntent(contentPendingIntent, false) // Enables heads-up banner on devices
             .build()
 
         nm.notify(reminderId.hashCode(), notification)
@@ -196,7 +213,6 @@ class ReminderReceiver : BroadcastReceiver() {
             Intent.ACTION_MY_PACKAGE_REPLACED,
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED -> {
-                // Reschedule all enabled reminders from DataStore
                 val prefManager = PreferencesManager(context)
                 CoroutineScope(Dispatchers.IO).launch {
                     val json = prefManager.scheduledRemindersJson.first()
@@ -215,14 +231,13 @@ class ReminderReceiver : BroadcastReceiver() {
                     NotificationDisplayMode.NORMAL
                 }
 
-                // Check if current reminder is still enabled and reschedule for next day
+                // Check if reminder is enabled and re-arm for tomorrow at same time
                 val prefManager = PreferencesManager(context)
                 CoroutineScope(Dispatchers.IO).launch {
                     val json = prefManager.scheduledRemindersJson.first()
                     val reminders = ScheduledReminder.listFromJson(json)
                     val reminder = reminders.find { it.id == reminderId }
                     if (reminder != null && reminder.isEnabled) {
-                        // Re-arm alarm for tomorrow
                         val am = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
                         if (am != null) {
                             ReminderScheduler.scheduleSingle(context, am, reminder)
@@ -231,17 +246,25 @@ class ReminderReceiver : BroadcastReceiver() {
                 }
 
                 if (displayMode == NotificationDisplayMode.FLOATING) {
-                    // Try to trigger live floating popup
-                    val reminder = ScheduledReminder(
-                        id = reminderId,
-                        displayMode = NotificationDisplayMode.FLOATING,
-                        customText = text,
-                        useCustomText = true
+                    // Check if SYSTEM_ALERT_WINDOW is granted
+                    if (XiaomiOverlayHelper.canDrawOverlays(context)) {
+                        // Launch full screen overlay popup service over other apps
+                        ScreenOverlayReminderService.showOverlay(context, reminderId, text)
+                    } else {
+                        // Fallback to high priority notification and heads-up banner
+                        ReminderScheduler.showSystemNotification(context, reminderId, text)
+                    }
+                    // Also trigger in-app state if app is in foreground
+                    ReminderScheduler.showFloatingReminder(
+                        ScheduledReminder(
+                            id = reminderId,
+                            displayMode = NotificationDisplayMode.FLOATING,
+                            customText = text,
+                            useCustomText = true
+                        )
                     )
-                    ReminderScheduler.showFloatingReminder(reminder)
-                    // Also fire system notification as high priority heads-up fallback
-                    ReminderScheduler.showSystemNotification(context, reminderId, text)
                 } else {
+                    // Normal mode: Standard notification + heads-up banner
                     ReminderScheduler.showSystemNotification(context, reminderId, text)
                 }
             }
