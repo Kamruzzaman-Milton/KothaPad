@@ -20,8 +20,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -438,16 +441,25 @@ private fun InAppKeyView(
         contentAlignment = Alignment.Center
     ) {
         if (!isDraggedSource) {
-            Text(
-                text = key.label,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = if (key.label.length > 2) (fontSizeSp - 3).coerceAtLeast(10).sp else fontSizeSp.sp,
-                    fontWeight = if (isControlKey || isEditMode || isEditToggleKey) FontWeight.Bold else FontWeight.Normal
-                ),
-                color = textColor,
-                textAlign = TextAlign.Center,
-                maxLines = 1
-            )
+            if (key.actionType == KeyActionType.EXIT && (key.label == "Exit" || key.label.isBlank())) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                    contentDescription = "Exit",
+                    tint = textColor,
+                    modifier = Modifier.size((fontSizeSp + 3).coerceIn(16, 24).dp)
+                )
+            } else {
+                Text(
+                    text = key.label,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = if (key.label.length > 2) (fontSizeSp - 3).coerceAtLeast(10).sp else fontSizeSp.sp,
+                        fontWeight = if (isControlKey || isEditMode || isEditToggleKey) FontWeight.Bold else FontWeight.Normal
+                    ),
+                    color = textColor,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
 
             // In Edit Mode, display small badge indicator on customizable keys
             if (isEditMode && !isEditToggleKey) {

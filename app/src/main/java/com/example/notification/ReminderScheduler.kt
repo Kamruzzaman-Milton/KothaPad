@@ -39,6 +39,11 @@ object ReminderScheduler {
     const val ACTION_TRIGGER_REMINDER = "com.example.notification.ACTION_TRIGGER_REMINDER"
     const val ACTION_PLUS_CLICK = "com.example.notification.ACTION_PLUS_CLICK"
     const val ACTION_DISMISS_NOTIFICATION = "com.example.notification.ACTION_DISMISS_NOTIFICATION"
+    const val ACTION_EXIT_APP = "com.example.notification.ACTION_EXIT_APP"
+
+    const val PERSISTENT_CHANNEL_ID = "kothapad_persistent_channel"
+    const val PERSISTENT_CHANNEL_NAME = "Active App & Background Reminder"
+    const val PERSISTENT_NOTIFICATION_ID = 9999
 
     const val EXTRA_REMINDER_ID = "extra_reminder_id"
     const val EXTRA_REMINDER_TEXT = "extra_reminder_text"
@@ -247,6 +252,90 @@ object ReminderScheduler {
 
         nm.notify(reminderId.hashCode(), builder.build())
     }
+
+    fun ensurePersistentNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+            val channel = NotificationChannel(
+                PERSISTENT_CHANNEL_ID,
+                PERSISTENT_CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Shows an ongoing reminder and indicator when KothaPad is running"
+                setShowBadge(false)
+            }
+            nm.createNotificationChannel(channel)
+        }
+    }
+
+    fun updatePersistentNotification(context: Context, enabled: Boolean, message: String = "") {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        if (!enabled) {
+            nm.cancel(PERSISTENT_NOTIFICATION_ID)
+            return
+        }
+
+        ensurePersistentNotificationChannel(context)
+
+        val contentIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val contentPendingIntent = PendingIntent.getActivity(
+            context,
+            1001,
+            contentIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Action: "+ Journal Today"
+        val plusIntent = Intent(context, MainActivity::class.java).apply {
+            action = ACTION_PLUS_CLICK
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val plusPendingIntent = PendingIntent.getActivity(
+            context,
+            1002,
+            plusIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val plusAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_input_add,
+            "+ Journal Today",
+            plusPendingIntent
+        ).build()
+
+        // Action: "Exit"
+        val exitIntent = Intent(context, ReminderReceiver::class.java).apply {
+            action = ACTION_EXIT_APP
+        }
+        val exitPendingIntent = PendingIntent.getBroadcast(
+            context,
+            1003,
+            exitIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val exitAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_menu_close_clear_cancel,
+            "Exit",
+            exitPendingIntent
+        ).build()
+
+        val text = message.ifBlank { "Did I forget to journal today?" }
+
+        val builder = NotificationCompat.Builder(context, PERSISTENT_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("KothaPad • Active")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().setBigContentTitle("KothaPad • Active").bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(contentPendingIntent)
+            .addAction(plusAction)
+            .addAction(exitAction)
+
+        nm.notify(PERSISTENT_NOTIFICATION_ID, builder.build())
+    }
 }
 
 /**
@@ -277,6 +366,11 @@ class ReminderReceiver : BroadcastReceiver() {
 
             ReminderScheduler.ACTION_DISMISS_NOTIFICATION -> {
                 ScreenOverlayManager.removeOverlay()
+            }
+
+            ReminderScheduler.ACTION_EXIT_APP -> {
+                ReminderScheduler.updatePersistentNotification(context, false)
+                KothaPadApp.exitAppCompletely()
             }
 
             ReminderScheduler.ACTION_TRIGGER_REMINDER -> {

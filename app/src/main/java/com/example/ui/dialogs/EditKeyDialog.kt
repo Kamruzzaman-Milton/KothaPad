@@ -92,7 +92,8 @@ fun EditKeyDialog(
             KeyActionType.REDO to "Redo",
             KeyActionType.SELECT_ALL to "Select All",
             KeyActionType.PASTE to "Paste",
-            KeyActionType.TOGGLE_SYSTEM_KEYBOARD to "Toggle System Keyboard"
+            KeyActionType.TOGGLE_SYSTEM_KEYBOARD to "Toggle System Keyboard",
+            KeyActionType.EXIT to "Exit App"
         )
     }
 
@@ -190,6 +191,8 @@ fun EditKeyDialog(
                                         selectedAction = action
                                         if (action == KeyActionType.TOGGLE_EDIT_MODE && (label.isBlank() || label == " ")) {
                                             label = "✎"
+                                        } else if (action == KeyActionType.EXIT && (label.isBlank() || label == " ")) {
+                                            label = "Exit"
                                         }
                                         actionDropdownExpanded = false
                                     }

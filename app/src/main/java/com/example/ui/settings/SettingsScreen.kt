@@ -334,6 +334,7 @@ fun SettingsScreen(
     onWaveformScaleChange: (Float) -> Unit = {},
     onWaveformShowChange: (Boolean) -> Unit = {},
     onReadingNavBottomOffsetChange: (Int) -> Unit = {},
+    onReadingNavButtonSizeChange: (Int) -> Unit = {},
     onResetFloatingLayout: () -> Unit = {},
     // Backup & Restore Callbacks
     onExportBackup: (Uri, (Result<BackupSummary>) -> Unit) -> Unit = { _, _ -> },
@@ -380,6 +381,10 @@ fun SettingsScreen(
     onToggleScheduledReminderEnabled: (String, Boolean) -> Unit = { _, _ -> },
     onUpdateFloatingNotificationConfig: (FloatingNotificationConfig) -> Unit = {},
     onPreviewFloatingNotification: (ScheduledReminder) -> Unit = {},
+    defaultReminderMessage: String = "Did I forget to journal today?",
+    onDefaultReminderMessageChange: (String) -> Unit = {},
+    persistentNotificationEnabled: Boolean = false,
+    onPersistentNotificationEnabledChange: (Boolean) -> Unit = {},
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -387,6 +392,19 @@ fun SettingsScreen(
 
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var lifecycleResumeCount by remember { mutableIntStateOf(0) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                lifecycleResumeCount++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
     var showExportDialog by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
     var importJsonText by remember { mutableStateOf("") }
@@ -1151,9 +1169,19 @@ fun SettingsScreen(
                         onCheckedChange = onWaveformShowChange
                     ),
                     SettingItem.Slider(
+                        id = "reading_nav_button_size",
+                        title = "Reading Floating Buttons: Size",
+                        subtitle = "Adjust size of Previous, Toggle, Next, and Exit buttons",
+                        value = floatingLayoutSettings.readingNavButtonSizeDp.toFloat(),
+                        valueRange = 28f..80f,
+                        steps = 52,
+                        displayValue = "${floatingLayoutSettings.readingNavButtonSizeDp} dp",
+                        onValueChange = { onReadingNavButtonSizeChange(it.toInt()) }
+                    ),
+                    SettingItem.Slider(
                         id = "reading_nav_bottom_offset",
-                        title = "Reading Nav Buttons: Bottom Offset",
-                        subtitle = "Adjust vertical position of Previous, Toggle, and Next buttons",
+                        title = "Reading Floating Buttons: Bottom Offset",
+                        subtitle = "Adjust vertical position of Previous, Toggle, Next, and Exit buttons",
                         value = floatingLayoutSettings.readingNavBottomOffsetDp.toFloat(),
                         valueRange = 0f..200f,
                         steps = 40,
@@ -1671,6 +1699,60 @@ fun SettingsScreen(
                 subtitle = "Unlimited daily alarms, custom text, system & floating popup modes",
                 icon = Icons.Outlined.Notifications,
                 items = listOf(
+                    SettingItem.Switch(
+                        id = "persistent_notification_toggle",
+                        title = "Persistent Background Notification",
+                        subtitle = "Displays an ongoing indicator in the status bar so you can be sure when KothaPad is active in the background versus completely closed",
+                        checked = persistentNotificationEnabled,
+                        onCheckedChange = onPersistentNotificationEnabledChange
+                    ),
+                    SettingItem.CustomContent(
+                        id = "default_reminder_message_item",
+                        content = {
+                            var currentMsg by remember(defaultReminderMessage) { mutableStateOf(defaultReminderMessage) }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Default Notification Message",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Automatically used whenever you create a new reminder so you don't have to repeatedly re-enter it",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                OutlinedTextField(
+                                    value = currentMsg,
+                                    onValueChange = {
+                                        currentMsg = it
+                                        onDefaultReminderMessageChange(it)
+                                    },
+                                    label = { Text("Default Message") },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("default_reminder_message_field"),
+                                    singleLine = false,
+                                    maxLines = 3,
+                                    trailingIcon = {
+                                        if (currentMsg != "Did I forget to journal today?") {
+                                            TextButton(onClick = {
+                                                currentMsg = "Did I forget to journal today?"
+                                                onDefaultReminderMessageChange("Did I forget to journal today?")
+                                            }) {
+                                                Text("Reset")
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    ),
                     SettingItem.CustomContent(
                         id = "scheduled_reminders_list",
                         content = {
@@ -1867,7 +1949,9 @@ fun SettingsScreen(
                     SettingItem.CustomContent(
                         id = "floating_permissions_guide",
                         content = {
-                            val isOverlayGranted = com.example.notification.XiaomiOverlayHelper.canDrawOverlays(context)
+                            val isOverlayGranted = remember(lifecycleResumeCount) {
+                                com.example.notification.XiaomiOverlayHelper.canDrawOverlays(context)
+                            }
                             val isXiaomi = com.example.notification.XiaomiOverlayHelper.isXiaomiOrMiui()
 
                             Surface(
@@ -1899,12 +1983,28 @@ fun SettingsScreen(
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlinedButton(
-                                            onClick = {
-                                                com.example.notification.XiaomiOverlayHelper.openOverlaySettings(context)
+                                        if (isOverlayGranted) {
+                                            Button(
+                                                onClick = {
+                                                    com.example.notification.XiaomiOverlayHelper.openOverlaySettings(context)
+                                                },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = Color(0xFF2E7D32),
+                                                    contentColor = Color.White
+                                                ),
+                                                modifier = Modifier.testTag("overlay_permission_button")
+                                            ) {
+                                                Text("✓ Overlay Permission Granted", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                             }
-                                        ) {
-                                            Text(if (isOverlayGranted) "Manage Overlay" else "Grant Overlay Permission", fontSize = 12.sp)
+                                        } else {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    com.example.notification.XiaomiOverlayHelper.openOverlaySettings(context)
+                                                },
+                                                modifier = Modifier.testTag("overlay_permission_button")
+                                            ) {
+                                                Text("Grant Overlay Permission", fontSize = 12.sp)
+                                            }
                                         }
 
                                         if (isXiaomi) {
@@ -2146,13 +2246,39 @@ fun SettingsScreen(
                 )
             ),
 
-            // Automatic Backup Section (collapsed by default)
+            // Unified Backup Section (Consolidated Manual & Automatic Backup)
             SettingHeadlineSection(
-                id = "auto_backup_section",
-                title = "Automatic Backup",
-                subtitle = "Scheduled archives, retention limit & safety restore",
+                id = "backup_section",
+                title = "Backup",
+                subtitle = "Automatic scheduled archives, manual export/import & safety restore",
                 icon = Icons.Outlined.Backup,
                 items = buildList {
+                    // Manual Export / Import Actions
+                    add(
+                        SettingItem.ButtonRow(
+                            id = "manual_backup_actions",
+                            title = "Manual Backup & Restore",
+                            subtitle = "Export all notes, folders, templates & settings to a ZIP file, or restore from a backup",
+                            buttons = listOf(
+                                SettingButtonOption(
+                                    label = "Export Backup",
+                                    onClick = {
+                                        val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                                        exportLauncher.launch("KothaPad_backup_$dateStr.zip")
+                                    }
+                                ),
+                                SettingButtonOption(
+                                    label = "Import Backup",
+                                    isDestructive = true,
+                                    onClick = {
+                                        importLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+                                    }
+                                )
+                            )
+                        )
+                    )
+
+                    // Automatic Backup Master Switch
                     add(
                         SettingItem.Switch(
                             id = "auto_backup_master",
@@ -2380,7 +2506,7 @@ fun SettingsScreen(
                     add(
                         SettingItem.ButtonRow(
                             id = "auto_backup_actions",
-                            title = "Backup Actions",
+                            title = "Automatic Backup Actions",
                             buttons = listOf(
                                 SettingButtonOption(
                                     label = if (isManualBackingUp) "Backing up..." else "Back up now",
@@ -2404,44 +2530,6 @@ fun SettingsScreen(
                         )
                     )
                 }
-            ),
-
-            // Backup & Restore Section
-            SettingHeadlineSection(
-                id = "backup_restore",
-                title = "Backup & Restore",
-                subtitle = "Export or replace all notes, folders, templates & app settings",
-                icon = Icons.Outlined.Backup,
-                items = listOf(
-                    SettingItem.ButtonRow(
-                        id = "export_backup_action",
-                        title = "Export Backup",
-                        subtitle = "Saves all notes, templates, folder tree & settings into a ZIP archive",
-                        buttons = listOf(
-                            SettingButtonOption(
-                                label = "Export Backup",
-                                onClick = {
-                                    val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-                                    exportLauncher.launch("KothaPad_backup_$dateStr.zip")
-                                }
-                            )
-                        )
-                    ),
-                    SettingItem.ButtonRow(
-                        id = "import_backup_action",
-                        title = "Import Backup (Replace mode)",
-                        subtitle = "Validates and restores notes, templates & settings from a ZIP backup",
-                        buttons = listOf(
-                            SettingButtonOption(
-                                label = "Import Backup",
-                                isDestructive = true,
-                                onClick = {
-                                    importLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
-                                }
-                            )
-                        )
-                    )
-                )
             ),
 
             // About Section
@@ -2793,7 +2881,9 @@ fun SettingsScreen(
                     id = "",
                     hour = selectedHour,
                     minute = selectedMinute,
-                    isEnabled = true
+                    isEnabled = true,
+                    defaultText = defaultReminderMessage,
+                    customText = defaultReminderMessage
                 )
                 isCreatingReminder = true
             },

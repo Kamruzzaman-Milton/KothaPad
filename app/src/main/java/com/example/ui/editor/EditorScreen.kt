@@ -59,6 +59,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.core.view.WindowCompat
@@ -324,25 +325,21 @@ fun EditorScreen(
         }
     }
 
-    // Immersive mode: hide navigation bars when in Reading Mode, restore on exit or pause/dispose
-    DisposableEffect(isReadingMode) {
-        val activity = context as? Activity
-        val window = activity?.window
-        if (window != null && isReadingMode) {
-            val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-            insetsController.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            insetsController.hide(WindowInsetsCompat.Type.navigationBars())
-        } else if (window != null) {
-            val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-            insetsController.show(WindowInsetsCompat.Type.navigationBars())
-        }
-        onDispose {
-            if (window != null) {
-                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-                insetsController.show(WindowInsetsCompat.Type.navigationBars())
+    val exitApp: () -> Unit = {
+        viewModel.flushAutoSave()
+        com.example.notification.ReminderScheduler.updatePersistentNotification(context, false)
+        var act: Activity? = context as? Activity
+        if (act == null && context is android.content.ContextWrapper) {
+            var currentContext: android.content.Context = context
+            while (currentContext is android.content.ContextWrapper) {
+                if (currentContext is Activity) {
+                    act = currentContext
+                    break
+                }
+                currentContext = currentContext.baseContext
             }
         }
+        act?.finishAffinity()
     }
 
 
@@ -532,7 +529,11 @@ fun EditorScreen(
                         holdBehavior = keyboardHoldBehavior,
                         isEditMode = keyboardEditMode,
                         onKeyAction = { key ->
-                            viewModel.onKeyboardKey(key)
+                            if (key.actionType == KeyActionType.EXIT) {
+                                exitApp()
+                            } else {
+                                viewModel.onKeyboardKey(key)
+                            }
                         },
                         onKeyEditRequest = { key ->
                             viewModel.editingKey.value = key
@@ -952,13 +953,19 @@ fun EditorScreen(
                 }
 
                 if (isReadingMode) {
-                    // Floating Navigation Cluster in Reading Mode: Previous Note, Mode Toggle, Next Note
+                    val navBtnSize = floatingLayoutSettings.readingNavButtonSizeDp.dp
+                    val navIconSize = (floatingLayoutSettings.readingNavButtonSizeDp * 20f / 44f).dp
+                    val navSpacing = (floatingLayoutSettings.readingNavButtonSizeDp * 18f / 44f).coerceIn(10f, 24f).dp
+
+
+
+                    // Floating Navigation Cluster in Reading Mode: Previous Note, Mode Toggle, Next Note, Exit
                     Row(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .windowInsetsPadding(WindowInsets.navigationBars)
                             .padding(bottom = floatingLayoutSettings.readingNavBottomOffsetDp.dp),
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(navSpacing),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Left floating button: Quickly open previous available note from earlier date
@@ -974,7 +981,7 @@ fun EditorScreen(
                                 )
                             ),
                             shadowElevation = if (hasPrevJournalEntry) 4.dp else 0.dp,
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(navBtnSize)
                         ) {
                             IconButton(
                                 onClick = {
@@ -993,12 +1000,12 @@ fun EditorScreen(
                                     tint = MaterialTheme.colorScheme.onSurface.copy(
                                         alpha = if (hasPrevJournalEntry) 0.8f else 0.25f
                                     ),
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(navIconSize)
                                 )
                             }
                         }
 
-                        // Center button: Toggle between reading and editing mode
+                        // Center-left button: Toggle between reading and editing mode
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
@@ -1007,7 +1014,7 @@ fun EditorScreen(
                                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
                             ),
                             shadowElevation = 4.dp,
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(navBtnSize)
                         ) {
                             IconButton(
                                 onClick = {
@@ -1021,12 +1028,12 @@ fun EditorScreen(
                                     imageVector = Icons.AutoMirrored.Filled.MenuBook,
                                     contentDescription = "Exit Reading Mode",
                                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(navIconSize)
                                 )
                             }
                         }
 
-                        // Right floating button: Quickly open next available note from later date
+                        // Center-right floating button: Quickly open next available note from later date
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.surface.copy(
@@ -1039,7 +1046,7 @@ fun EditorScreen(
                                 )
                             ),
                             shadowElevation = if (hasNextJournalEntry) 4.dp else 0.dp,
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(navBtnSize)
                         ) {
                             IconButton(
                                 onClick = {
@@ -1058,7 +1065,35 @@ fun EditorScreen(
                                     tint = MaterialTheme.colorScheme.onSurface.copy(
                                         alpha = if (hasNextJournalEntry) 0.8f else 0.25f
                                     ),
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(navIconSize)
+                                )
+                            }
+                        }
+
+                        // Most right floating button: Immediately close app
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                            ),
+                            shadowElevation = 4.dp,
+                            modifier = Modifier.size(navBtnSize)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    exitApp()
+                                },
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .testTag("exit_app_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                    contentDescription = "Exit",
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(navIconSize)
                                 )
                             }
                         }

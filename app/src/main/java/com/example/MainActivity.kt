@@ -9,11 +9,14 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
@@ -165,12 +168,38 @@ class MainActivity : ComponentActivity() {
                         val now = System.currentTimeMillis()
                         if (now - lastBackPressTime < 2000L) {
                             viewModel.flushAutoSave()
+                            com.example.notification.ReminderScheduler.updatePersistentNotification(this@MainActivity, false)
                             finishAffinity()
                         } else {
                             lastBackPressTime = now
                             Toast.makeText(this@MainActivity, "Press back again to exit", Toast.LENGTH_SHORT).show()
                         }
                     }
+                }
+            }
+
+            // Keyboard or action Exit App event handler
+            LaunchedEffect(Unit) {
+                viewModel.exitAppEvent.collect {
+                    viewModel.flushAutoSave()
+                    com.example.notification.ReminderScheduler.updatePersistentNotification(this@MainActivity, false)
+                    finishAffinity()
+                }
+            }
+
+            // Centralized Immersive Mode: strictly limited to Reading Mode in EditorScreen
+            // System navigation bar is automatically shown on all other screens (Settings, Calendar) and editing mode
+            val shouldBeImmersive = currentScreen == "EDITOR" && isReadingMode
+            DisposableEffect(shouldBeImmersive) {
+                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+                if (shouldBeImmersive) {
+                    insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    insetsController.hide(WindowInsetsCompat.Type.navigationBars())
+                } else {
+                    insetsController.show(WindowInsetsCompat.Type.navigationBars())
+                }
+                onDispose {
+                    insetsController.show(WindowInsetsCompat.Type.navigationBars())
                 }
             }
 
@@ -255,6 +284,8 @@ class MainActivity : ComponentActivity() {
                                 val autoBackupLastStatus by viewModel.autoBackupLastStatus.collectAsState()
                                 val scheduledReminders by viewModel.scheduledReminders.collectAsState()
                                 val floatingNotificationConfig by viewModel.floatingNotificationConfig.collectAsState()
+                                val defaultReminderMessage by viewModel.defaultReminderMessage.collectAsState()
+                                val persistentNotificationEnabled by viewModel.persistentNotificationEnabled.collectAsState()
 
                                 SettingsScreen(
                                     dictationMode = dictationMode,
@@ -380,6 +411,7 @@ class MainActivity : ComponentActivity() {
                                     onWaveformScaleChange = { viewModel.setWaveformScale(it) },
                                     onWaveformShowChange = { viewModel.setWaveformShow(it) },
                                     onReadingNavBottomOffsetChange = { viewModel.setReadingNavBottomOffsetDp(it) },
+                                    onReadingNavButtonSizeChange = { viewModel.setReadingNavButtonSizeDp(it) },
                                     onResetFloatingLayout = { viewModel.resetFloatingLayoutToDefaults() },
 
                                     templates = allStamps,
@@ -423,6 +455,10 @@ class MainActivity : ComponentActivity() {
                                     onToggleScheduledReminderEnabled = { id, en -> viewModel.toggleScheduledReminderEnabled(id, en) },
                                     onUpdateFloatingNotificationConfig = { viewModel.updateFloatingNotificationConfig(it) },
                                     onPreviewFloatingNotification = { viewModel.previewFloatingNotification(it) },
+                                    defaultReminderMessage = defaultReminderMessage,
+                                    onDefaultReminderMessageChange = { viewModel.setDefaultReminderMessage(it) },
+                                    persistentNotificationEnabled = persistentNotificationEnabled,
+                                    onPersistentNotificationEnabledChange = { viewModel.setPersistentNotificationEnabled(it) },
                                     onBackClick = { viewModel.navigateTo("EDITOR") }
                                 )
                             }
@@ -550,5 +586,8 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         (application as? KothaPadApp)?.speechSupervisor?.restoreCrashSafetyMute()
+        if (isFinishing) {
+            com.example.notification.ReminderScheduler.updatePersistentNotification(this, false)
+        }
     }
 }

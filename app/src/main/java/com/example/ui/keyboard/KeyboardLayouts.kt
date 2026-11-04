@@ -20,8 +20,8 @@ object KeyboardLayouts {
             KeyboardKey(id = "k_0_4", label = "।", actionType = KeyActionType.INSERT, outputText = "।", smartSpacing = true, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
             KeyboardKey(id = "k_0_5", label = ",", actionType = KeyActionType.INSERT, outputText = ",", smartSpacing = true, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
             KeyboardKey(id = "k_0_6", label = "?", actionType = KeyActionType.INSERT, outputText = "?", smartSpacing = true, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
-            KeyboardKey(id = "k_0_7", label = ".", actionType = KeyActionType.INSERT, outputText = ".", smartSpacing = true, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
-            KeyboardKey(id = "k_0_8", label = "⌫", actionType = KeyActionType.BACKSPACE, outputText = null, smartSpacing = false, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
+            KeyboardKey(id = "k_0_7", label = "⌫", actionType = KeyActionType.BACKSPACE, outputText = null, smartSpacing = false, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
+            KeyboardKey(id = "k_0_8", label = "Exit", actionType = KeyActionType.EXIT, outputText = null, smartSpacing = false, dateFormat = null, timeFormat = null),
             KeyboardKey(id = "k_0_9", label = "✎", actionType = KeyActionType.TOGGLE_EDIT_MODE, outputText = null, smartSpacing = false, dateFormat = null, timeFormat = null)
         )
 
@@ -39,13 +39,13 @@ object KeyboardLayouts {
             KeyboardKey(id = "k_1_9", label = "🌐", actionType = KeyActionType.CHANGE_LANGUAGE, outputText = null, smartSpacing = false, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a")
         )
 
-        // Row 3: -, (, ),  ,  , ই, ও, ঁ, হ, ␣
+        // Row 3: -, (, ),  , ., ই, ও, ঁ, হ, ␣
         val row3 = listOf(
             KeyboardKey(id = "k_2_0", label = "-", actionType = KeyActionType.INSERT, outputText = "-", smartSpacing = false, dateFormat = null, timeFormat = null),
             KeyboardKey(id = "k_2_1", label = "(", actionType = KeyActionType.INSERT, outputText = "(", smartSpacing = false, dateFormat = null, timeFormat = null),
             KeyboardKey(id = "k_2_2", label = ")", actionType = KeyActionType.INSERT, outputText = ")", smartSpacing = false, dateFormat = null, timeFormat = null),
             KeyboardKey(id = "k_2_3", label = " ", actionType = KeyActionType.INSERT, outputText = " ", smartSpacing = false, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
-            KeyboardKey(id = "k_2_4", label = " ", actionType = KeyActionType.INSERT, outputText = " ", smartSpacing = false, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
+            KeyboardKey(id = "k_2_4", label = ".", actionType = KeyActionType.INSERT, outputText = ".", smartSpacing = true, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
             KeyboardKey(id = "k_2_5", label = "ই", actionType = KeyActionType.INSERT, outputText = "ই", smartSpacing = true, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
             KeyboardKey(id = "k_2_6", label = "ও", actionType = KeyActionType.INSERT, outputText = "ও", smartSpacing = true, dateFormat = "dd MMM yyyy", timeFormat = "hh:mm a"),
             KeyboardKey(id = "k_2_7", label = "ঁ", actionType = KeyActionType.INSERT, outputText = "ঁ", smartSpacing = false, dateFormat = null, timeFormat = null),

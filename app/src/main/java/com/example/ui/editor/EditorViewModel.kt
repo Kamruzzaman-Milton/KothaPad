@@ -363,6 +363,26 @@ class EditorViewModel(
         com.example.notification.ReminderScheduler.showFloatingReminder(reminder)
     }
 
+    val defaultReminderMessage: StateFlow<String> = preferencesManager.defaultReminderMessage
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Did I forget to journal today?")
+
+    fun setDefaultReminderMessage(message: String) {
+        viewModelScope.launch {
+            preferencesManager.setDefaultReminderMessage(message)
+        }
+    }
+
+    val persistentNotificationEnabled: StateFlow<Boolean> = preferencesManager.persistentNotificationEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    fun setPersistentNotificationEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setPersistentNotificationEnabled(enabled)
+        }
+    }
+
+    val exitAppEvent = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
     // UI state
     // userWantsBuiltIn reflects the toggle in the toolbar / settings
     private val _userWantsBuiltInKeyboard = MutableStateFlow(true)
@@ -415,9 +435,9 @@ class EditorViewModel(
         // Load persisted keyboard layout from DataStore
         viewModelScope.launch {
             val v = preferencesManager.keyboardLayoutVersion.first()
-            if (v < 2) {
+            if (v < 3) {
                 preferencesManager.setKeyboardLayoutJson(null)
-                preferencesManager.setKeyboardLayoutVersion(2)
+                preferencesManager.setKeyboardLayoutVersion(3)
                 _keyboardLayout.value = KeyboardLayouts.getDefault3x10Layout()
             }
             preferencesManager.keyboardLayoutJson.collect { jsonStr ->
@@ -522,6 +542,14 @@ class EditorViewModel(
             val list = com.example.data.model.ScheduledReminder.listFromJson(json)
             if (list.isNotEmpty()) {
                 com.example.notification.ReminderScheduler.rescheduleAll(getApplication(), list)
+            }
+        }
+
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(persistentNotificationEnabled, defaultReminderMessage) { enabled, msg ->
+                Pair(enabled, msg)
+            }.collect { (enabled, msg) ->
+                com.example.notification.ReminderScheduler.updatePersistentNotification(getApplication(), enabled, msg)
             }
         }
     }
@@ -870,6 +898,9 @@ class EditorViewModel(
             }
             KeyActionType.DISMISS_KEYBOARD -> {
                 _userWantsBuiltInKeyboard.value = false
+            }
+            KeyActionType.EXIT -> {
+                exitAppEvent.tryEmit(Unit)
             }
         }
     }
@@ -1938,6 +1969,7 @@ class EditorViewModel(
     fun setWaveformScale(scale: Float) = viewModelScope.launch { preferencesManager.setWaveformScale(scale) }
     fun setWaveformShow(show: Boolean) = viewModelScope.launch { preferencesManager.setWaveformShow(show) }
     fun setReadingNavBottomOffsetDp(offset: Int) = viewModelScope.launch { preferencesManager.setReadingNavBottomOffsetDp(offset) }
+    fun setReadingNavButtonSizeDp(sizeDp: Int) = viewModelScope.launch { preferencesManager.setReadingNavButtonSizeDp(sizeDp) }
     fun resetFloatingLayoutToDefaults() = viewModelScope.launch { preferencesManager.resetFloatingLayoutToDefaults() }
 
     // Notes Manager Settings Flows & Methods

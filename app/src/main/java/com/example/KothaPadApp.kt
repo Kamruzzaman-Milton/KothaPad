@@ -32,6 +32,7 @@ class KothaPadApp : Application() {
 
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: android.app.Activity) {
+                currentActivity = java.lang.ref.WeakReference(activity)
                 resumedActivityCount++
                 isActivityInForeground = true
             }
@@ -43,7 +44,9 @@ class KothaPadApp : Application() {
                 }
             }
 
-            override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) {}
+            override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) {
+                currentActivity = java.lang.ref.WeakReference(activity)
+            }
             override fun onActivityStarted(activity: android.app.Activity) {}
             override fun onActivityStopped(activity: android.app.Activity) {
                 if (resumedActivityCount == 0) {
@@ -52,6 +55,9 @@ class KothaPadApp : Application() {
             }
             override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: android.os.Bundle) {}
             override fun onActivityDestroyed(activity: android.app.Activity) {
+                if (currentActivity?.get() == activity) {
+                    currentActivity = null
+                }
                 if (resumedActivityCount == 0) {
                     isActivityInForeground = false
                 }
@@ -65,6 +71,15 @@ class KothaPadApp : Application() {
 
         @Volatile
         var isActivityInForeground: Boolean = false
+
+        @Volatile
+        var currentActivity: java.lang.ref.WeakReference<android.app.Activity>? = null
+
+        fun exitAppCompletely() {
+            try {
+                currentActivity?.get()?.finishAffinity()
+            } catch (_: Exception) {}
+        }
 
         /**
          * Authoritative check whether the user is actively using KothaPad in the foreground.

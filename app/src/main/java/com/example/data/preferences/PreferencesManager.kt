@@ -117,7 +117,8 @@ class PreferencesManager(private val context: Context) {
         val waveformScale: Float = 0f,
         val waveformShow: Boolean = false,
         val readingModeEnabled: Boolean = false,
-        val readingNavBottomOffsetDp: Int = 48
+        val readingNavBottomOffsetDp: Int = 48,
+        val readingNavButtonSizeDp: Int = 44
     )
 
     private val dummySettings = AppSettings()
@@ -254,6 +255,7 @@ class PreferencesManager(private val context: Context) {
         val KEY_WAVEFORM_SCALE = floatPreferencesKey("waveform_scale")
         val KEY_WAVEFORM_SHOW = booleanPreferencesKey("waveform_show")
         val KEY_READING_NAV_BOTTOM_OFFSET_DP = intPreferencesKey("reading_nav_bottom_offset_dp")
+        val KEY_READING_NAV_BUTTON_SIZE_DP = intPreferencesKey("reading_nav_button_size_dp")
 
         // Automatic Backup Keys
         val KEY_AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")
@@ -273,6 +275,8 @@ class PreferencesManager(private val context: Context) {
         // Notification & Reminder Settings Keys
         val KEY_SCHEDULED_REMINDERS_JSON = stringPreferencesKey("scheduled_reminders_json")
         val KEY_FLOATING_NOTIFICATION_CONFIG_JSON = stringPreferencesKey("floating_notification_config_json")
+        val KEY_DEFAULT_REMINDER_MESSAGE = stringPreferencesKey("default_reminder_message")
+        val KEY_PERSISTENT_NOTIFICATION_ENABLED = booleanPreferencesKey("persistent_notification_enabled")
 
         val KNOWN_PREF_TYPES: Map<String, PrefType> = mapOf(
             KEY_DICTATION_MODE.name to PrefType.STRING,
@@ -391,6 +395,7 @@ class PreferencesManager(private val context: Context) {
             KEY_WAVEFORM_SCALE.name to PrefType.FLOAT,
             KEY_WAVEFORM_SHOW.name to PrefType.BOOLEAN,
             KEY_READING_NAV_BOTTOM_OFFSET_DP.name to PrefType.INT,
+            KEY_READING_NAV_BUTTON_SIZE_DP.name to PrefType.INT,
             KEY_AUTO_BACKUP_ENABLED.name to PrefType.BOOLEAN,
             KEY_AUTO_BACKUP_SCHEDULE.name to PrefType.STRING,
             KEY_AUTO_BACKUP_CUSTOM_VALUE.name to PrefType.INT,
@@ -405,7 +410,9 @@ class PreferencesManager(private val context: Context) {
             KEY_AUTO_BACKUP_LAST_STATUS.name to PrefType.STRING,
             KEY_AUTO_BACKUP_LAST_HASH.name to PrefType.STRING,
             KEY_SCHEDULED_REMINDERS_JSON.name to PrefType.STRING,
-            KEY_FLOATING_NOTIFICATION_CONFIG_JSON.name to PrefType.STRING
+            KEY_FLOATING_NOTIFICATION_CONFIG_JSON.name to PrefType.STRING,
+            KEY_DEFAULT_REMINDER_MESSAGE.name to PrefType.STRING,
+            KEY_PERSISTENT_NOTIFICATION_ENABLED.name to PrefType.BOOLEAN
         )
 
         val KNOWN_SYNC_PREF_TYPES: Map<String, PrefType> = mapOf(
@@ -641,6 +648,22 @@ class PreferencesManager(private val context: Context) {
         } else {
             it.remove(KEY_FLOATING_NOTIFICATION_CONFIG_JSON)
         }
+    }
+
+    val defaultReminderMessage: Flow<String> = context.dataStore.data.map {
+        it[KEY_DEFAULT_REMINDER_MESSAGE] ?: "Did I forget to journal today?"
+    }
+
+    suspend fun setDefaultReminderMessage(message: String) = context.dataStore.edit {
+        it[KEY_DEFAULT_REMINDER_MESSAGE] = message
+    }
+
+    val persistentNotificationEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_PERSISTENT_NOTIFICATION_ENABLED] ?: false
+    }
+
+    suspend fun setPersistentNotificationEnabled(enabled: Boolean) = context.dataStore.edit {
+        it[KEY_PERSISTENT_NOTIFICATION_ENABLED] = enabled
     }
 
     suspend fun setNoteSortOption(option: String) {
@@ -1058,7 +1081,8 @@ class PreferencesManager(private val context: Context) {
             formatBarVisibleWithoutCursor = prefs[KEY_FORMAT_BAR_VISIBLE_WITHOUT_CURSOR] ?: true,
             waveformScale = prefs[KEY_WAVEFORM_SCALE] ?: 1.0f,
             showWaveform = prefs[KEY_WAVEFORM_SHOW] ?: true,
-            readingNavBottomOffsetDp = prefs[KEY_READING_NAV_BOTTOM_OFFSET_DP] ?: 48
+            readingNavBottomOffsetDp = prefs[KEY_READING_NAV_BOTTOM_OFFSET_DP] ?: 48,
+            readingNavButtonSizeDp = prefs[KEY_READING_NAV_BUTTON_SIZE_DP] ?: 44
         )
     }
 
@@ -1138,6 +1162,10 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { it[KEY_READING_NAV_BOTTOM_OFFSET_DP] = offsetDp }
         notifyRepo { it.copy(readingNavBottomOffsetDp = offsetDp) }
     }
+    suspend fun setReadingNavButtonSizeDp(sizeDp: Int) {
+        context.dataStore.edit { it[KEY_READING_NAV_BUTTON_SIZE_DP] = sizeDp }
+        notifyRepo { it.copy(readingNavButtonSizeDp = sizeDp) }
+    }
 
     suspend fun resetFloatingLayoutToDefaults() {
         val defaults = com.example.data.model.FloatingLayoutSettings()
@@ -1161,6 +1189,7 @@ class PreferencesManager(private val context: Context) {
             prefs[KEY_WAVEFORM_SCALE] = defaults.waveformScale
             prefs[KEY_WAVEFORM_SHOW] = defaults.showWaveform
             prefs[KEY_READING_NAV_BOTTOM_OFFSET_DP] = defaults.readingNavBottomOffsetDp
+            prefs[KEY_READING_NAV_BUTTON_SIZE_DP] = defaults.readingNavButtonSizeDp
         }
         notifyRepo {
             it.copy(
@@ -1182,7 +1211,8 @@ class PreferencesManager(private val context: Context) {
                 formatBarVisibleWithoutCursor = defaults.formatBarVisibleWithoutCursor,
                 waveformScale = defaults.waveformScale,
                 waveformShow = defaults.showWaveform,
-                readingNavBottomOffsetDp = defaults.readingNavBottomOffsetDp
+                readingNavBottomOffsetDp = defaults.readingNavBottomOffsetDp,
+                readingNavButtonSizeDp = defaults.readingNavButtonSizeDp
             )
         }
     }

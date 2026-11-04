@@ -24,7 +24,8 @@ enum class KeyActionType {
     TOGGLE_SYSTEM_KEYBOARD,
     SWITCH_LAYOUT,
     DISMISS_KEYBOARD,
-    TOGGLE_EDIT_MODE
+    TOGGLE_EDIT_MODE,
+    EXIT
 }
 
 data class KeyboardKey(
