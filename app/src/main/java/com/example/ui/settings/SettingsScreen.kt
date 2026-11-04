@@ -1786,7 +1786,8 @@ fun SettingsScreen(
                                                                 context,
                                                                 rem.id,
                                                                 rem.getEffectiveText(),
-                                                                rem.formattedTime()
+                                                                rem.formattedTime(),
+                                                                com.example.notification.ReminderScheduler.calculateNextTriggerTime(rem)
                                                             )
                                                         }
                                                     }
@@ -1841,11 +1842,10 @@ fun SettingsScreen(
                                     if (firstRem != null) {
                                         firstRem
                                     } else {
-                                        val now = java.util.Calendar.getInstance()
                                         ScheduledReminder(
                                             id = "sample_preview",
-                                            hour = now.get(java.util.Calendar.HOUR_OF_DAY),
-                                            minute = now.get(java.util.Calendar.MINUTE),
+                                            hour = 9,
+                                            minute = 0,
                                             customText = "Did I forget to journal today?",
                                             useCustomText = false
                                         )

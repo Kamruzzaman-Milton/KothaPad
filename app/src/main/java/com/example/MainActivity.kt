@@ -525,11 +525,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        KothaPadApp.isActivityInForeground = true
+        com.example.notification.ScreenOverlayManager.removeOverlay()
         viewModel.onAppForegroundStateChanged(true)
     }
 
     override fun onPause() {
         super.onPause()
+        KothaPadApp.isActivityInForeground = false
         window?.let {
             WindowCompat.getInsetsController(it, it.decorView).show(WindowInsetsCompat.Type.navigationBars())
         }
@@ -539,6 +542,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
+        KothaPadApp.isActivityInForeground = false
         viewModel.onAppForegroundStateChanged(false)
         viewModel.flushAutoSave()
     }

@@ -44,6 +44,19 @@ object ScreenOverlayManager {
     private val handler = Handler(Looper.getMainLooper())
     private var autoDismissRunnable: Runnable? = null
 
+    suspend fun showOverlayDirect(context: Context, reminderId: String, text: String, timeStr: String = "") {
+        val appContext = context.applicationContext
+        try {
+            val prefManager = PreferencesManager(appContext)
+            val configJson = prefManager.floatingNotificationConfigJson.first()
+            val config = FloatingNotificationConfig.fromJson(configJson)
+            displayOverlay(appContext, reminderId, text, timeStr, config)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in showOverlayDirect", e)
+            displayOverlay(appContext, reminderId, text, timeStr, FloatingNotificationConfig())
+        }
+    }
+
     fun showOverlay(context: Context, reminderId: String, text: String, timeStr: String = "") {
         val appContext = context.applicationContext
 
@@ -53,10 +66,7 @@ object ScreenOverlayManager {
         }
 
         CoroutineScope(Dispatchers.Main).launch {
-            val prefManager = PreferencesManager(appContext)
-            val configJson = prefManager.floatingNotificationConfigJson.first()
-            val config = FloatingNotificationConfig.fromJson(configJson)
-            displayOverlay(appContext, reminderId, text, timeStr, config)
+            showOverlayDirect(appContext, reminderId, text, timeStr)
         }
     }
 

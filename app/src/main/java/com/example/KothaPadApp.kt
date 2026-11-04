@@ -32,26 +32,63 @@ class KothaPadApp : Application() {
 
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: android.app.Activity) {
-                resumedActivities++
+                resumedActivityCount++
+                isActivityInForeground = true
             }
 
             override fun onActivityPaused(activity: android.app.Activity) {
-                resumedActivities = (resumedActivities - 1).coerceAtLeast(0)
+                resumedActivityCount = (resumedActivityCount - 1).coerceAtLeast(0)
+                if (resumedActivityCount == 0) {
+                    isActivityInForeground = false
+                }
             }
 
             override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) {}
             override fun onActivityStarted(activity: android.app.Activity) {}
-            override fun onActivityStopped(activity: android.app.Activity) {}
+            override fun onActivityStopped(activity: android.app.Activity) {
+                if (resumedActivityCount == 0) {
+                    isActivityInForeground = false
+                }
+            }
             override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: android.os.Bundle) {}
-            override fun onActivityDestroyed(activity: android.app.Activity) {}
+            override fun onActivityDestroyed(activity: android.app.Activity) {
+                if (resumedActivityCount == 0) {
+                    isActivityInForeground = false
+                }
+            }
         })
     }
 
     companion object {
         @Volatile
-        private var resumedActivities = 0
+        private var resumedActivityCount = 0
+
+        @Volatile
+        var isActivityInForeground: Boolean = false
+
+        /**
+         * Authoritative check whether the user is actively using KothaPad in the foreground.
+         * Combines OS process memory state with activity lifecycle tracking.
+         * Returns false whenever the app is minimized, running in background, or closed.
+         */
+        fun isAppActivelyInForeground(context: android.content.Context): Boolean {
+            // First check OS-level process importance (instant synchronous query without IPC)
+            val appProcessInfo = android.app.ActivityManager.RunningAppProcessInfo()
+            try {
+                android.app.ActivityManager.getMyMemoryState(appProcessInfo)
+                // If process importance is NOT IMPORTANCE_FOREGROUND (100), the app is 100% in background / minimized / cached
+                if (appProcessInfo.importance != android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) {
+                    return false
+                }
+            } catch (_: Exception) {
+                // Ignore and fall back to activity tracker
+            }
+
+            // If OS reports foreground, also confirm our Activity is actually resumed and visible on screen
+            return isActivityInForeground && resumedActivityCount > 0
+        }
 
         val isAppInForeground: Boolean
-            get() = resumedActivities > 0
+            get() = isActivityInForeground && resumedActivityCount > 0
     }
 }
