@@ -28,6 +28,37 @@ if (!rootEnv.exists()) {
   }
 }
 
+// Auto-restore debug.keystore.base64 and debug.keystore from SIGNING_KEY_BACKUP.txt
+val backupKeyFile = file("${rootDir}/SIGNING_KEY_BACKUP.txt")
+val base64KeyFile = file("${rootDir}/debug.keystore.base64")
+val keystoreFile = file("${rootDir}/debug.keystore")
+
+if (backupKeyFile.exists() && (!base64KeyFile.exists() || !keystoreFile.exists())) {
+  try {
+    val backupLines = backupKeyFile.readLines()
+    val keyLine = backupLines.firstOrNull { it.startsWith("MIIK") }
+    if (keyLine != null && keyLine.isNotBlank()) {
+      val trimmed = keyLine.trim()
+      if (!base64KeyFile.exists()) {
+        base64KeyFile.writeText(trimmed)
+        println("[AutoRestore] Restored debug.keystore.base64 from backup")
+      }
+      if (!keystoreFile.exists()) {
+        val decoderClass = Class.forName("java.util.Base64")
+        val getDecoderMethod = decoderClass.getMethod("getDecoder")
+        val decoder = getDecoderMethod.invoke(null)
+        val decodeMethod = decoder.javaClass.getMethod("decode", String::class.java)
+        val decodedBytes = decodeMethod.invoke(decoder, trimmed) as ByteArray
+        keystoreFile.writeBytes(decodedBytes)
+        println("[AutoRestore] Restored debug.keystore directly from backup")
+      }
+    }
+  } catch (e: Exception) {
+    println("[AutoRestore] Warning: Failed to restore keystore: ${e.message}")
+  }
+}
+
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
