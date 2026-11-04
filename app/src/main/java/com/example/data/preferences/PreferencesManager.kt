@@ -270,6 +270,10 @@ class PreferencesManager(private val context: Context) {
         val KEY_AUTO_BACKUP_LAST_STATUS = stringPreferencesKey("auto_backup_last_status")
         val KEY_AUTO_BACKUP_LAST_HASH = stringPreferencesKey("auto_backup_last_hash")
 
+        // Notification & Reminder Settings Keys
+        val KEY_SCHEDULED_REMINDERS_JSON = stringPreferencesKey("scheduled_reminders_json")
+        val KEY_FLOATING_NOTIFICATION_CONFIG_JSON = stringPreferencesKey("floating_notification_config_json")
+
         val KNOWN_PREF_TYPES: Map<String, PrefType> = mapOf(
             KEY_DICTATION_MODE.name to PrefType.STRING,
             KEY_TIMED_MINUTES.name to PrefType.INT,
@@ -399,7 +403,9 @@ class PreferencesManager(private val context: Context) {
             KEY_AUTO_BACKUP_LAST_TIME.name to PrefType.LONG,
             KEY_AUTO_BACKUP_LAST_SIZE.name to PrefType.LONG,
             KEY_AUTO_BACKUP_LAST_STATUS.name to PrefType.STRING,
-            KEY_AUTO_BACKUP_LAST_HASH.name to PrefType.STRING
+            KEY_AUTO_BACKUP_LAST_HASH.name to PrefType.STRING,
+            KEY_SCHEDULED_REMINDERS_JSON.name to PrefType.STRING,
+            KEY_FLOATING_NOTIFICATION_CONFIG_JSON.name to PrefType.STRING
         )
 
         val KNOWN_SYNC_PREF_TYPES: Map<String, PrefType> = mapOf(
@@ -614,6 +620,26 @@ class PreferencesManager(private val context: Context) {
         it[KEY_AUTO_BACKUP_LAST_STATUS] = status
         if (hash != null) {
             it[KEY_AUTO_BACKUP_LAST_HASH] = hash
+        }
+    }
+
+    // Scheduled Reminders & Floating Notifications Flows
+    val scheduledRemindersJson: Flow<String?> = context.dataStore.data.map { it[KEY_SCHEDULED_REMINDERS_JSON] }
+    val floatingNotificationConfigJson: Flow<String?> = context.dataStore.data.map { it[KEY_FLOATING_NOTIFICATION_CONFIG_JSON] }
+
+    suspend fun setScheduledRemindersJson(json: String?) = context.dataStore.edit {
+        if (json != null) {
+            it[KEY_SCHEDULED_REMINDERS_JSON] = json
+        } else {
+            it.remove(KEY_SCHEDULED_REMINDERS_JSON)
+        }
+    }
+
+    suspend fun setFloatingNotificationConfigJson(json: String?) = context.dataStore.edit {
+        if (json != null) {
+            it[KEY_FLOATING_NOTIFICATION_CONFIG_JSON] = json
+        } else {
+            it.remove(KEY_FLOATING_NOTIFICATION_CONFIG_JSON)
         }
     }
 

@@ -16,6 +16,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,6 +77,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        handleNotificationIntent(intent)
 
         setContent {
             val appTheme by viewModel.appTheme.collectAsState()
@@ -249,6 +253,8 @@ class MainActivity : ComponentActivity() {
                                 val autoBackupLastTime by viewModel.autoBackupLastTime.collectAsState()
                                 val autoBackupLastSize by viewModel.autoBackupLastSize.collectAsState()
                                 val autoBackupLastStatus by viewModel.autoBackupLastStatus.collectAsState()
+                                val scheduledReminders by viewModel.scheduledReminders.collectAsState()
+                                val floatingNotificationConfig by viewModel.floatingNotificationConfig.collectAsState()
 
                                 SettingsScreen(
                                     dictationMode = dictationMode,
@@ -410,6 +416,13 @@ class MainActivity : ComponentActivity() {
                                     onAutoBackupSkipLowStorageChange = { viewModel.setAutoBackupSkipLowStorage(it) },
                                     onTriggerManualAutoBackup = { cb -> viewModel.triggerManualAutoBackup(cb) },
                                     onViewAutoBackupsClick = { viewModel.navigateTo("AUTO_BACKUP_RESTORE") },
+                                    scheduledReminders = scheduledReminders,
+                                    floatingNotificationConfig = floatingNotificationConfig,
+                                    onSaveScheduledReminder = { viewModel.saveScheduledReminder(it) },
+                                    onDeleteScheduledReminder = { viewModel.deleteScheduledReminder(it) },
+                                    onToggleScheduledReminderEnabled = { id, en -> viewModel.toggleScheduledReminderEnabled(id, en) },
+                                    onUpdateFloatingNotificationConfig = { viewModel.updateFloatingNotificationConfig(it) },
+                                    onPreviewFloatingNotification = { viewModel.previewFloatingNotification(it) },
                                     onBackClick = { viewModel.navigateTo("EDITOR") }
                                 )
                             }
@@ -469,9 +482,44 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
+                        // Floating Notification Overlay Banner with dedicated PLUS (+) button
+                        val activeFloatingReminder by viewModel.activeFloatingReminder.collectAsState()
+                        val floatingConfig by viewModel.floatingNotificationConfig.collectAsState()
+
+                        AnimatedVisibility(
+                            visible = activeFloatingReminder != null,
+                            enter = slideInVertically(tween(250, easing = FastOutSlowInEasing)) { -it } + fadeIn(tween(200)),
+                            exit = slideOutVertically(tween(200, easing = FastOutSlowInEasing)) { -it } + fadeOut(tween(150))
+                        ) {
+                            com.example.ui.editor.FloatingNotificationBanner(
+                                reminder = activeFloatingReminder,
+                                config = floatingConfig,
+                                onTodayPlusClick = {
+                                    viewModel.dismissFloatingReminder()
+                                    viewModel.handleDailyJournalTodayFabClick()
+                                },
+                                onDismiss = {
+                                    viewModel.dismissFloatingReminder()
+                                }
+                            )
+                        }
+
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: android.content.Intent?) {
+        if (intent == null) return
+        if (intent.action == com.example.notification.ReminderScheduler.ACTION_PLUS_CLICK) {
+            viewModel.handleDailyJournalTodayFabClick()
         }
     }
 

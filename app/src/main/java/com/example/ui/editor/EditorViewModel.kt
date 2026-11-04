@@ -294,6 +294,75 @@ class EditorViewModel(
     val autoBackupLastStatus: StateFlow<String> = preferencesManager.autoBackupLastStatus
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
+    // Scheduled Reminders & Floating Notifications Flows
+    val scheduledReminders: StateFlow<List<com.example.data.model.ScheduledReminder>> = preferencesManager.scheduledRemindersJson
+        .map { com.example.data.model.ScheduledReminder.listFromJson(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val floatingNotificationConfig: StateFlow<com.example.data.model.FloatingNotificationConfig> = preferencesManager.floatingNotificationConfigJson
+        .map { com.example.data.model.FloatingNotificationConfig.fromJson(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.example.data.model.FloatingNotificationConfig())
+
+    // Active in-app floating reminder
+    val activeFloatingReminder: StateFlow<com.example.data.model.ScheduledReminder?> =
+        com.example.notification.ReminderScheduler.activeFloatingReminder
+
+    fun dismissFloatingReminder() {
+        com.example.notification.ReminderScheduler.dismissFloatingReminder()
+    }
+
+    fun saveScheduledReminder(reminder: com.example.data.model.ScheduledReminder) {
+        viewModelScope.launch {
+            val currentList = scheduledReminders.value.toMutableList()
+            val existingIndex = currentList.indexOfFirst { it.id == reminder.id }
+            if (existingIndex >= 0) {
+                currentList[existingIndex] = reminder
+            } else {
+                currentList.add(reminder)
+            }
+            val json = com.example.data.model.ScheduledReminder.listToJson(currentList)
+            preferencesManager.setScheduledRemindersJson(json)
+            com.example.notification.ReminderScheduler.rescheduleAll(getApplication(), currentList)
+        }
+    }
+
+    fun deleteScheduledReminder(reminderId: String) {
+        viewModelScope.launch {
+            val currentList = scheduledReminders.value.toMutableList()
+            val reminderToRemove = currentList.find { it.id == reminderId }
+            if (reminderToRemove != null) {
+                currentList.remove(reminderToRemove)
+                val json = com.example.data.model.ScheduledReminder.listToJson(currentList)
+                preferencesManager.setScheduledRemindersJson(json)
+                com.example.notification.ReminderScheduler.cancelSingle(getApplication(), reminderToRemove)
+            }
+        }
+    }
+
+    fun toggleScheduledReminderEnabled(reminderId: String, isEnabled: Boolean) {
+        viewModelScope.launch {
+            val currentList = scheduledReminders.value.toMutableList()
+            val index = currentList.indexOfFirst { it.id == reminderId }
+            if (index >= 0) {
+                val updated = currentList[index].copy(isEnabled = isEnabled)
+                currentList[index] = updated
+                val json = com.example.data.model.ScheduledReminder.listToJson(currentList)
+                preferencesManager.setScheduledRemindersJson(json)
+                com.example.notification.ReminderScheduler.rescheduleAll(getApplication(), currentList)
+            }
+        }
+    }
+
+    fun updateFloatingNotificationConfig(config: com.example.data.model.FloatingNotificationConfig) {
+        viewModelScope.launch {
+            preferencesManager.setFloatingNotificationConfigJson(config.toJson().toString())
+        }
+    }
+
+    fun previewFloatingNotification(reminder: com.example.data.model.ScheduledReminder) {
+        com.example.notification.ReminderScheduler.showFloatingReminder(reminder)
+    }
+
     // UI state
     // userWantsBuiltIn reflects the toggle in the toolbar / settings
     private val _userWantsBuiltInKeyboard = MutableStateFlow(true)
@@ -444,6 +513,15 @@ class EditorViewModel(
                 if (now - lastTime >= 3600_000L) {
                     AutoBackupManager.performBackup(getApplication(), force = false)
                 }
+            }
+        }
+
+        // Reschedule reminders on app startup
+        viewModelScope.launch(Dispatchers.IO) {
+            val json = preferencesManager.scheduledRemindersJson.first()
+            val list = com.example.data.model.ScheduledReminder.listFromJson(json)
+            if (list.isNotEmpty()) {
+                com.example.notification.ReminderScheduler.rescheduleAll(getApplication(), list)
             }
         }
     }
@@ -2120,6 +2198,10 @@ class EditorViewModel(
                 _keyboardLayout2.value = KeyboardLayouts.getDefault3x10Layout2()
             }
         }
+
+        val remindersJson = preferencesManager.scheduledRemindersJson.first()
+        val reminders = com.example.data.model.ScheduledReminder.listFromJson(remindersJson)
+        com.example.notification.ReminderScheduler.rescheduleAll(getApplication(), reminders)
     }
 
     override fun onCleared() {

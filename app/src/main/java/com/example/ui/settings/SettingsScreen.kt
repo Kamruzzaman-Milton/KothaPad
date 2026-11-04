@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import com.example.ui.navigation.horizontalSwipeNavigation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,10 +55,15 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Tune
+import com.example.data.model.NotificationDisplayMode
+import com.example.data.model.ScheduledReminder
+import com.example.data.model.FloatingNotificationConfig
+import com.example.ui.dialogs.EditReminderDialog
 import com.example.data.model.Note
 import com.example.data.model.Stamp
 import androidx.compose.runtime.mutableIntStateOf
@@ -361,6 +367,14 @@ fun SettingsScreen(
     onRestoreNote: (Note) -> Unit = {},
     onPermanentlyDeleteNote: (Note) -> Unit = {},
     onEmptyTrash: () -> Unit = {},
+    // Notifications & Reminders Callbacks & State
+    scheduledReminders: List<ScheduledReminder> = emptyList(),
+    floatingNotificationConfig: FloatingNotificationConfig = FloatingNotificationConfig(),
+    onSaveScheduledReminder: (ScheduledReminder) -> Unit = {},
+    onDeleteScheduledReminder: (String) -> Unit = {},
+    onToggleScheduledReminderEnabled: (String, Boolean) -> Unit = { _, _ -> },
+    onUpdateFloatingNotificationConfig: (FloatingNotificationConfig) -> Unit = {},
+    onPreviewFloatingNotification: (ScheduledReminder) -> Unit = {},
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -388,6 +402,10 @@ fun SettingsScreen(
     var validationError by remember { mutableStateOf<String?>(null) }
     var pendingRestoreData by remember { mutableStateOf<ParsedBackupData?>(null) }
     var showFinishSetupDialog by remember { mutableStateOf(false) }
+
+    // Notifications & Reminders state
+    var editingReminder by remember { mutableStateOf<ScheduledReminder?>(null) }
+    var isCreatingReminder by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
@@ -470,7 +488,7 @@ fun SettingsScreen(
         autoBackupEnabled, autoBackupSchedule, autoBackupCustomValue, autoBackupCustomUnit,
         autoBackupOnAppOpen, autoBackupKeepCount, autoBackupLocationUri, autoBackupOnlyCharging,
         autoBackupSkipLowStorage, autoBackupLastTime, autoBackupLastSize, autoBackupLastStatus,
-        isManualBackingUp
+        isManualBackingUp, scheduledReminders, floatingNotificationConfig
     ) {
         listOf(
             // Templates & Trash Section
@@ -1640,6 +1658,209 @@ fun SettingsScreen(
                 )
             ),
 
+            // Notifications & Reminders Section
+            SettingHeadlineSection(
+                id = "notifications_reminders_section",
+                title = "Notifications & Reminders",
+                subtitle = "Unlimited daily alarms, custom text, system & floating popup modes",
+                icon = Icons.Outlined.Notifications,
+                items = listOf(
+                    SettingItem.CustomContent(
+                        id = "scheduled_reminders_list",
+                        content = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Scheduled Reminders (${scheduledReminders.size})",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Set as many reminders throughout the day as you wish",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Button(
+                                        onClick = {
+                                            editingReminder = ScheduledReminder(
+                                                id = "",
+                                                hour = 9,
+                                                minute = 0,
+                                                isEnabled = true
+                                            )
+                                            isCreatingReminder = true
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Add Reminder", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+
+                                if (scheduledReminders.isEmpty()) {
+                                    Text(
+                                        text = "No reminders scheduled yet. Tap 'Add Reminder' to set daily alarms (e.g. 7:00 AM, 1:00 PM, 9:00 PM) with optional custom text and display modes.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                } else {
+                                    scheduledReminders.forEach { rem ->
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable {
+                                                    editingReminder = rem
+                                                    isCreatingReminder = false
+                                                },
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.surface,
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                            text = rem.formattedTime(),
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (rem.isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Surface(
+                                                            shape = RoundedCornerShape(4.dp),
+                                                            color = if (rem.displayMode == NotificationDisplayMode.FLOATING)
+                                                                MaterialTheme.colorScheme.secondaryContainer
+                                                            else MaterialTheme.colorScheme.surfaceVariant
+                                                        ) {
+                                                            Text(
+                                                                text = if (rem.displayMode == NotificationDisplayMode.FLOATING) "Floating Popup" else "Normal",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Text(
+                                                        text = rem.getEffectiveText(),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 1,
+                                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                    )
+                                                }
+
+                                                // Test / Preview button
+                                                TextButton(
+                                                    onClick = {
+                                                        if (rem.displayMode == NotificationDisplayMode.FLOATING) {
+                                                            onPreviewFloatingNotification(rem)
+                                                        } else {
+                                                            com.example.notification.ReminderScheduler.showSystemNotification(
+                                                                context,
+                                                                rem.id,
+                                                                rem.getEffectiveText()
+                                                            )
+                                                        }
+                                                    }
+                                                ) {
+                                                    Text("Test", fontSize = 12.sp)
+                                                }
+
+                                                // Enable / Disable switch
+                                                Switch(
+                                                    checked = rem.isEnabled,
+                                                    onCheckedChange = { onToggleScheduledReminderEnabled(rem.id, it) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ),
+                    SettingItem.ChipGroup(
+                        id = "floating_popup_size",
+                        title = "Floating Notification Size",
+                        subtitle = "Controls the height and padding of floating reminder popups",
+                        options = listOf(
+                            ChipOption("COMPACT", "Compact"),
+                            ChipOption("MEDIUM", "Medium (Default)"),
+                            ChipOption("LARGE", "Large")
+                        ),
+                        selectedKey = floatingNotificationConfig.popupSize,
+                        onOptionSelected = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(popupSize = it))
+                        }
+                    ),
+                    SettingItem.ChipGroup(
+                        id = "floating_visual_style",
+                        title = "Floating Notification Visual Style",
+                        subtitle = "Controls elevation shadow, borders, and appearance",
+                        options = listOf(
+                            ChipOption("ELEVATED", "Elevated Shadow"),
+                            ChipOption("MINIMAL", "Minimal Flat"),
+                            ChipOption("ACCENT_BORDER", "Accent Border")
+                        ),
+                        selectedKey = floatingNotificationConfig.visualStyle,
+                        onOptionSelected = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(visualStyle = it))
+                        }
+                    ),
+                    SettingItem.Slider(
+                        id = "floating_opacity",
+                        title = "Floating Notification Background Opacity",
+                        subtitle = "Adjust transparency of the floating reminder card",
+                        value = floatingNotificationConfig.backgroundOpacity,
+                        valueRange = 0.70f..1.0f,
+                        steps = 5,
+                        displayValue = "${(floatingNotificationConfig.backgroundOpacity * 100).toInt()}%",
+                        onValueChange = {
+                            onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(backgroundOpacity = it))
+                        }
+                    ),
+                    SettingItem.ChipGroup(
+                        id = "floating_auto_dismiss",
+                        title = "Floating Popup Auto-Dismiss",
+                        subtitle = "Duration the floating reminder stays on screen before disappearing",
+                        options = listOf(
+                            ChipOption("0", "Keep Until Dismissed"),
+                            ChipOption("8", "8 seconds"),
+                            ChipOption("12", "12 seconds (Default)"),
+                            ChipOption("20", "20 seconds")
+                        ),
+                        selectedKey = floatingNotificationConfig.autoDismissSeconds.toString(),
+                        onOptionSelected = {
+                            it.toIntOrNull()?.let { s ->
+                                onUpdateFloatingNotificationConfig(floatingNotificationConfig.copy(autoDismissSeconds = s))
+                            }
+                        }
+                    )
+                )
+            ),
+
             // Automatic Backup Section (collapsed by default)
             SettingHeadlineSection(
                 id = "auto_backup_section",
@@ -2269,6 +2490,24 @@ fun SettingsScreen(
                 editingTemplate = null
             },
             onDismiss = { editingTemplate = null }
+        )
+    }
+
+    // Edit / Create Reminder Dialog
+    editingReminder?.let { rem ->
+        EditReminderDialog(
+            reminder = rem,
+            onSave = { updated ->
+                onSaveScheduledReminder(updated)
+                editingReminder = null
+            },
+            onDelete = if (rem.id.isNotBlank() && !isCreatingReminder) {
+                {
+                    onDeleteScheduledReminder(rem.id)
+                    editingReminder = null
+                }
+            } else null,
+            onDismiss = { editingReminder = null }
         )
     }
 
