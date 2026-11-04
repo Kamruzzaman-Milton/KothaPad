@@ -71,7 +71,9 @@ import com.example.data.model.FloatingNotificationConfig
 import com.example.ui.dialogs.EditReminderDialog
 import com.example.data.model.Note
 import com.example.data.model.Stamp
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.Color
 import com.example.ui.dialogs.EditTemplateDialog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -1953,6 +1955,9 @@ fun SettingsScreen(
                                 com.example.notification.XiaomiOverlayHelper.canDrawOverlays(context)
                             }
                             val isXiaomi = com.example.notification.XiaomiOverlayHelper.isXiaomiOrMiui()
+                            val isXiaomiPopupGranted = remember(lifecycleResumeCount) {
+                                com.example.notification.XiaomiOverlayHelper.isMiuiPopupGranted(context)
+                            }
 
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
@@ -2008,12 +2013,28 @@ fun SettingsScreen(
                                         }
 
                                         if (isXiaomi) {
-                                            OutlinedButton(
-                                                onClick = {
-                                                    com.example.notification.XiaomiOverlayHelper.openMiuiPopupPermissions(context)
+                                            if (isXiaomiPopupGranted) {
+                                                Button(
+                                                    onClick = {
+                                                        com.example.notification.XiaomiOverlayHelper.openMiuiPopupPermissions(context)
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = Color(0xFF2E7D32),
+                                                        contentColor = Color.White
+                                                    ),
+                                                    modifier = Modifier.testTag("xiaomi_popup_permission_button")
+                                                ) {
+                                                    Text("✓ Xiaomi Pop-up Permission", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                                 }
-                                            ) {
-                                                Text("Xiaomi Pop-up Permission", fontSize = 12.sp)
+                                            } else {
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        com.example.notification.XiaomiOverlayHelper.openMiuiPopupPermissions(context)
+                                                    },
+                                                    modifier = Modifier.testTag("xiaomi_popup_permission_button")
+                                                ) {
+                                                    Text("Xiaomi Pop-up Permission", fontSize = 12.sp)
+                                                }
                                             }
                                         }
                                     }

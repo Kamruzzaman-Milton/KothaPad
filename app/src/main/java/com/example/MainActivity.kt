@@ -190,16 +190,13 @@ class MainActivity : ComponentActivity() {
             // Centralized Immersive Mode: strictly limited to Reading Mode in EditorScreen
             // System navigation bar is automatically shown on all other screens (Settings, Calendar) and editing mode
             val shouldBeImmersive = currentScreen == "EDITOR" && isReadingMode
+            LaunchedEffect(shouldBeImmersive) {
+                applyImmersiveMode(shouldBeImmersive)
+            }
             DisposableEffect(shouldBeImmersive) {
-                val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-                if (shouldBeImmersive) {
-                    insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    insetsController.hide(WindowInsetsCompat.Type.navigationBars())
-                } else {
-                    insetsController.show(WindowInsetsCompat.Type.navigationBars())
-                }
+                applyImmersiveMode(shouldBeImmersive)
                 onDispose {
-                    insetsController.show(WindowInsetsCompat.Type.navigationBars())
+                    applyImmersiveMode(false)
                 }
             }
 
@@ -559,19 +556,39 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun applyImmersiveMode(immersive: Boolean) {
+        val w = window ?: return
+        val insetsController = WindowCompat.getInsetsController(w, w.decorView)
+        if (immersive) {
+            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            insetsController.hide(WindowInsetsCompat.Type.navigationBars())
+        } else {
+            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            insetsController.show(WindowInsetsCompat.Type.navigationBars())
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         KothaPadApp.isActivityInForeground = true
         com.example.notification.ScreenOverlayManager.removeOverlay()
         viewModel.onAppForegroundStateChanged(true)
+        val shouldBeImmersive = viewModel.currentScreen.value == "EDITOR" && viewModel.isReadingMode.value
+        applyImmersiveMode(shouldBeImmersive)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            val shouldBeImmersive = viewModel.currentScreen.value == "EDITOR" && viewModel.isReadingMode.value
+            applyImmersiveMode(shouldBeImmersive)
+        }
     }
 
     override fun onPause() {
         super.onPause()
         KothaPadApp.isActivityInForeground = false
-        window?.let {
-            WindowCompat.getInsetsController(it, it.decorView).show(WindowInsetsCompat.Type.navigationBars())
-        }
+        applyImmersiveMode(false)
         viewModel.onAppForegroundStateChanged(false)
         viewModel.flushAutoSave()
     }
@@ -586,8 +603,6 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         (application as? KothaPadApp)?.speechSupervisor?.restoreCrashSafetyMute()
-        if (isFinishing) {
-            com.example.notification.ReminderScheduler.updatePersistentNotification(this, false)
-        }
+        com.example.notification.ReminderScheduler.updatePersistentNotification(this, false)
     }
 }

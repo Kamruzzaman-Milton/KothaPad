@@ -30,6 +30,31 @@ object XiaomiOverlayHelper {
     }
 
     /**
+     * Checks if MIUI / HyperOS background pop-up window permission is granted via AppOps.
+     */
+    fun isMiuiPopupGranted(context: Context): Boolean {
+        if (!isXiaomiOrMiui()) return true
+        return try {
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? android.app.AppOpsManager
+            if (appOps != null) {
+                val method = appOps.javaClass.getMethod(
+                    "checkOpNoThrow",
+                    Int::class.javaPrimitiveType,
+                    Int::class.javaPrimitiveType,
+                    String::class.java
+                )
+                // 10021 is MIUI OP_BACKGROUND_START_ACTIVITY
+                val mode = method.invoke(appOps, 10021, android.os.Process.myUid(), context.packageName) as? Int
+                mode == android.app.AppOpsManager.MODE_ALLOWED
+            } else {
+                canDrawOverlays(context)
+            }
+        } catch (_: Exception) {
+            canDrawOverlays(context)
+        }
+    }
+
+    /**
      * Opens standard Android overlay settings.
      */
     fun openOverlaySettings(context: Context) {

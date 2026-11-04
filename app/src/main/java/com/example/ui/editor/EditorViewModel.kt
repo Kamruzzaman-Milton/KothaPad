@@ -435,9 +435,9 @@ class EditorViewModel(
         // Load persisted keyboard layout from DataStore
         viewModelScope.launch {
             val v = preferencesManager.keyboardLayoutVersion.first()
-            if (v < 3) {
+            if (v < 4) {
                 preferencesManager.setKeyboardLayoutJson(null)
-                preferencesManager.setKeyboardLayoutVersion(3)
+                preferencesManager.setKeyboardLayoutVersion(4)
                 _keyboardLayout.value = KeyboardLayouts.getDefault3x10Layout()
             }
             preferencesManager.keyboardLayoutJson.collect { jsonStr ->
