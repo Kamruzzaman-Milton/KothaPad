@@ -1,244 +1,462 @@
-# MainBrain.md - KothaPad Project Specification & Architecture Truth
+# MainBrain.md - KothaPad Architectural Source of Truth & Developer Reference Manual
 
-## 1. Project Overview & Role
-- **Application Name**: KothaPad (`com.aistudio.kothapad.zhntnp`, package namespace `com.example`)
+## 1. System Identity, Tech Stack & Architecture Overview
+- **Application ID**: `com.aistudio.kothapad.zhntnp` (Package namespace `com.example`)
 - **Launcher Label**: "KothaPad"
-- **Role & Target User**: Production-grade, speech-enabled notepad and daily journaling workstation engineered specifically for bilingual power writers (Bengali & English). Combines non-stop continuous voice dictation with an in-app soft keyboard, live Obsidian-style Markdown rendering, one-tap text stamps, and 100% local-first Room database storage.
-- **Export Artifact**: Ready-to-install `KothaPad.apk` generated directly in the root workspace directory upon build (never duplicate as `app-debug.apk` in root).
-- **Core Philosophy**: 100% offline-capable, zero cloud dependencies, zero external tracker/telemetry SDKs, direct internal database storage without mandatory file tree permissions or welcome screens.
-
----
-
-## 2. Core Architectural Guardrails & Coding Constraints
-- **Framework & Tooling**:
-  - Kotlin + Jetpack Compose with Material 3.
-  - Compile SDK 36, Target SDK 36, Min SDK 26, JVM target 11, AGP 9.1.1, Gradle 9.3.1.
-  - Room 2.6+ with KSP compiler, Kotlin Coroutines & Flow, Jetpack DataStore (Preferences), Jetpack WorkManager 2.10+.
+- **Target Platform**: Android Native (Kotlin + Jetpack Compose with Material 3)
+- **Tooling & SDK**:
+  - Gradle 9.3.1 (Kotlin DSL), Android Gradle Plugin (AGP) 9.1.1
+  - Compile SDK 36, Target SDK 36, Min SDK 26, JVM Target 11
+  - Jetpack Compose BOM 2024+, Room Database 2.6+ with KSP compiler, Jetpack DataStore (Preferences), Jetpack WorkManager 2.10+
 - **Architecture Pattern**:
-  - Single-Activity (`MainActivity`) Compose UI hosting an in-memory persistent `EditorScreen` underneath all sub-screens (`DAILY_JOURNAL_MANAGER`, `SETTINGS`, `MARKDOWN_SETTINGS`, `AUTO_BACKUP_RESTORE`).
-  - MVVM via `EditorViewModel` injected through `KothaPadApp` container.
-  - Unidirectional Data Flow (UDF) powered by `StateFlow` and `SharedFlow`.
-- **Token Efficiency & Build Verification**:
-  - Do not execute `gradle testDebugUnitTest` unless explicitly requested.
-  - Verify exclusively with `compile_applet` (`assembleDebug`).
-  - Strict preservation of existing working business logic and API contracts.
+  - Single-Activity Architecture (`MainActivity.kt`) hosting an in-memory persistent `EditorScreen` underneath animated overlay sub-screens (`DAILY_JOURNAL_MANAGER`, `SETTINGS`, `MARKDOWN_SETTINGS`, `AUTO_BACKUP_RESTORE`).
+  - MVVM via `EditorViewModel.kt` instantiated through `ViewModelProvider.Factory` accessing singletons initialized in `KothaPadApp.kt` (`AppDatabase`, `NoteRepository`, `StampRepository`, `SpokenCommandRepository`, `PreferencesManager`, `SpeechSupervisor`).
+  - Unidirectional Data Flow (UDF): ViewModels expose immutable `StateFlow` and `SharedFlow` streams; Composable screens emit event callbacks upward.
+- **Offline-First & Zero-Telemetry Contract**:
+  - 100% offline-functional: Zero analytics, zero crash-reporting servers, zero network calls, zero external accounts.
+  - All notes, templates, settings, and audio dictations reside solely on-device in internal SQLite Room storage and DataStore.
 
 ---
 
-## 3. Editor & Cursor Scrolling Architecture
-- **Tap-to-Center Positioning (`EditorScreen.kt`)**:
-  - Intentional tap detection: Movement $\le$ 18px and touch duration < 500ms.
-  - When the user taps anywhere inside note text in editing mode, the editor places the cursor and smoothly animates scroll position so the active cursor rests near the vertical midpoint of the usable screen area (between top toolbar and bottom keyboard/format bar).
-  - Tapping empty blank space below note text places cursor at text end (`text.length`) and centers the bottom of the document.
-- **Free Manual Scrolling & Zero Recomposition Snap**:
-  - Once cursor is positioned or keyboard is open, user can fling or scroll manually without rubber-banding or snapping back to cursor.
-  - Auto-centering strictly triggers on intentional tap or initial keyboard display; never on drag-release, fling, recomposition, or side gestures.
-- **Reading vs. Editing Mode Scroll Preservation**:
-  - Toggling between Reading Mode and Editing Mode retains the exact visible scroll offset without jumping or resetting to 0.
-  - Switching notes resets vertical scroll position to top (0).
-  - Scrolling never alters text selection handles, dismisses active soft keyboard, or moves cursor position.
+## 2. Visual Design System, Theme Engine & Typography
+- **Theme Engine (`com.example.ui.theme.Theme.kt`, `Color.kt`)**:
+  - `KothaPadTheme(themeSetting, customPrimary, customBackground, customSurface, customText, customSecondary, cornerRadiusDp)`
+  - **Presets**:
+    - `DEFAULT` / `CYBER_DARK`: Rich dark slate (`#121214`), dark purple accents (`#7C4DFF`).
+    - `AMOLED_BLACK`: Pure `#000000` background and surface for zero OLED pixel power consumption during continuous dictation.
+    - `CLEAN_LIGHT`: High-contrast neutral light palette (`#F8F9FA` background, `#1A1A1A` text).
+    - `CUSTOM`: Fully user-definable 5-color ARGB palette (`customPrimaryColor`, `customBackgroundColor`, `customSurfaceColor`, `customTextColor`, `customSecondaryColor`).
+  - Dynamic corner radius (`cornerRadiusDp`: 0dp to 24dp) propagated through `MaterialTheme.shapes`.
+- **Typography Engine (`com.example.ui.theme.Type.kt`)**:
+  - `getFontFamilyByOption(option: String, customPath: String?)`:
+    - `"INTER"` $\rightarrow$ Loads `res/font/inter.ttf` (Default modern sans-serif).
+    - `"JETBRAINS_MONO"` $\rightarrow$ Loads `res/font/jetbrains_mono.ttf` (Monospace, markdown code).
+    - `"NOTO_SANS_BENGALI"` $\rightarrow$ Loads `res/font/noto_sans_bengali.ttf` (Native complex script typography).
+    - `"CUSTOM"` $\rightarrow$ Loads external user-supplied `.ttf`/`.otf` file from disk via `Font(File(customPath))`.
+- **Note Metrics Display Config (`NoteMetricsConfig.kt`)**:
+  - Real-time text statistics computed via `split("\\s+".toRegex())` (words), `.length` (characters), and average reading speed (200 WPM).
+  - Configurable chip layout: `noteMetricsStyle` (`"COMPACT"` vs `"DETAILED"`), `noteMetricsOrder` (e.g. `"WORDS,CHARS,READ_TIME"`), and visibility filters.
 
 ---
 
-## 4. Speech Supervisor & Continuous Dictation Engine (`SpeechSupervisor.kt`, `AudioSourceDetector.kt`)
-- **Supervised Loop Architecture**:
-  - Custom `SpeechSupervisor` manages native Android `SpeechRecognizer` (`android.speech.SpeechRecognizer`).
-  - Unlike standard Android recognizers that terminate after 3 seconds of silence, KothaPad's supervisor catches `ERROR_NO_MATCH`, `ERROR_SPEECH_TIMEOUT`, and end-of-speech events, immediately re-arming the recognizer without dropping spoken words.
-  - Configurable `pauseToleranceSeconds` (5s to 60s, default 30s) controls silent recovery threshold.
-  - `idleAutoStopMinutes` (0 = disabled, 1–30m) watchdog cleanly stops dictation after prolonged inactivity.
+## 3. Editor Interface & Tap-to-Center Cursor Engine
+- **File**: `app/src/main/java/com/example/ui/editor/EditorScreen.kt`
+- **Visual Interface Structure**:
+  - **Top Bar (`EditorTopBar.kt`)**: Note title (tap to rename dialog), language indicator badge (tap opens `LanguagePickerDialog`, long-press cycles favorite languages), daily journal back navigation button, menu button (opens Calendar), share button, and delete note button.
+  - **Toolbar (`EditorToolBar.kt`)**: Keyboard mode toggle (In-App vs System IME), dictation status chip, active audio source badge (Built-in, Wired, Bluetooth), on-device indicator, live word/char counters, text zoom controls (`zoomIn()`, `zoomOut()`), and style sheet bottom sheet launcher.
+  - **Scrollable Viewport**: `Column` with `.verticalScroll(scrollState)` and dynamic padding accommodating side rails or floating toolbars.
+  - **Editable Viewport vs Reading Viewport**:
+    - Reading Mode: Shows `MarkdownRenderer` with interactive checkboxes or selectable `Text`.
+    - Editing Mode: Shows `BasicTextField` wrapped with custom `VisualTransformation`.
+- **Tap-to-Center Cursor Mechanics**:
+  - **Gesture Detection**:
+    ```kotlin
+    .pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(pass = PointerEventPass.Initial, requireUnconsumed = false)
+            val startPos = down.position
+            val startTime = System.currentTimeMillis()
+            var isTap = true
+            while (true) {
+                val event = awaitPointerEvent(pass = PointerEventPass.Final)
+                val change = event.changes.find { it.id == down.id }
+                if (change == null || (change.position - startPos).getDistance() > 18f) {
+                    isTap = false; break
+                }
+                if (!change.pressed) {
+                    val duration = System.currentTimeMillis() - startTime
+                    if (isTap && duration < 500) { centerCursorTrigger++ }
+                    break
+                }
+            }
+        }
+    }
+    ```
+  - **Centering Calculation**:
+    ```kotlin
+    val usableHeightPx = (viewportHeightPx - bottomControlsHeightPx).coerceAtLeast(100f)
+    val targetCenterY = usableHeightPx / 2f
+    val diff = currentCursorYOnScreen - targetCenterY
+    if (abs(diff) > 8f) {
+        val targetScroll = (scrollState.value + diff).roundToInt().coerceIn(0, scrollState.maxValue)
+        scrollState.animateScrollTo(targetScroll, animationSpec = tween(200, easing = FastOutSlowInEasing))
+    }
+    ```
+  - **Scroll Position Invariants**:
+    - Reading $\leftrightarrow$ Editing mode transitions capture `lastScrollPosition` and re-apply it via `snapshotFlow { scrollState.maxValue }` without jumping to 0.
+    - Note changes (`currentNote?.id`) strictly reset `lastScrollPosition = 0` and scroll to 0.
+  - **System IME vs Custom Keyboard Interception**:
+    - Built-in Keyboard: `InterceptPlatformTextInput { awaitCancellation() }` prevents Android system IME from popping up while maintaining a live, blinking cursor inside `BasicTextField`.
+    - System Keyboard: Passes input method request through `nextHandler.startInputMethod(request)`.
+
+---
+
+## 4. Speech Supervisor & Continuous Dictation Engine
+- **Files**: `app/src/main/java/com/example/engine/dictation/SpeechSupervisor.kt`, `AudioSourceDetector.kt`
+- **Visuals**:
+  - Floating action cluster or side rail hosting a pulsating glowing Mic button.
+  - Real-time animated waveform: 5 vertical audio bars driven by `_audioLevelRms: StateFlow<Float>` (0.0f to 1.0f).
+  - Status chips displaying active dictation state (`Listening`, `Paused`, `Processing`) and connected audio hardware.
+- **Continuous Supervised Loop**:
+  - Wraps native `android.speech.SpeechRecognizer` and `RecognitionListener`.
+  - Normal Android speech recognizers terminate immediately upon 3 seconds of silence. KothaPad catches `ERROR_NO_MATCH`, `ERROR_SPEECH_TIMEOUT`, and `onEndOfSpeech()`:
+    ```kotlin
+    if (isSessionActive && !isManuallyPaused) {
+        mainHandler.postDelayed(restartRunnable, 150L)
+    }
+    ```
+  - Silent recovery is bounded by user-configured `pauseToleranceSeconds` (default 30s).
+  - Inactivity watchdog: `idleAutoStopMinutes` automatically closes the session if no words are spoken for $N$ minutes.
+  - Timed dictation sprints: `timedMinutes` (1–60m) countdown timer that finishes session automatically.
 - **Audio Routing & Hardware Detection (`AudioSourceDetector.kt`)**:
-  - Dynamically registers `AudioDeviceCallback` and `ACTION_HEADSET_PLUG` / `ACTION_SCO_AUDIO_STATE_UPDATED`.
-  - Live status detection: Built-in Mic, Wired Headset Mic, and Bluetooth SCO/A2DP Headset with visual status chips.
+  - Registers `AudioDeviceCallback` (API 28+) and broadcasts for `ACTION_HEADSET_PLUG`, `BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED`, and `AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED`.
+  - Automatically routes audio input between Built-in Microphone, Wired Headset, and Bluetooth Headset (enabling Bluetooth SCO when connected).
 - **Beep Suppression & Volume Recovery**:
-  - `muteBeepMethod`: `MEDIA_SYSTEM` (mutes `STREAM_MUSIC` and `STREAM_SYSTEM` once at session start and restores on teardown), `VIBRATE_ONCE` (haptic pulse instead of audio), or `OFF`.
-  - Crash-safety recovery: Preserves volume and ringer modes, restoring them via `AudioManager` during cleanup or process restart.
-- **RMS Waveform Visualizer**:
-  - `_audioLevelRms: StateFlow<Float>` emits real-time dB/RMS input amplitudes (normalized 0.0 to 1.0) feeding `EditorFloatingCluster` animated wave bars.
-- **Dictation State Machine (`DictationState.kt`)**:
-  - `Idle`, `Listening`, `Paused`, `Processing`, `Error(message)`.
-  - Text insertion modes: `APPEND_END`, `INSERT_AT_CURSOR`, `REPLACE_SELECTION`.
+  - Suppresses intrusive Android speech recognition start/stop beeps:
+    - Mode `MEDIA_SYSTEM`: Saves system and music stream volumes (`getStreamVolume`) and sets them to 0 on session start; restores original volumes once when the entire dictation session stops.
+    - Mode `VIBRATE_ONCE`: Silences streams and performs a brief 20ms haptic feedback pulse.
+    - Mode `OFF`: Leaves system audio unmanaged.
 
 ---
 
-## 5. Text Processing Pipeline & Bilingual Voice Commands (`com.example.engine.pipeline`)
-- **Modular Pipeline Interface (`PipelineStep.kt`)**:
-  - Pipeline executes sequentially: `TextPipeline.process(rawText, cursorPosition, context)` passing through configured steps.
-- **Pipeline Steps**:
-  1. `AutoCapitalizePipelineStep`: Capitalizes sentence beginnings, post-punctuation tokens (`.`, `?`, `!`), and newline starts for English text.
-  2. `SpacingPipelineStep`: Enforces typographical spacing rules for English and Bengali (strips rogue leading spaces before `,`, `.`, `।`, `?`, `!`, `:`; ensures single trailing space).
-  3. `SpokenCommandsPipelineStep`: Matches transcribed speech against `SpokenCommand` dictionary stored in Room (`spoken_commands` table).
-  4. `StampProcessor`: Expands date/time macros `{date}`, `{time}`, `{datetime}`, `{weekday}`, and positions `{cursor}` placeholder.
-- **Bilingual Typographical & Voice Action Mappings**:
-  - **Bengali (বাংলা)**:
-    - `"দাঁড়ি"` / `"দাড়ি"` $\rightarrow$ `। `
-    - `"কমা"` $\rightarrow$ `, `
-    - `"প্রশ্নবোধক চিহ্ন"` / `"প্রশ্নচিহ্ন"` $\rightarrow$ `? `
-    - `"আশ্চর্যবোধক চিহ্ন"` $\rightarrow$ `! `
-    - `"নতুন লাইন"` $\rightarrow$ `\n`
-    - `"নতুন প্যারাগ্রাফ"` $\rightarrow$ `\n\n`
-    - `"কোলন"` $\rightarrow$ `: `
-    - `"শেষ শব্দ মুছুন"` / `"শব্দ কাটো"` $\rightarrow$ Action `DELETE_LAST_WORD`
-    - `"আনডু করো"` $\rightarrow$ Action `UNDO`
-    - `"থামো"` / `"বন্ধ করো"` $\rightarrow$ Action `STOP_DICTATION`
-  - **English**:
-    - `"full stop"` / `"period"` $\rightarrow$ `. `
-    - `"comma"` $\rightarrow$ `, `
-    - `"question mark"` $\rightarrow$ `? `
-    - `"exclamation mark"` $\rightarrow$ `! `
-    - `"new line"` $\rightarrow$ `\n`
-    - `"new paragraph"` $\rightarrow$ `\n\n`
-    - `"colon"` $\rightarrow$ `: `
-    - `"dash"` $\rightarrow$ ` — `
-    - `"delete last word"` $\rightarrow$ Action `DELETE_LAST_WORD`
-    - `"undo that"` $\rightarrow$ Action `UNDO`
-    - `"stop dictation"` $\rightarrow$ Action `STOP_DICTATION`
+## 5. Text Processing Pipeline & Spoken Commands
+- **Files**: `app/src/main/java/com/example/engine/pipeline/` (`TextPipeline.kt`, `AutoCapitalizePipelineStep.kt`, `SpacingPipelineStep.kt`, `SpokenCommandsPipelineStep.kt`, `StampProcessor.kt`)
+- **Pipeline Architecture**:
+  - Inbound text from speech recognizer passes through a synchronous pipeline chain before being committed to the document:
+    $$\text{Raw Speech} \xrightarrow{\text{Spoken Commands}} \xrightarrow{\text{Spacing Rules}} \xrightarrow{\text{Auto-Capitalization}} \xrightarrow{\text{Stamp Macro Expansion}} \text{Document}$$
+- **Spoken Commands Engine (`SpokenCommandsPipelineStep.kt`)**:
+  - Queries Room table `spoken_commands` cached in memory.
+  - Matches spoken trigger phrases against registered dictionary entries.
+  - Supports two action categories:
+    1. `PUNCTUATION`: In-place replacement of trigger phrase with punctuation marks.
+    2. `ACTION`: Triggers editor operations via `commandCode` (`DELETE_LAST_WORD`, `UNDO`, `STOP_DICTATION`).
+- **Typographical Rule Matrix**:
+  | Language | Spoken Trigger Phrase | Typographical / Action Output |
+  | :--- | :--- | :--- |
+  | **Bengali** | `"দাঁড়ি"`, `"দাড়ি"` | `। ` (Bangla Dari + trailing space) |
+  | **Bengali** | `"কমা"` | `, ` |
+  | **Bengali** | `"প্রশ্নবোধক চিহ্ন"`, `"প্রশ্নচিহ্ন"` | `? ` |
+  | **Bengali** | `"আশ্চর্যবোধক চিহ্ন"` | `! ` |
+  | **Bengali** | `"নতুন লাইন"` | `\n` |
+  | **Bengali** | `"নতুন প্যারাগ্রাফ"` | `\n\n` |
+  | **Bengali** | `"কোলন"` | `: ` |
+  | **Bengali** | `"শব্দ কাটো"`, `"শেষ শব্দ মুছুন"` | Deletes previous word |
+  | **Bengali** | `"আনডু করো"` | Reverts last voice commit |
+  | **Bengali** | `"থামো"`, `"বন্ধ করো"` | Stops dictation session |
+  | **English** | `"full stop"`, `"period"` | `. ` |
+  | **English** | `"comma"` | `, ` |
+  | **English** | `"question mark"` | `? ` |
+  | **English** | `"exclamation mark"` | `! ` |
+  | **English** | `"new line"` | `\n` |
+  | **English** | `"new paragraph"` | `\n\n` |
+  | **English** | `"colon"` | `: ` |
+  | **English** | `"dash"` | ` — ` |
+  | **English** | `"delete last word"` | Deletes previous word |
+  | **English** | `"undo that"` | Reverts last voice commit |
+  | **English** | `"stop dictation"` | Stops dictation session |
+- **Smart Spacing Step (`SpacingPipelineStep.kt`)**:
+  - Strips illegal leading whitespace before punctuation symbols: `\\s+([,.:?!।])` $\rightarrow$ `$1`.
+  - Guarantees exactly one space following punctuation unless immediately followed by a newline.
+- **Stamp Processor (`StampProcessor.kt`)**:
+  - Replaces dynamic text macros in templates:
+    - `{date}` $\rightarrow$ Current date (e.g. `2026-11-12`)
+    - `{time}` $\rightarrow$ Current time (e.g. `14:30`)
+    - `{datetime}` $\rightarrow$ Date and time combined
+    - `{weekday}` $\rightarrow$ Day of week (e.g. `Thursday`)
+    - `{cursor}` $\rightarrow$ Designates final caret insertion position after pasting stamp
 
 ---
 
-## 6. Dual In-App Soft Keyboards & Custom Layout Engine (`InAppKeyboard.kt`, `KeyboardLayouts.kt`)
+## 6. Dual In-App Soft Keyboards & Custom Layout Engine
+- **Files**: `app/src/main/java/com/example/ui/keyboard/` (`InAppKeyboard.kt`, `KeyboardLayouts.kt`), `app/src/main/java/com/example/data/model/KeyboardLayout.kt`
+- **Visual Interface**:
+  - Fixed-height or dynamic bottom sheet displaying rows of rounded soft keys.
+  - Configurable key height (`keyboardKeyHeightDp`: 30dp to 56dp), font size (`keyboardFontSizeSp`: 12sp to 20sp), and haptic click vibration.
+  - Active layout index pill indicator with quick switch action.
 - **Dual Independent Layouts (Keyboard 1 & Keyboard 2)**:
-  - Supports two fully independent custom keyboard configurations with separate key matrices, styles, and action bindings.
-  - Bi-directional swipe switching: Swiping left-to-right or right-to-left across the soft keyboard toggles between Keyboard 1 and Keyboard 2 without losing text focus or layout area.
-- **Drag-and-Drop Repositioning Engine**:
-  - Long press (> 320ms) on any key initiates drag-and-drop repositioning with elevated shadow preview and hover slot swap.
-  - Cross-Keyboard Edge Dragging: Dragging a key to the left or right edge and holding (~450ms) triggers active keyboard layout switching, allowing keys to be transferred between Keyboard 1 and Keyboard 2.
+  - System maintains two completely separate keyboard layouts serialized into DataStore: `KEY_KEYBOARD_LAYOUT_JSON` and `KEY_KEYBOARD_LAYOUT_2_JSON`.
+  - **Bi-directional Horizontal Swipe**: Swiping across the keyboard surface switches between Keyboard 1 and Keyboard 2 without closing the keyboard or dropping cursor focus.
+- **Drag-and-Drop Repositioning Mechanics**:
+  - **Long-Press Activation**: Holding a key for > 320ms when editing mode is disabled enters repositioning mode. Key elevates with shadow elevation (`8.dp`) and follows pointer.
+  - **Slot Swapping**: Dropping over a target key calls `swapKeysInLayout(fromRow, fromCol, toRow, toCol, layoutIndex)`.
+  - **Cross-Keyboard Edge Dragging**: Dragging a key to the far left ($x < 24\text{dp}$) or far right ($x > \text{width} - 24\text{dp}$) and holding for $\sim 450\text{ms}$ automatically flips the active keyboard layout, allowing seamless key transfers between Keyboard 1 and Keyboard 2.
 - **Editing Mode Toggle Button (`KeyActionType.TOGGLE_EDIT_MODE`)**:
-  - Default label `"✎"`, positioned in top-right corner.
-  - Single tap toggles layout edit mode. When active, tapping any key opens `EditKeyDialog` to customize primary label, shift label, long-press label, action type, color, and width weight.
-  - **Mandatory Toggle Invariant**: Deserialization and deletion logic guarantees every layout contains at least one `TOGGLE_EDIT_MODE` key; the sole remaining toggle key cannot be deleted or remapped.
-- **Dedicated Exit App Button (`KeyActionType.EXIT`)**:
-  - Positioned by default on the top row of Keyboard 1. Tapping immediately flushes auto-save, cleans up persistent notifications, and terminates the application cleanly.
+  - Dedicated key labeled `"✎"` positioned by default on the top-right corner.
+  - Tapping toggles edit mode ON/OFF with distinct highlight. While active, tapping any key opens `EditKeyDialog` to modify label, output text, smart spacing, action type, and width weight.
+  - **Mandatory Invariant**: Every keyboard layout must have at least one `TOGGLE_EDIT_MODE` key. Deletion and remapping prevent removing the sole remaining toggle key.
+- **Key Actions (`KeyActionType` Enum)**:
+  - Text: `INSERT`, `SPACE`, `ENTER`, `NEW_PARAGRAPH`, `BACKSPACE`, `DELETE_WORD`.
+  - Cursor: `CURSOR_LEFT`, `CURSOR_RIGHT`, `CURSOR_UP`, `CURSOR_DOWN`, `WORD_LEFT`, `WORD_RIGHT`, `LINE_START`, `LINE_END`.
+  - Clipboard & System: `UNDO`, `REDO`, `SELECT_ALL`, `PASTE`, `OPEN_TEMPLATES`, `CHANGE_LANGUAGE`, `SWITCH_LAYOUT`, `TOGGLE_SYSTEM_KEYBOARD`, `DISMISS_KEYBOARD`, `EXIT`.
 
 ---
 
-## 7. Obsidian-Grade Markdown Engine (`com.example.markdown`)
-- **Live In-Editor Syntax Styler (`MarkdownLiveStyler.kt`)**:
-  - Real-time syntax highlighting inside Compose `TextField` using `AnnotatedString` spans.
-  - Dimmed syntax markers: Tokens like `#`, `**`, `*`, `==`, `~~`, `>`, and backticks are rendered with low alpha (`0.38f`) so formatting symbols do not distract from the reading flow.
-  - Proportional heading scaling (H1 through H6) rendered dynamically with configurable scale factors (0.8x to 1.5x).
-  - Inline code and fenced code blocks styled with `jetbrains_mono.ttf`.
+## 7. Obsidian-Grade Markdown Live Styler & Reading View
+- **Files**: `app/src/main/java/com/example/markdown/` (`MarkdownLiveStyler.kt`, `MarkdownRenderer.kt`, `MarkdownListAutoContinuer.kt`, `MarkdownSettings.kt`)
+- **Live In-Editor Styler (`MarkdownLiveStyler.kt`)**:
+  - Uses Compose `VisualTransformation` returning `TransformedText(styledAnnotatedString, OffsetMapping.Identity)`.
+  - Raw underlying text in `TextFieldValue` is never modified; only rendering spans are injected.
+  - **Regular Expression Rules**:
+    - Headings: `^(#{1,6})(\\s+)(.*)$` $\rightarrow$ Hashes dimmed to `0.45f` alpha; heading text scaled (H1: `1.45f`, H2: `1.30f`, H3: `1.20f`, H4: `1.10f`, H5: `1.00f`, H6: `0.95f`).
+    - Bold / Italic: `(\*\*|__)(.*?)\1` (Bold), `(\*|_)(.*?)\1` (Italic), `(\*\*\*|___)(.*?)\1` (Bold+Italic). Markers dimmed; text weighted.
+    - Highlight: `(==)([^=\n]+)(==)` $\rightarrow$ Markers dimmed; background tinted `HighlightGold.copy(alpha = 0.35f)`.
+    - Strikethrough: `(~~)([^~\n]+)(~~)` $\rightarrow$ `TextDecoration.LineThrough`.
+    - Inline Code: ``(`)([^`\n]+)(`)`` $\rightarrow$ Background filled `surfaceVariant`, font set to `FontFamily.Monospace`.
+    - Fenced Code Blocks: ````^```(\w*)```` to ````^```$```` $\rightarrow$ Full-block monospace background in `jetbrains_mono.ttf`.
+    - Blockquotes: `^(\s*)(>+)(\s*)(.*)$` $\rightarrow$ Prefix dimmed; quote text tinted.
+    - Links: `(\[)([^\]\n]+)(\])(\()([^)\n]+)(\))` $\rightarrow$ Bracket markers dimmed; text colored `primary`.
 - **List Auto-Continuation (`MarkdownListAutoContinuer.kt`)**:
-  - Pressing Enter automatically continues bulleted (`- `, `* `), numbered (`1. `), and task checkbox (`- [ ] `) lists.
-  - Pressing Enter on an empty list prefix cleanly terminates the list by stripping the indentation prefix.
-- **Interactive Reading View (`MarkdownRenderer.kt`)**:
-  - In Reading Mode, task checkboxes (`- [ ] ` and `- [x] `) are directly tappable on screen. Toggling immediately mutates the note text in Room and triggers silent auto-save.
+  - Intercepts `onValueChange` in `BasicTextField`.
+  - When user types Enter (`\n`), checks the preceding line:
+    - Bullet list (`- ` or `* `): Appends new bullet item.
+    - Ordered list (`^(\d+)\.\s`): Increments counter (e.g. `2. ` $\rightarrow$ `3. `).
+    - Task checkbox (`- [ ] ` or `- [x] `): Inserts unchecked box `- [ ] `.
+    - Double Enter on empty list line: Strips the empty prefix and ends list cleanly.
+- **Reading View Interactive Checkboxes (`MarkdownRenderer.kt`)**:
+  - In Reading Mode, task lines render with native interactive Compose `Checkbox` widgets.
+  - Tapping a checkbox updates the raw markdown string in `EditorViewModel` (`- [ ] ` $\leftrightarrow$ `- [x] `) and triggers silent auto-save without switching to Editing Mode.
 
 ---
 
-## 8. Ergonomic Side Rail & Floating Controls Architecture (`EditorSideRailLayout.kt`, `EditorFloatingCluster.kt`)
-- **Dual Floating Layout Models**:
-  - **Ergonomic Side Rail**: Vertical strip docked to left or right screen edge designed for natural one-handed thumb ergonomics. Hosts Mic, Timer, Keyboard Switch, Format Bar toggle, and Expand action.
-  - **Docked Floating Cluster**: Bottom-centered pill cluster with adjustable scale, bottom offset, and spacing.
-- **Configuration & Text Clearance (`FloatingLayoutSettings.kt`)**:
-  - `railKeepTextClear`: Dynamically injects lateral padding into the editor viewport so note text never hides beneath floating buttons.
-  - Reading Mode Floating Bar: 4 unified buttons (`Previous Note`, `Read/Edit Toggle`, `Next Note`, `Exit`). Controlled via synchronized `readingNavBottomOffsetDp` and `readingNavButtonSizeDp` preferences.
+## 8. Ergonomic Side Rail & Floating Controls Architecture
+- **Files**: `app/src/main/java/com/example/ui/editor/EditorSideRailLayout.kt`, `EditorFloatingCluster.kt`
+- **Visual Models**:
+  - **Ergonomic Side Rail (`EditorSideRailLayout.kt`)**:
+    - Slim vertical control strip anchored along the left or right screen border (`railSide: "LEFT" | "RIGHT"`).
+    - Positioned at thumb height (`railBottomOffsetDp`).
+    - Contains: Mic Button, Timer Sprint button, In-App Keyboard switch, Format Bar expander, and Reading Mode toggle.
+    - Reorderable buttons via `railButtonOrder` preference list.
+  - **Docked Floating Cluster (`EditorFloatingCluster.kt`)**:
+    - Bottom-centered floating pill cluster used when side rail is disabled.
+- **Text Clearance Invariant (`railKeepTextClear`)**:
+  - When enabled, calculates dynamic margin:
+    $$\text{editorStartPad} = \text{marginDp} + (\text{if Rail is Left then } (48\text{dp} \times \text{railScale} + 12\text{dp}) \text{ else } 0\text{dp})$$
+  - Guarantees note content never scrolls beneath floating buttons.
+- **Reading Mode Floating Controls**:
+  - 4 unified buttons docked at screen bottom:
+    1. **Previous Note** (`ArrowBack`): Navigates to prior chronological journal entry.
+    2. **Reading/Editing Toggle** (`MenuBook`): Swaps back to Editing Mode.
+    3. **Next Note** (`ArrowForward`): Navigates to subsequent journal entry.
+    4. **Exit App** (`ExitToApp`): Flushes auto-save and immediately terminates the application.
+  - Synchronized size (`readingNavButtonSizeDp`) and vertical position (`readingNavBottomOffsetDp`).
 
 ---
 
-## 9. Journal-First Architecture & Daily Calendar System (`DailyJournalManagerScreen.kt`)
+## 9. Journal-First Architecture & Daily Calendar System
+- **Files**: `app/src/main/java/com/example/ui/notes/DailyJournalManagerScreen.kt`, `com.example.ui.navigation.HorizontalSwipeModifier.kt`
+- **Visual Interface**:
+  - Top app bar displaying current month and year (e.g. "November 2026") with previous/next month navigation buttons.
+  - 7-column weekday header (`Sat`, `Sun`, `Mon`, `Tue`, `Wed`, `Thu`, `Fri`).
+  - Month calendar grid with custom day cells.
+  - Floating Action Button (+): Always targets today's date (`LocalDate.now()`).
 - **Cold-Start App Lifecycle**:
-  - Cold launch immediately opens the last viewed note in Reading Mode with scroll at top (0).
-  - Falls back to today's date note (`LocalDate.now()`, format `yyyy-MM-dd`) or latest active note if absent.
-- **High-Performance Single-Pass Calendar**:
-  - Zero nested row weights to eliminate multi-pass Compose measurement overhead.
-  - O(1) bitmask note presence checks against pre-warmed Room month cache.
-  - Active open note displays a blinking electric cyan border and cyan sub-dot.
-  - Tapping any date opens that date's note (Reading mode if existing, Editing mode if new).
-  - Floating Action Button (+) always opens today's note directly in Editing Mode.
-- **Swipe Navigation Isolation (`SwipeGestureModifier.kt`, `HorizontalSwipeModifier.kt`)**:
-  - In Reading Mode: Screen-wide horizontal swipes navigate: Left-to-Right $\rightarrow$ Calendar, Right-to-Left $\rightarrow$ Settings.
-  - In Editing Mode: Calendar and Settings swipes are strictly confined to note text/whitespace and never fire from toolbar, format bar, side rail, or keyboard touch events.
-  - Swiping Right-to-Left from Calendar returns to Editor; swiping Left-to-Right from Settings returns to Editor.
+  - Cold launch immediately loads the last opened note (`KEY_LAST_OPENED_NOTE_ID`) in Reading Mode with scroll at top (0).
+  - If null, locates today's date note (`yyyy-MM-dd`), creating it automatically if absent.
+- **High-Performance Single-Pass Calendar Engine**:
+  - Custom `Layout` composable bypassing nested row and column measurements.
+  - Pre-warmed `ConcurrentHashMap<Int, FastMonthData>` indexing month offsets from epoch month (2010-01).
+  - **O(1) Bitmask Note Lookup**:
+    ```kotlin
+    val notesMaskMap = HashMap<YearMonth, Int>()
+    // Day N is encoded at bit (1 shl N) in a 32-bit integer
+    map[ym] = currentMask or (1 shl d.dayOfMonth)
+    ```
+  - **Visual Day Cell Indicators**:
+    - Has Note: Bold date number with primary accent background.
+    - Active Currently Opened Note: Blinking electric cyan border (`infiniteRepeatable` alpha animation 0.3f to 1.0f) with a cyan sub-dot.
+    - Today: Crisp white outline border.
+- **Swipe Navigation Isolation**:
+  - Reading Mode: Screen-wide horizontal swipes (Left-to-Right $\rightarrow$ Calendar, Right-to-Left $\rightarrow$ Settings).
+  - Editing Mode: Horizontal swipes are strictly confined to the note text body and blank areas; gestures never fire from toolbar, format bar, side rail, or soft keyboard.
 
 ---
 
-## 10. Local-First Room Database & Schema Migrations (`AppDatabase.kt`)
+## 10. Room Database, Schemas & Migrations
+- **File**: `app/src/main/java/com/example/data/db/AppDatabase.kt`
 - **Database Identity**: `kothapad.db`, version 4.
 - **Entity Schemas**:
-  - `Note`: `id: Long` (PK auto), `title: String`, `content: String`, `createdAt: Long`, `updatedAt: Long`, `folder: String` (default `"General"`), `tags: String`, `isArchived: Boolean`, `isDeleted: Boolean`, `deletedAt: Long?`, `sessionDurationSec: Long`, `sessionCount: Int`, `wordCount: Int`, `charCount: Int`, `statsStale: Boolean`.
-  - `Stamp`: `id: Long` (PK auto), `setName: String`, `label: String`, `templateText: String`, `voiceTriggerPhrase: String`, `orderIndex: Int`, `isPinned: Boolean`.
-  - `SpokenCommand`: `id: Long` (PK auto), `language: String`, `phrase: String`, `actionType: String` (`PUNCTUATION`, `ACTION`), `replacementText: String`, `commandCode: String`.
+  - **`notes` Table (`Note.kt`)**:
+    ```sql
+    CREATE TABLE notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        folder TEXT NOT NULL DEFAULT 'General',
+        tags TEXT NOT NULL DEFAULT '',
+        isArchived INTEGER NOT NULL DEFAULT 0,
+        isDeleted INTEGER NOT NULL DEFAULT 0,
+        deletedAt INTEGER DEFAULT NULL,
+        sessionDurationSec INTEGER NOT NULL DEFAULT 0,
+        sessionCount INTEGER NOT NULL DEFAULT 0,
+        wordCount INTEGER NOT NULL DEFAULT 0,
+        charCount INTEGER NOT NULL DEFAULT 0,
+        statsStale INTEGER NOT NULL DEFAULT 0
+    );
+    ```
+  - **`stamps` Table (`Stamp.kt`)**:
+    ```sql
+    CREATE TABLE stamps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        setName TEXT NOT NULL,
+        label TEXT NOT NULL,
+        templateText TEXT NOT NULL,
+        voiceTriggerPhrase TEXT NOT NULL,
+        orderIndex INTEGER NOT NULL,
+        isPinned INTEGER NOT NULL DEFAULT 0
+    );
+    ```
+  - **`spoken_commands` Table (`SpokenCommand.kt`)**:
+    ```sql
+    CREATE TABLE spoken_commands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        language TEXT NOT NULL,
+        phrase TEXT NOT NULL,
+        actionType TEXT NOT NULL,
+        replacementText TEXT NOT NULL,
+        commandCode TEXT NOT NULL
+    );
+    ```
 - **Migration History**:
-  - `MIGRATION_1_2`: Added folders, tags, archive, soft-delete, session duration, and pinned stamps.
-  - `MIGRATION_2_3`: Added note session counters.
-  - `MIGRATION_3_4`: Added word count, character count, and stale stats tracking.
-- **Templates & Trash Management**:
-  - Soft-deleted notes (`isDeleted = 1`) move to Trash with configurable auto-purge (`trash_auto_empty_days`, default 7).
-  - Restoring notes and emptying trash execute directly in Room under Settings > "Templates & Trash".
+  - `MIGRATION_1_2`: Added `folder`, `tags`, `isArchived`, `isDeleted`, `deletedAt`, `sessionDurationSec` to `notes`; added `isPinned` to `stamps`.
+  - `MIGRATION_2_3`: Added `sessionCount` to `notes`.
+  - `MIGRATION_3_4`: Added `wordCount`, `charCount`, and `statsStale` to `notes`.
+- **Soft-Delete & Auto-Empty Trash**:
+  - Trashed notes have `isDeleted = 1` and `deletedAt = System.currentTimeMillis()`.
+  - `trash_auto_empty_days` (default 7 days): Background startup scan deletes notes where `System.currentTimeMillis() - deletedAt > days * 86400000L`.
 
 ---
 
-## 11. WorkManager Automated Backup System (`AutoBackupManager.kt`, `AutoBackupWorker.kt`)
-- **Periodic Background Backups**:
-  - Scheduled via `WorkManager` using `PeriodicWorkRequestBuilder` with unique work name `"kothapad_auto_backup"`.
-  - Supported intervals: Off, 6 Hours, Daily, Weekly, or Custom ($\ge$ 15 minutes).
-  - Optional `autoBackupOnAppOpen` trigger (rate-limited: executes only if last backup is > 1 hour old).
-- **Storage & Retention Engine**:
-  - Default target: `Download/KOTHAPAD Backups` with SAF folder picker fallback (`auto_backup_location_uri`).
-  - Keep-Last-N Retention (3, 5, 10, 20): Older archives are pruned strictly after a new backup is validated and written.
-  - Content-Hash Detection: Computes SHA-256 of notes and settings; skips redundant backup writes if data has not changed since last run.
-  - Safety Rollback Protection: Before any restore operation, automatically generates `KothaPad_pre_restore_safety.zip` to prevent accidental data loss.
+## 11. WorkManager Automated Backup System
+- **Files**: `app/src/main/java/com/example/data/backup/AutoBackupManager.kt`, `AutoBackupWorker.kt`
+- **Visual Interface (Settings > Backup)**:
+  - Schedule selector: Off, 6 Hours, Daily, Weekly, Custom (slider $\ge$ 15 min).
+  - Retention count selector: Keep last 3, 5, 10, or 20 archives.
+  - Backup location card showing active path (`Download/KOTHAPAD Backups` or custom SAF tree) with folder picker.
+  - "Backup Now" manual trigger button and "View Auto Backups & Restore" launcher.
+- **Worker Execution Architecture**:
+  - Periodic Work Request:
+    ```kotlin
+    val workRequest = PeriodicWorkRequestBuilder<AutoBackupWorker>(intervalMinutes, TimeUnit.MINUTES)
+        .setConstraints(Constraints.Builder()
+            .setRequiresCharging(onlyCharging)
+            .setRequiresStorageNotLow(skipLowStorage)
+            .build())
+        .build()
+    WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+        WORK_NAME, ExistingPeriodicWorkPolicy.UPDATE, workRequest
+    )
+    ```
+  - On-App-Open Trigger: Rate-limited trigger running on cold start if last successful backup is older than 1 hour.
+- **Deduplication via SHA-256 Content Hashing**:
+  - Generates SHA-256 digest over notes list and DataStore settings.
+  - If computed hash matches `auto_backup_last_hash`, skips ZIP archive generation (`SkippedNoChanges`), saving device flash storage.
+- **Pruning Engine & Rollback Safety**:
+  - Retention pruning: Prunes oldest backup files only after the new backup archive has been verified on disk.
+  - Pre-Restore Safety: Before restoring any backup, creates `KothaPad_pre_restore_safety.zip` in the internal cache directory.
 
 ---
 
-## 12. Exact Alarm Notification & Floating Overlay System (`ReminderScheduler.kt`, `ScreenOverlayReminderService.kt`)
-- **Exact Alarms & Background Delivery**:
-  - Scheduled using Android `AlarmManager` with exact alarm permissions (`USE_EXACT_ALARM`, `SCHEDULE_EXACT_ALARM`).
-  - Broadcast receiver executes with `goAsync()` and acquires a `PARTIAL_WAKE_LOCK` guaranteeing on-time firing when device is locked or app is killed.
+## 12. Exact Alarm Notification & Floating Overlay System
+- **Files**: `app/src/main/java/com/example/notification/ReminderScheduler.kt`, `ScreenOverlayReminderService.kt`, `XiaomiOverlayHelper.kt`
+- **Alarm Scheduling (`ReminderScheduler.kt`)**:
+  - Schedules reminders via Android `AlarmManager` with exact execution:
+    ```kotlin
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+    }
+    ```
+  - Broadcast receiver executes with `goAsync()` retaining process life under a 10-second `WakeLock`.
 - **Foreground Smart Suppression**:
-  - If user is actively typing or viewing notes in the foreground, intrusive alarm popups and head-up banners are suppressed to prevent disruption.
-- **Dual Display Modes**:
-  - **Normal Mode**: High-priority system notification (`IMPORTANCE_HIGH`) with scheduled time badge and "+ Journal Today" direct action.
-  - **Floating Overlay Mode**: Real screen overlay rendered over external apps via `SYSTEM_ALERT_WINDOW` (`ScreenOverlayReminderService`). Features custom geometry, opacity, typography, and one-tap "+ Journal Today" button that unlocks into today's note editor.
-  - Original Time Fidelity: System notification header (`setWhen`) and overlay badges strictly reflect the reminder's original scheduled time, even if delayed by system doze.
-- **Xiaomi / MIUI / HyperOS Compatibility (`XiaomiOverlayHelper.kt`)**:
-  - Detects MIUI/HyperOS ROMs and guides user to grant "Display pop-up windows while running in the background" and Autostart permissions.
+  - `ReminderScheduler` inspects `isAppInForeground`. If the user is actively viewing or typing in KothaPad, intrusive popups and alarms are suppressed to avoid disrupting focus.
+- **True System Window Overlay Mode (`ScreenOverlayManager`)**:
+  - Draws over third-party applications via `SYSTEM_ALERT_WINDOW`:
+    ```kotlin
+    val params = WindowManager.LayoutParams(
+        widthPx, WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+        WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
+        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+        PixelFormat.TRANSLUCENT
+    ).apply { gravity = Gravity.CENTER; x = 0; y = 0 }
+    windowManager.addView(rootContainer, params)
+    ```
+  - Features scheduled time badge, custom background opacity, border stroke, and a prominent "+ Journal Today" button that unlocks straight into today's note editor.
+- **MIUI / HyperOS Compatibility (`XiaomiOverlayHelper.kt`)**:
+  - Detects Xiaomi devices (`getSystemProperty("ro.miui.ui.version.name")`) and prompts for "Display pop-up windows while running in the background" permission intent.
 
 ---
 
-## 13. Backup, Restore & Migration Architecture (`BackupManager.kt`)
-- **Unified ZIP Archive Format (`CURRENT_BACKUP_VERSION = 4`)**:
+## 13. Backup, Restore & Universal Migration Architecture
+- **Files**: `app/src/main/java/com/example/data/backup/BackupManager.kt`
+- **Unified ZIP Archive Specification (`CURRENT_BACKUP_VERSION = 4`)**:
   - `manifest.json`: Metadata, app version, timestamp, entity counts.
   - `notes.json`: Array of serialized `Note` records.
   - `templates.json`: Array of serialized `Stamp` records.
   - `spoken_commands.json`: Array of serialized `SpokenCommand` records.
-  - `settings.json`: Key-value map of preferences typed via `KNOWN_PREF_TYPES`.
-- **Backward Compatibility & Vault Migration**:
-  - Seamlessly imports Schema v1, v2, v3, and v4 backups.
-  - Supports legacy Obsidian-style markdown directory archives, importing `.md` files into Room notes with metadata frontmatter parsing.
-  - Atomic restore: Validates all JSON entries before clearing local tables; aborts safely on corrupt files without partial wipes.
+  - `settings.json`: JSON key-value map of preferences typed via `KNOWN_PREF_TYPES`.
+- **Backward Compatibility Engine**:
+  - Fully supports importing Schema v1, v2, v3, and v4 backups.
+  - Supports legacy Obsidian-style directory ZIPs containing `.md` files: Parses markdown body and YAML frontmatter (`tags`, `folder`, `date`) into native Room `Note` rows.
+- **Universal Backup Synchronization Rule**:
+  - **Mandatory Invariant**: Every preference key defined in `PreferencesManager.Companion` MUST be registered in `KNOWN_PREF_TYPES`:
+    ```kotlin
+    val KNOWN_PREF_TYPES: Map<String, PrefType> = mapOf(
+        KEY_DICTATION_MODE.name to PrefType.STRING,
+        KEY_TIMED_MINUTES.name to PrefType.INT,
+        KEY_PAUSE_TOLERANCE_SECONDS.name to PrefType.INT,
+        // ... all settings registered
+    )
+    ```
+  - Guarantees 100% of user configurations are restored without omission across device migrations.
 
 ---
 
-## 14. Universal Backup Synchronization Rule
-- **Mandatory Backup Synchronization Invariant**:
-  - Every setting, user preference, or configuration added to `PreferencesManager` MUST be registered inside `KNOWN_PREF_TYPES` with its explicit `PrefType` (`BOOLEAN`, `INT`, `LONG`, `FLOAT`, `DOUBLE`, `STRING`, `STRING_SET`).
-  - `getAllPreferencesForBackup()` automatically serializes all known keys into `settings.json`.
-  - `restorePreferencesFromBackup()` parses and commits them back to `DataStore`.
-  - Zero preference keys may exist outside this synchronization contract.
-
----
-
-## 15. Theming, Typography & UI Polish (`Theme.kt`, `Color.kt`, `Type.kt`)
-- **Theme Palettes**:
-  - Default Dark, Pure AMOLED Black (`#000000` surface & background), Cyber Dark, Clean Light, and Full Custom Color Engine (Primary, Background, Surface, Text, Secondary ARGB pickers).
-- **Font Stack**:
-  - Embedded fonts: `inter.ttf` (default sans-serif UI), `jetbrains_mono.ttf` (code blocks and editor mono), `noto_sans_bengali.ttf` (Bangla script rendering).
-  - External Font Loader: Supports custom user `.ttf` / `.otf` font file paths from device storage.
-- **Note Metrics Display Config (`NoteMetricsConfig.kt`)**:
-  - Displays word count, character count, and reading duration in note cards.
-  - Fully configurable ordering, visibility chips, and styles (`COMPACT` vs. `DETAILED`).
-
----
-
-## 16. Navigation Hierarchy & Back Handling (`MainActivity.kt`)
-- **Centralized `BackHandler` Ladder**:
-  1. System IME open $\rightarrow$ Pass through to Android OS to dismiss soft keyboard.
-  2. Dialog, bottom sheet, or key editor open $\rightarrow$ Dismiss active overlay/sheet.
-  3. Sub-screens (`SETTINGS`, `MARKDOWN_SETTINGS`, `AUTO_BACKUP_RESTORE`, `DAILY_JOURNAL_MANAGER`) $\rightarrow$ Navigate back to `EDITOR`.
-  4. Active voice dictation $\rightarrow$ Retain recording; display toast warning.
-  5. Editing Mode active $\rightarrow$ Switch to Reading Mode (primary resting state).
-  6. Reading Mode active $\rightarrow$ Double-tap back within 2000ms to exit app (flushes auto-save and clears persistent notification).
+## 14. Centralized Navigation Hierarchy & Back Handling
+- **File**: `app/src/main/java/com/example/MainActivity.kt`
+- **6-Tier Back Navigation Priority Ladder**:
+  ```kotlin
+  BackHandler(enabled = !isImeVisible || isReadingMode || currentScreen != "EDITOR") {
+      when {
+          // Priority 1: System keyboard open -> Handled by Android OS (closes keyboard)
+          // Priority 2: Dialog or Sheet open -> Dismiss active overlay
+          editingKey != null -> viewModel.editingKey.value = null
+          showRenameDialog -> viewModel.showRenameDialog.value = false
+          showLanguagePicker -> viewModel.showLanguagePicker.value = false
+          showStyleSheet -> viewModel.showStyleSheet.value = false
+          showTemplatesSheet -> viewModel.showTemplatesSheet.value = false
+          !onboardingCompleted -> viewModel.completeOnboarding()
+          
+          // Priority 3: Sub-screen open -> Return to Editor
+          currentScreen == "MARKDOWN_SETTINGS" -> viewModel.navigateTo("SETTINGS")
+          currentScreen == "AUTO_BACKUP_RESTORE" -> viewModel.navigateTo("SETTINGS")
+          currentScreen == "DAILY_JOURNAL_MANAGER" -> viewModel.onBackFromDailyJournalManager()
+          currentScreen != "EDITOR" -> viewModel.navigateTo("EDITOR")
+          
+          // Priority 4: Voice recording active -> Prevent exit; display warning toast
+          dictationState !is DictationState.Idle -> {
+              Toast.makeText(this, "Recording in progress. Tap mic to pause or stop.", Toast.LENGTH_SHORT).show()
+          }
+          
+          // Priority 5: Editing mode active -> Switch to Reading Mode
+          !isReadingMode -> viewModel.setReadingMode(true)
+          
+          // Priority 6: Reading mode active -> Double-tap back within 2000ms to exit app
+          else -> {
+              val now = System.currentTimeMillis()
+              if (now - lastBackPressTime < 2000L) {
+                  viewModel.flushAutoSave()
+                  finishAffinity()
+              } else {
+                  lastBackPressTime = now
+                  Toast.makeText(this, "Press back again to exit", Toast.LENGTH_SHORT).show()
+              }
+          }
+      }
+  }
+  ```
 - **Immersive Mode Bounds**:
-  - System navigation bar hiding is strictly limited to Reading Mode on `EditorScreen`.
-  - Navigation bar remains permanently visible across Editing Mode, Calendar, Settings, and Dialogs.
+  - Immersive full-screen mode (hiding the Android system navigation bar) is strictly confined to Reading Mode on `EditorScreen`.
+  - The navigation bar is immediately restored whenever navigating to Editing Mode, Calendar, Settings, or opening dialogs.
